@@ -144,14 +144,16 @@ service cloud.firestore {
     }
     // Shared libraries (no teamId — one library for all three Brophy teams).
     match /videos/{id}        { allow read: if signedIn(); allow write: if isAdmin(); }
-    match /drills/{id}          { allow read: if signedIn(); allow write: if isAdmin(); }
-    // Drill library (standalone Brophy Drill Library site): public read,
-    // coach-only write. Anyone (signed in or not) can read — the library is
-    // public. Only coaches (role admin or orgAdmin) can add/edit/delete, and
-    // the creator must be the signed-in user with a non-empty name. Merged
-    // from the drill-library repo's firestore.rules — deploy once with the
-    // app's rules, never deploy the library's file on its own (it would
-    // overwrite the app's rules).
+    // ONE shared drill library (unified 2026-11-09): the team app AND the
+    // standalone Drill Library site BOTH read and write `drillLibrary` —
+    // a drill made in either app shows up in both. The old `drills`
+    // collection is no longer read or written by either app (its real
+    // drills were migrated into `drillLibrary`; kind === "point"
+    // coaching-point items were NOT migrated and stay in `drills`, unread).
+    // Public read, coach-only write; create requires createdByUid == the
+    // caller and a non-empty name. Merged from the drill-library repo's
+    // firestore.rules — deploy once with the app's rules, never deploy the
+    // library's file on its own (it would overwrite the app's rules).
     match /drillLibrary/{drillId} {
       allow read: if true;
       allow create: if isAdmin()
