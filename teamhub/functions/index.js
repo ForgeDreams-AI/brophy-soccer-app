@@ -5,7 +5,6 @@ const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
-const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
@@ -651,35 +650,3 @@ async function processWellnessNudges() {
     }
   }
 }
-
-// ── tester feedback → email (via Gmail) ─────────────────────────────────────
-// Sends from the same Google account that owns this Firebase project, so the
-// app password below belongs to it too — Gmail SMTP requires the authenticated
-// user and the From address to match, so these can't drift apart.
-// Set the app password once (generated at myaccount.google.com → Security →
-// 2-Step Verification → App passwords, signed in as the account below):
-//   firebase functions:secrets:set GMAIL_APP_PASSWORD
-const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
-const FEEDBACK_FROM = "phoenixcollegesoccer@gmail.com";
-const FEEDBACK_TO = "phoenixcollegesoccer@gmail.com";
-
-exports.onFeedbackCreated = onDocumentCreated(
-  { document: "feedback/{id}", secrets: [GMAIL_APP_PASSWORD] },
-  async (event) => {
-    const data = event.data?.data();
-    if (!data || !data.text) return;
-    const nodemailer = require("nodemailer");
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user: FEEDBACK_FROM, pass: GMAIL_APP_PASSWORD.value() },
-    });
-    const who = `${data.fromName || "A tester"} · ${data.fromEmail || "no email"} · ${data.role || "member"}`;
-    await transporter.sendMail({
-      from: `TeamHub Feedback <${FEEDBACK_FROM}>`,
-      to: FEEDBACK_TO,
-      replyTo: data.fromEmail || FEEDBACK_FROM,
-      subject: `TeamHub feedback — ${data.fromName || "a tester"}`,
-      text: `${data.text}\n\n— ${who}\nSent: ${new Date().toISOString()}`,
-    });
-  },
-);

@@ -7592,7 +7592,12 @@ const initialsOf = (name) =>
     .join("")
     .toUpperCase();
 
-const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, onWhatsNew }) => {
+// Settings — a professional page: Profile, Team & Role, People & Roles
+// (org admin only), Notifications, Help, About. Tester feedback was removed
+// outright (decision 2026-11-08, §10) — no feedback form exists anywhere.
+const ROLE_LABELS = { player: "Player", admin: "Team Coach", orgAdmin: "Org Admin" };
+
+const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, onWhatsNew, isOrgAdmin = false, orgUsers = [], setUserRoleAndTeams }) => {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(user.name || "");
   const [savingName, setSavingName] = useState(false);
@@ -7619,21 +7624,6 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, onWhatsNew }) =
   const [pushOn, setPushOn] = useState(currentPermission() === "granted");
   const [pushBusy, setPushBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [fbText, setFbText] = useState("");
-  const [fbBusy, setFbBusy] = useState(false);
-  const [fbSent, setFbSent] = useState(false);
-  const sendFeedback = async () => {
-    const text = fbText.trim();
-    if (!text) return;
-    setFbBusy(true);
-    try {
-      await addDoc(collection(db, "feedback"), {
-        text, fromUid: user.uid, fromName: user.name || "", fromEmail: user.email || "", role: user.role || "player", createdAt: serverTimestamp(),
-      });
-      setFbText(""); setFbSent(true);
-    } catch (e) { toast("Couldn't send feedback — " + (e.message || "")); }
-    finally { setFbBusy(false); }
-  };
 
   // iOS Safari → needs PWA install for push to work at all.
   const isIOS = typeof navigator !== "undefined"
@@ -7680,6 +7670,56 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, onWhatsNew }) =
   };
 
   const denied = currentPermission() === "denied";
+
+  // ── People & Roles (org admin only) ──────────────────────────────────────
+  // Who can make a coach, and at what level: ONLY the program admin
+  // (orgAdmin) promotes/demotes anyone — Player / Team Coach / Org Admin —
+  // and assigns which team(s) a coach coaches. A team coach can't promote
+  // anyone. setUserRoleAndTeams + the users-doc rules enforce it server-side
+  // too (only orgAdmin may write role/teamIds).
+  const [roleSearch, setRoleSearch] = useState("");
+  const [editingUid, setEditingUid] = useState(null);
+  const [editRole, setEditRole] = useState("player");
+  const [editTeams, setEditTeams] = useState([]);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editErr, setEditErr] = useState("");
+  const [editMsg, setEditMsg] = useState("");
+  const myTeams = useMemo(() => {
+    const ids = (user.teamIds || []).filter(isValidTeamId);
+    if (ids.length) return ids;
+    return [user.primaryTeamId || DEFAULT_TEAM_ID].filter(isValidTeamId);
+  }, [user]);
+  const filteredUsers = useMemo(() => {
+    const q = roleSearch.trim().toLowerCase();
+    const list = (orgUsers || []).slice().sort((a, b) => (a.name || a.email || "").localeCompare(b.name || b.email || ""));
+    if (!q) return list;
+    return list.filter((u) => (u.name || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q));
+  }, [orgUsers, roleSearch]);
+  const openEditor = (u) => {
+    setEditingUid(u.id);
+    setEditRole(u.role === "orgAdmin" ? "orgAdmin" : u.role === "admin" ? "admin" : "player");
+    const teams = (u.teamIds || []).filter(isValidTeamId);
+    setEditTeams(teams.length ? teams : [u.primaryTeamId || DEFAULT_TEAM_ID].filter(isValidTeamId));
+    setEditErr(""); setEditMsg("");
+  };
+  const saveEditor = async (u) => {
+    if (!setUserRoleAndTeams) return;
+    setEditBusy(true); setEditErr(""); setEditMsg("");
+    try {
+      await setUserRoleAndTeams(u.id, u.email, { role: editRole, teamIds: editTeams, primaryTeamId: editTeams[0] });
+      setEditMsg(`${u.name || u.email} is now ${ROLE_LABELS[editRole] || "Player"}.`);
+      setEditingUid(null);
+    } catch (e) { setEditErr(e.message || "Couldn't save — try again."); }
+    finally { setEditBusy(false); }
+  };
+  const toggleEditTeam = (teamId) => {
+    setEditTeams((prev) => prev.includes(teamId) ? prev.filter((t) => t !== teamId) : [...prev, teamId]);
+  };
+  const roleBadgeStyle = (role) => role === "orgAdmin"
+    ? { backgroundColor: COLORS.primary, color: "white" }
+    : role === "admin"
+    ? { backgroundColor: COLORS.accent, color: COLORS.primary }
+    : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
@@ -7730,14 +7770,147 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, onWhatsNew }) =
                       <button onClick={() => setEditingName(true)} className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 underline flex-shrink-0">Edit</button>
                     </div>
                     <div className="text-[11px] text-slate-500 truncate font-mono">{user.email}</div>
-                    <div className="inline-block mt-1 text-[9px] font-black uppercase tracking-[0.14em] px-2 py-0.5 rounded-md" style={user.role === "admin" ? { backgroundColor: COLORS.accent, color: COLORS.primary } : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}>
-                      {user.role === "admin" ? "Coach" : "Player"}
-                    </div>
                   </>
                 )}
               </div>
             </div>
           </section>
+
+          {/* TEAM & ROLE */}
+          <section>
+            <h4 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 mb-2 px-1">Team &amp; Role</h4>
+            <div className="bg-slate-50 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-black uppercase tracking-[0.14em] px-2 py-0.5 rounded-md" style={roleBadgeStyle(user.role)}>
+                  {ROLE_LABELS[user.role] || "Player"}
+                </span>
+                <span className="text-xs text-slate-600">
+                  {myTeams.map((t) => getTeamShortName(t)).join(" · ") || "No team assigned yet"}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-snug">
+                Only the program admin can change your role or teams. A player can be on more than one team; a coach coaches the team (or teams) they are assigned to.
+              </p>
+            </div>
+          </section>
+
+          {/* PEOPLE & ROLES — org admin only */}
+          {isOrgAdmin && (
+            <section>
+              <h4 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 mb-2 px-1">People &amp; Roles</h4>
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                <p className="text-[11px] text-slate-500 leading-snug">
+                  Promote or demote anyone, and assign which team (or teams) a coach coaches. Team coaches can&apos;t change roles — only you can.
+                </p>
+                <input
+                  value={roleSearch}
+                  onChange={(e) => setRoleSearch(e.target.value)}
+                  placeholder="Search by name or email…"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200 bg-white"
+                />
+                {editMsg && <p className="text-[11px] text-green-700 font-semibold bg-green-50 border border-green-100 rounded-lg px-3 py-2">{editMsg}</p>}
+                {filteredUsers.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic text-center py-2">{roleSearch ? "No one matches that search." : "No signed-in users yet."}</p>
+                ) : (
+                  <ul className="bg-white border border-slate-100 rounded-xl divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                    {filteredUsers.map((u) => {
+                      const isSelf = u.id === user.uid;
+                      const editing = editingUid === u.id;
+                      const teams = (u.teamIds || []).filter(isValidTeamId);
+                      return (
+                        <li key={u.id} className="px-3 py-2.5">
+                          <div className="flex items-center gap-3">
+                            <Avatar photoURL={u.photoURL} initials={u.initials} size={36} bg={COLORS.accent} color={COLORS.primary} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-semibold text-slate-900 truncate">
+                                {u.name || u.email}
+                                {isSelf && <span className="ml-1.5 text-[10px] font-bold text-slate-400 uppercase">You</span>}
+                              </div>
+                              <div className="text-[11px] text-slate-500 truncate font-mono">{u.email}</div>
+                              <div className="flex flex-wrap items-center gap-1 mt-1">
+                                <span className="text-[9px] font-black uppercase tracking-[0.12em] px-2 py-0.5 rounded-md" style={roleBadgeStyle(u.role)}>
+                                  {ROLE_LABELS[u.role] || "Player"}
+                                </span>
+                                {teams.map((t) => (
+                                  <span key={t} className="text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">{getTeamShortName(t)}</span>
+                                ))}
+                              </div>
+                            </div>
+                            {!isSelf && (
+                              <button
+                                onClick={() => (editing ? setEditingUid(null) : openEditor(u))}
+                                className="text-[11px] font-bold text-slate-600 underline flex-shrink-0"
+                              >
+                                {editing ? "Close" : "Manage"}
+                              </button>
+                            )}
+                          </div>
+                          {editing && (
+                            <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+                              <div>
+                                <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">Role</div>
+                                <div className="flex gap-1.5">
+                                  {["player", "admin", "orgAdmin"].map((r) => (
+                                    <button
+                                      key={r}
+                                      onClick={() => setEditRole(r)}
+                                      className="flex-1 py-2 rounded-full text-[11px] font-bold disabled:opacity-50"
+                                      style={editRole === r
+                                        ? { backgroundColor: COLORS.primary, color: "white" }
+                                        : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
+                                    >
+                                      {ROLE_LABELS[r]}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">Teams</div>
+                                {editRole === "orgAdmin" ? (
+                                  <p className="text-[11px] text-slate-500">Org admins see all three teams — JVB, JVA, and Varsity.</p>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {TEAMS.map((t) => {
+                                      const on = editTeams.includes(t.id);
+                                      return (
+                                        <button
+                                          key={t.id}
+                                          onClick={() => toggleEditTeam(t.id)}
+                                          aria-pressed={on}
+                                          className="px-3 py-1.5 rounded-full text-[11px] font-bold"
+                                          style={on
+                                            ? { backgroundColor: COLORS.primary, color: "white" }
+                                            : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
+                                        >
+                                          {t.shortName}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                              {editErr && <p className="text-[11px] text-red-500 font-medium">{editErr}</p>}
+                              <div className="flex gap-2">
+                                <button onClick={() => setEditingUid(null)} disabled={editBusy} className="flex-1 py-2 rounded-full bg-slate-200 text-[11px] font-bold text-slate-700 disabled:opacity-50">Cancel</button>
+                                <button
+                                  onClick={() => saveEditor(u)}
+                                  disabled={editBusy || (editRole !== "orgAdmin" && editTeams.length === 0)}
+                                  className="flex-1 py-2 rounded-full text-[11px] font-bold text-white disabled:opacity-50"
+                                  style={{ backgroundColor: COLORS.primary }}
+                                >
+                                  {editBusy ? "Saving…" : "Save changes"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </section>
+          )}
 
           {/* NOTIFICATIONS */}
           <section>
@@ -7789,7 +7962,7 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, onWhatsNew }) =
               <div className="space-y-2">
                 {onWhatsNew && (
                   <button onClick={onWhatsNew} className="w-full bg-slate-50 rounded-2xl p-4 text-left flex items-center justify-between hover:bg-slate-100">
-                    <span className="text-sm font-semibold text-slate-900">What's new</span>
+                    <span className="text-sm font-semibold text-slate-900">What&apos;s new</span>
                     <span className="text-lg" aria-hidden="true">✨</span>
                   </button>
                 )}
@@ -7806,19 +7979,8 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, onWhatsNew }) =
           <section>
             <h4 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 mb-2 px-1">About</h4>
             <div className="bg-slate-50 rounded-2xl p-4 text-[11px] space-y-1.5">
-              <div className="flex justify-between"><span className="text-slate-500">App</span><span className="font-semibold text-slate-900">Phoenix Bears TeamHub</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">App</span><span className="font-semibold text-slate-900">Brophy Soccer</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Version</span><span className="font-mono text-[10px] text-slate-700">{APP_VERSION}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Domain</span><span className="font-mono text-[10px] text-slate-700">{APP_DOMAIN}</span></div>
-            </div>
-          </section>
-
-          {/* SEND FEEDBACK */}
-          <section>
-            <h4 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 mb-2 px-1">Send feedback</h4>
-            <div className="bg-slate-50 rounded-2xl p-4 space-y-2">
-              <p className="text-[11px] text-slate-600">Found a bug or have an idea? Tell us — it goes straight to the team.</p>
-              <textarea value={fbText} onChange={(e) => { setFbText(e.target.value); setFbSent(false); }} rows={3} placeholder="What's working, what's not, what you'd want…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-              <button onClick={sendFeedback} disabled={fbBusy || !fbText.trim()} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{fbBusy ? "Sending…" : fbSent ? "✓ Thanks — sent!" : "Send feedback"}</button>
             </div>
           </section>
 
@@ -8060,6 +8222,13 @@ export default function TeamHubRolesApp() {
   const allUsers = useCollection(
     isCoach ? "users" : null,
     where("teamIds", "array-contains", activeTeamId),
+    orderBy("name"),
+  );
+  // Org-admin-only view of EVERY signed-in user across all three teams, for
+  // the Settings admin model (§10): the program admin manages roles and team
+  // assignments here. A team coach never subscribes (rules deny otherwise).
+  const orgUsers = useCollection(
+    user?.role === "orgAdmin" ? "users" : null,
     orderBy("name"),
   );
   const events = useMemo(() => {
@@ -8493,6 +8662,38 @@ export default function TeamHubRolesApp() {
     await Promise.all(snap.docs.map((d) => updateDoc(d.ref, { role: nextRole })));
   };
 
+  // Change a signed-in user's role + team assignment. ORG-ADMIN-ONLY (§10
+  // admin model, decision 2026-11-08): only the program admin promotes /
+  // demotes anyone — Player ↔ Team Coach ↔ Org Admin — and assigns which
+  // team(s) a coach coaches. A team coach can invite and manage their roster
+  // but can never promote anyone. The users-doc rules enforce this
+  // server-side too (only orgAdmin may write role/teamIds); this guard gives
+  // a clear error instead of a silent rules denial.
+  const setUserRoleAndTeams = async (uid, email, { role, teamIds, primaryTeamId }) => {
+    if (user.role !== "orgAdmin") {
+      throw new Error("Only the program admin can change roles.");
+    }
+    if (uid === user.uid) {
+      throw new Error("You can't change your own role.");
+    }
+    const validTeams = (teamIds || []).filter(isValidTeamId);
+    if (role !== "orgAdmin" && !validTeams.length) {
+      throw new Error("Pick at least one team.");
+    }
+    const finalRole = role === "orgAdmin" ? "orgAdmin" : role === "admin" ? "admin" : "player";
+    // Org admins see all three teams; everyone else gets exactly the teams
+    // the admin picked. Primary is the first picked team (or the existing
+    // primary if it's still one of them).
+    const finalTeams = finalRole === "orgAdmin" ? [...TEAM_IDS] : validTeams;
+    const finalPrimary = finalTeams.includes(primaryTeamId) ? primaryTeamId : finalTeams[0];
+    await updateDoc(doc(db, "users", uid), { role: finalRole, teamIds: finalTeams, primaryTeamId: finalPrimary });
+    // Keep the invite record in sync so a future re-sign-in doesn't revert
+    // the role. Best-effort: invite-link sign-ups have no invitedEmails doc.
+    if (email) {
+      try { await setDoc(doc(db, "invitedEmails", email), { role: finalRole }, { merge: true }); } catch { /* users doc is authoritative */ }
+    }
+  };
+
   // Workouts — personal (private subcollection) + team-published
   const myWorkoutsPath = user ? `users/${user.uid}/workouts` : null;
   const myWorkouts = useCollection(myWorkoutsPath, orderBy("updatedAt", "desc"));
@@ -8848,7 +9049,7 @@ export default function TeamHubRolesApp() {
         {updateReady && <UpdateBanner onReload={reload} color={COLORS.primary} />}
         <Header title={title} user={effUser} onAvatarClick={() => setSettingsOpen(true)} onPreview={() => { setPreviewAsPlayer(true); setTab("home"); }} />
         {canSeeMultipleTeams && <TeamSwitcher teams={visibleTeams} activeTeamId={activeTeamId} onSelect={setPreferredTeamId} />}
-        {settingsOpen && <SettingsModal user={user} onClose={() => setSettingsOpen(false)} onSignOut={() => signOut(auth)} onReplayTour={() => { setSettingsOpen(false); setShowTour(true); }} onWhatsNew={() => { setSettingsOpen(false); setWhatsNewOpen(true); }} />}
+        {settingsOpen && <SettingsModal user={user} onClose={() => setSettingsOpen(false)} onSignOut={() => signOut(auth)} onReplayTour={() => { setSettingsOpen(false); setShowTour(true); }} onWhatsNew={() => { setSettingsOpen(false); setWhatsNewOpen(true); }} isOrgAdmin={user.role === "orgAdmin"} orgUsers={orgUsers} setUserRoleAndTeams={setUserRoleAndTeams} />}
         {whatsNewOpen && <WhatsNewModal onClose={() => setWhatsNewOpen(false)} accent={COLORS.accent} soft={COLORS.accentSoft} />}
         <WelcomeTour open={showTour} role={effUser.role} onClose={closeTour} />
         {previewAsPlayer && realIsAdmin && (

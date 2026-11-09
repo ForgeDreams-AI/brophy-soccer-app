@@ -242,12 +242,6 @@ service cloud.firestore {
       allow update: if coachUpdate()
         || (isMemberOf(rTeam()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completedBy']));
     }
-    // Tester feedback: any signed-in user submits their own; only admins read.
-    match /feedback/{id} {
-      allow create: if signedIn() && request.resource.data.fromUid == request.auth.uid;
-      allow read:   if isAdmin();
-      allow update, delete: if false;
-    }
     match /recipes/{id}       { allow read: if signedIn(); allow write: if isAdmin(); }
     match /categories/{id}    { allow read: if signedIn(); allow write: if isAdmin(); }
     // Quote of the Day: one per team; coach of the team posts, members read.
