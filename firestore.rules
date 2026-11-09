@@ -1,0 +1,250 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function isAdmin() {
+      return signedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // The audience keys the current user satisfies. A doc with an
+    // `audienceKeys` array is readable if it contains any of these (or '*').
+    // Missing `audienceKeys` defaults to ['*'] (everyone) for back-compat.
+    // Roster emails are lowercased at invite time but an auth token's email can
+    // carry the case the user typed, so we match both spellings.
+    function myAudienceKeys() {
+      return ['*',
+              'uid:' + request.auth.uid,
+              'email:' + (request.auth.token.email == null ? '' : request.auth.token.email),
+              'email:' + (request.auth.token.email == null ? '' : request.auth.token.email.lower())];
+    }
+    function inAudience() {
+      return signedIn() &&
+        resource.data.get('audienceKeys', ['*']).hasAny(myAudienceKeys());
+    }
+    // The audience of a chat channel, read live from its doc. "team" (and any
+    // channel that no longer exists) is everyone. Used to stop a player from
+    // posting into — or forging a wider audience than — a channel they're in.
+    function channelKeys(ch) {
+      return (ch == 'team' || !exists(/databases/$(database)/documents/chatGroups/$(ch)))
+        ? ['*']
+        : get(/databases/$(database)/documents/chatGroups/$(ch)).data.get('audienceKeys', ['*']);
+    }
+    // Whether `msg` is a legitimate post by the current player: into a channel
+    // they can see, carrying an audience no wider than that channel's, with
+    // themselves inside it, and not masquerading as a coach (`isCoach` is what
+    // drives the coach styling in the chat UI, and the client sets it freely).
+    // Resolves the channel once — rules cap document lookups per request.
+    function canPostAsPlayer(msg) {
+      let chKeys = channelKeys(msg.get('channel', 'team'));
+      let msgKeys = msg.get('audienceKeys', ['*']);
+      let mine = myAudienceKeys();
+      return chKeys.hasAny(mine)
+        && msgKeys.hasOnly(chKeys)
+        && msgKeys.hasAny(mine)
+        && msg.get('isCoach', false) == false;
+    }
+
+    // Profiles: anyone signed in can read; you create your own; only admin changes roles
+    match /users/{uid} {
+      allow read:   if signedIn();
+      allow create: if isOwner(uid);
+      // Admin can edit anything on any user doc.
+      // A signed-in user can update their own doc, but only the FCM-token
+      // and notification-pref fields (so they can opt themselves in/out
+      // of push without being able to grant themselves admin).
+      allow update: if isAdmin()
+        || (isOwner(uid)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['fcmTokens', 'notificationsEnabledAt', 'name', 'initials', 'photoURL', 'photoPath']));
+      allow delete: if isAdmin();
+    }
+
+    // Admin-writes / everyone-reads
+    match /announcements/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
+    // Events carry an audience: coach reads all, a player only reads events
+    // addressed to them (everyone / their group / them specifically).
+    match /events/{id}        { allow read: if isAdmin() || inAudience(); allow write: if isAdmin(); }
+    match /videos/{id}        { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /drills/{id}          { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /practices/{id}       { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /programs/{id}        { allow read: if signedIn(); allow write: if isAdmin(); }
+    // Game-day starting line-ups: coach builds/saves; everyone on the team reads.
+    match /lineups/{id}         { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /customExercises/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
+
+    // Team documents: admin uploads/deletes; any signed-in player may add their
+    // own signature (only the `signatures` field), like message readBy/votes.
+    match /documents/{id} {
+      allow read:   if signedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (signedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signatures']));
+    }
+
+    // Daily attendance: everyone reads; the coach marks anyone present/absent,
+    // and a player may self check-in — but ONLY their own status (keyed by their
+    // email) and nothing else on the shared day doc.
+    match /attendance/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+      allow create: if signedIn() && request.auth.token.email != null
+        && request.resource.data.diff({}).affectedKeys().hasOnly(['date', 'statuses', 'updatedAt'])
+        && request.resource.data.statuses.keys().hasOnly([request.auth.token.email])
+        && request.resource.data.statuses[request.auth.token.email] in ['present', 'absent', ''];
+      allow update: if signedIn() && request.auth.token.email != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['date', 'statuses', 'updatedAt'])
+        && request.resource.data.statuses.diff(resource.data.get('statuses', {})).affectedKeys().hasOnly([request.auth.token.email])
+        && request.resource.data.statuses[request.auth.token.email] in ['present', 'absent', ''];
+    }
+
+    // Absence reasons: a player explains their own absence for a given date.
+    // A player may create/update only their own (the doc's uid must be theirs);
+    // the coach reads everyone's. Doc id is `${date}__${uid}`.
+    match /attendanceReasons/{id} {
+      allow read:          if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow delete:        if isAdmin();
+    }
+
+    // Group chats (channels): admin creates/deletes + sets visibility.
+    // A hidden channel is only readable by its audience (enforced server-side
+    // via audienceKeys); its messages are gated the same way below.
+    // Coaches can also edit membership after creation, which rewrites
+    // `visibleTo` + `audienceKeys` and re-stamps the channel's messages. Any
+    // edit that touches the audience must leave a non-empty `audienceKeys`
+    // behind, so enforcement can never be dropped by an edit; edits that don't
+    // touch it (e.g. pin/rename) are unaffected, including on pre-backfill docs.
+    match /chatGroups/{id} {
+      allow read: if isAdmin() || inAudience();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() && (
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['visibleTo', 'audienceKeys'])
+        || (request.resource.data.audienceKeys is list
+            && request.resource.data.audienceKeys.size() > 0)
+      );
+    }
+
+    // Direct messages with the coach: a player can read/write only their own
+    // thread (threadId == their uid); the coach can read/write any thread.
+    match /dms/{id} {
+      allow read:   if isAdmin() || (signedIn() && resource.data.threadId == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.senderUid == request.auth.uid
+                    && (isAdmin() || request.resource.data.threadId == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    // Nutrition targets: coach sets daily kcal/protein goals; everyone reads.
+    match /nutritionTargets/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
+
+    // App-wide prompts (e.g. "everyone update your profile"): coach sets, all read.
+    match /appConfig/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
+
+    // Scheduled reminders + polls: coach-only. A Cloud Function (admin SDK,
+    // bypasses rules) fires them at their sendAt time.
+    match /scheduled/{id} { allow read, write: if isAdmin(); }
+
+    // Assignments: coach creates/deletes; any signed-in player may mark
+    // themselves done (only the `completedBy` map), like message readBy.
+    match /assignments/{id} {
+      allow read:   if signedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (signedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completedBy']));
+    }
+    // Tester feedback: any signed-in user submits their own; only admins read.
+    match /feedback/{id} {
+      allow create: if signedIn() && request.resource.data.fromUid == request.auth.uid;
+      allow read:   if isAdmin();
+      allow update, delete: if false;
+    }
+    match /recipes/{id}       { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /categories/{id}    { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /quotes/{id}        { allow read: if signedIn(); allow write: if isAdmin(); }
+
+    // Chat: anyone can post as themselves; only the coach edits/deletes/pins.
+    // Reads are scoped to the message's audience (copied from its channel), so
+    // a player never receives messages from a channel they can't see.
+    match /messages/{id} {
+      allow read:   if isAdmin() || inAudience();
+      // A message copies its channel's audience at post time, so that audience
+      // has to be checked against the channel rather than taken on trust from
+      // the client (see canPostAsPlayer). Coaches post freely.
+      // Note: a player posting in the instant between a coach narrowing a
+      // channel and their own snapshot catching up is denied and must retry —
+      // failing closed is the right side to err on for a privacy control.
+      allow create: if signedIn()
+        && request.resource.data.senderUid == request.auth.uid
+        && (isAdmin() || canPostAsPlayer(request.resource.data));
+      // Admin can edit/pin/delete. Any signed-in player can mark messages
+      // read (readBy), vote on a poll (votes) or react — but only those fields,
+      // and only on messages they're still in the audience for. Without the
+      // audience check a player removed from a channel could keep voting on and
+      // reacting to its polls using ids they collected while they were a member.
+      allow update: if isAdmin()
+        || (inAudience() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']))
+        || (inAudience() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']))
+        || (inAudience() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']));
+      allow delete: if isAdmin();
+    }
+
+    // Wellness: player writes only their own; coach reads the whole team
+    match /wellnessCheckins/{docId} {
+      allow read:  if isAdmin() || isOwner(resource.data.uid);
+      allow write: if signedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Food log: completely private to each player
+    match /logs/{uid}/entries/{entryId} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // Saved / favorite foods: private per player, for one-tap re-logging.
+    match /logs/{uid}/savedFoods/{id} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // Personal workouts: completely private to each player
+    match /users/{uid}/workouts/{wid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // Team-published workouts: everyone reads, only admin writes
+    match /teamWorkouts/{wid} {
+      allow read:  if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Invite roster: admin manages, signed-in can read (so first-login gate works)
+    match /invitedEmails/{email} {
+      allow read:  if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Water tracking: one doc per player per day. Player writes own, reads own.
+    match /water/{docId} {
+      allow read:  if signedIn() && resource.data.uid == request.auth.uid;
+      allow write: if signedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Meal log activity: small "did this player log today" markers so the
+    // coach can see compliance without reading what they actually ate.
+    match /mealLogActivity/{docId} {
+      allow read:  if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow write: if signedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Personal calendar events: completely private to each player.
+    match /users/{uid}/personalEvents/{id} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // Groups: admin manages; signed-in can read so the visibility filter works.
+    match /groups/{id} {
+      allow read:  if signedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

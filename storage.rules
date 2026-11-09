@@ -1,0 +1,94 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // The audience keys the caller satisfies — mirrors firestore.rules so a
+    // chat image is readable only by the same people who can read its channel.
+    function myAudienceKeys() {
+      return ['*',
+              'uid:' + request.auth.uid,
+              'email:' + (request.auth.token.email == null ? '' : request.auth.token.email),
+              'email:' + (request.auth.token.email == null ? '' : request.auth.token.email.lower())];
+    }
+    function isAdminUser() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Chat images. Path shape: chat/{channel}/{uid}/{filename}, where channel
+    // is the chatGroup id ("team" = everyone). Uploader writes their own
+    // folder (image, max 10MB); reads are gated to the channel's audience so
+    // images in a hidden channel stay private, matching the message rules.
+    match /chat/{channel}/{uid}/{filename} {
+      allow read: if request.auth != null && (
+        channel == 'team'
+        || isAdminUser()
+        || firestore.get(/databases/(default)/documents/chatGroups/$(channel))
+             .data.get('audienceKeys', ['*']).hasAny(myAudienceKeys())
+      );
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Legacy chat images uploaded before channel-scoped paths existed
+    // (chat/{uid}/{filename}). Read-only for signed-in members; no new writes.
+    match /chat/{uid}/{filename} {
+      allow read: if request.auth != null;
+    }
+
+    // Profile photos. Path shape: avatars/{uid}/{filename}. Any signed-in team
+    // member reads (so faces show in the roster / line-ups); only the owner
+    // writes to their own folder (image, max 10MB). A coach sets a player's
+    // photo from the player's own folder is not possible here, so coaches write
+    // under their own uid too and the URL is stored on the target user doc.
+    match /avatars/{uid}/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Team branding — e.g. the logo watermarked onto game-day line-ups.
+    // Path shape: branding/{uid}/{filename}. Any signed-in member reads; only
+    // the uploader (a coach) writes to their own folder (image, max 10MB).
+    match /branding/{uid}/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Drill photos + diagrams. Path shape: drills/{uid}/{filename}.
+    // Any signed-in team member can read; only the uploader writes to their
+    // own folder, must be an image, max 10MB.
+    match /drills/{uid}/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Coach-authored exercise photos. Path shape: exercises/{uid}/{filename}.
+    match /exercises/{uid}/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Team documents (PDF, Office files, images, etc.). Path shape:
+    // documents/{uid}/{filename}. Any signed-in member reads; only the uploader
+    // writes, max 50MB (presentations with media run large). No content-type
+    // restriction — the app curates which types coaches can pick.
+    match /documents/{uid}/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 50 * 1024 * 1024;
+    }
+  }
+}

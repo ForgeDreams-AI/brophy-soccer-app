@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── TeamHub theme tokens ──────────────────────────────────────────────
+   ThemeProvider sets every --th-* var on <html> at runtime from the active
+   team config (src/theme/teams.js). These :root values are the Phoenix
+   defaults — they apply before React mounts so there's no unstyled flash. */
+:root {
+  --th-primary: #14275C;
+  --th-primary-deep: #0B1836;
+  --th-accent: #F4C75E;
+  --th-accent-soft: #FCF1D6;
+  --th-success: #00B27A;
+  --th-danger: #E5484D;
+  --th-info: #0EA5E9;
+  --th-bg: #F1F4FA;
+  --th-surface: #FFFFFF;
+  --th-surface-2: #E8EDF6;
+  --th-ink: #101C33;
+  --th-ink-2: #4A5A75;
+  --th-ink-3: #8B96AB;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  background: var(--th-bg);
+  color: var(--th-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior-y: none;
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────── */
+@keyframes th-sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes th-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes th-pop-in {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes th-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.animate-sheet-up { animation: th-sheet-up 0.38s cubic-bezier(0.32, 0.9, 0.35, 1) both; }
+.animate-fade-in { animation: th-fade-in 0.22s ease-out both; }
+.animate-pop-in { animation: th-pop-in 0.28s cubic-bezier(0.32, 0.9, 0.35, 1) both; }
+
+/* ── Utilities ───────────────────────────────────────────────────────── */
+.press {
+  transition: transform 0.12s ease-out, opacity 0.12s ease-out;
+}
+.press:active {
+  transform: scale(0.95);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Numeric readouts (stats, timers) — keeps digits from jittering. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

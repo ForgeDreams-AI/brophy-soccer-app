@@ -1,0 +1,12 @@
+name = "phoenix-mens-soccer-app"
+compatibility_date = "2024-11-06"
+main = "./worker/index.js"
+
+# Static SPA bundle is bound as ASSETS — the Worker script in worker/index.js
+# falls through to env.ASSETS.fetch(request) for any non-/api path.
+# single-page-application fallback still applies through that binding so
+# client-side routes resolve to index.html.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
