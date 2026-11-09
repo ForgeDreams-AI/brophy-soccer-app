@@ -19,7 +19,7 @@ import {
   signOut,
 } from "firebase/auth";
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, setDoc,
+  collection, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc,
   orderBy, where, query, getDocs, limit,
   serverTimestamp, writeBatch, arrayUnion, deleteField,
 } from "firebase/firestore";
@@ -64,6 +64,7 @@ import {
 import { recipeSeedDocs } from "./data/recipeSeed";
 import { liftSeedDocs } from "./data/liftSeed";
 import { workoutSeedDocs, AREA_ORDER } from "./data/workoutSeed";
+import { TEAMS, TEAM_IDS, DEFAULT_TEAM_ID, isValidTeamId, teamDocFields } from "./data/teams";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { APP_VERSION } from "./data/whatsNew";
 import { UpdateBanner, WhatsNewModal } from "./components/UpdateUI";
@@ -538,6 +539,22 @@ const Header = ({ title, user, onAvatarClick, onPreview }) => (
       </button>
     </div>
   </header>
+);
+
+// Team switcher — shown in the app shell when the user can see more than
+// one team (a coach of several teams, or the org admin). Players see only
+// their own team, so they never get a switcher.
+const TeamSwitcher = ({ teams, activeTeamId, onSelect }) => (
+  <div className="flex gap-1.5 px-5 py-2 bg-white border-b border-slate-200 overflow-x-auto">
+    {teams.map((t) => {
+      const active = t.id === activeTeamId;
+      return (
+        <button key={t.id} onClick={() => onSelect(t.id)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider" style={{ backgroundColor: active ? COLORS.primary : COLORS.bg, color: active ? "#fff" : COLORS.textSecondary }}>
+          {t.shortName}
+        </button>
+      );
+    })}
+  </div>
 );
 
 const ReadOnlyHint = ({ label }) => (
@@ -5784,7 +5801,7 @@ const DateDivider = ({ label }) => (
   </div>
 );
 
-const MessagesPage = ({ user, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, scheduled = [], addScheduled, deleteScheduled }) => {
+const MessagesPage = ({ user, activeTeamId, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, scheduled = [], addScheduled, deleteScheduled }) => {
   const isAdmin = user.role === "admin";
   const [input, setInput] = useState("");
   const [showPinned, setShowPinned] = useState(true);
@@ -5891,7 +5908,7 @@ const MessagesPage = ({ user, messages, addMessage, togglePinMessage, deleteMess
       const blob = await downscaleImage(file);
       // Namespace by channel so Storage rules can gate reads to the channel's
       // audience (a hidden channel's images stay private, like its messages).
-      const path = `chat/${effectiveChannel}/${user.uid}/${Date.now()}.jpg`;
+      const path = `chat/${activeTeamId}/${effectiveChannel}/${user.uid}/${Date.now()}.jpg`;
       const ref = storageRef(storage, path);
       const snap = await uploadBytes(ref, blob, { contentType: "image/jpeg" });
       const url = await getDownloadURL(snap.ref);
@@ -7491,6 +7508,63 @@ const NameGate = ({ user, onDone }) => {
 /* ─── MAIN ─── */
 export default function TeamHubRolesApp() {
   const { user, loading, error: authError, clearError } = useAuth();
+
+  // ── Teams (Brophy: JVB + JVA + Varsity under one account) ──────────────
+  // A user belongs to one or more teams (user.teamIds, user.primaryTeamId).
+  // Players see only their own team; a coach sees their team(s); an orgAdmin
+  // sees all three and switches between them. `activeTeamId` is the team
+  // every team-scoped query and write below is filtered/stamped by.
+  const myTeamIds = useMemo(() => {
+    if (!user) return [];
+    if (user.role === "orgAdmin") return [...TEAM_IDS];
+    const ids = (user.teamIds || []).filter(isValidTeamId);
+    if (ids.length) return ids;
+    return [user.primaryTeamId || DEFAULT_TEAM_ID].filter(isValidTeamId);
+  }, [user]);
+  const isCoach = user?.role === "admin" || user?.role === "orgAdmin";
+  const visibleTeams = useMemo(() => TEAMS.filter((t) => myTeamIds.includes(t.id)), [myTeamIds]);
+  const canSeeMultipleTeams = visibleTeams.length > 1;
+  // The user's preferred team, persisted per device so a returning user lands
+  // on the team they were viewing. `activeTeamId` is derived during render
+  // (never corrected in an effect): if the saved preference isn't one of the
+  // user's teams (e.g. saved before a role change), fall back to their first
+  // team. Deriving during render keeps this lint-clean
+  // (react-hooks/set-state-in-effect).
+  const [preferredTeamId, setPreferredTeamId] = useState(() => {
+    try {
+      const saved = localStorage.getItem("activeTeamId");
+      return isValidTeamId(saved) ? saved : null;
+    } catch { return null; }
+  });
+  const activeTeamId = myTeamIds.includes(preferredTeamId)
+    ? preferredTeamId
+    : (myTeamIds[0] || DEFAULT_TEAM_ID);
+  useEffect(() => {
+    try { localStorage.setItem("activeTeamId", activeTeamId); } catch { /* private mode */ }
+  }, [activeTeamId]);
+
+  // One-time, idempotent seed of the `teams/{teamId}` docs (name, short name,
+  // level, coachUids) for the teams this user can see. A coach may create
+  // their own team's doc if it's missing; only an org admin may change one —
+  // see firestore.rules. Runs once per session for coaches/admins.
+  const teamsSeededRef = useRef(false);
+  useEffect(() => {
+    if (!user || !isCoach || teamsSeededRef.current) return;
+    teamsSeededRef.current = true;
+    (async () => {
+      try {
+        for (const t of visibleTeams) {
+          const ref = doc(db, "teams", t.id);
+          const snap = await getDoc(ref);
+          if (!snap.exists()) {
+            await setDoc(ref, { ...teamDocFields(t), createdAt: serverTimestamp() });
+          }
+        }
+      } catch {
+        teamsSeededRef.current = false; // retry on a later render
+      }
+    })();
+  }, [user, isCoach, visibleTeams]);
   const [tab, setTab] = useState("home");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [previewAsPlayer, setPreviewAsPlayer] = useState(false);
@@ -7581,9 +7655,10 @@ export default function TeamHubRolesApp() {
   }, [user]);
 
   // Live from Firestore — see Build Guide §4 + §8
-  const announcements = useCollection("announcements", orderBy("createdAt", "desc"));
+  const announcements = useCollection("announcements", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const addAnnouncement = (title, body) =>
     addDoc(collection(db, "announcements"), {
+      teamId: activeTeamId,
       title: title.trim(),
       body: (body || "").trim(),
       pinned: false,
@@ -7608,12 +7683,15 @@ export default function TeamHubRolesApp() {
     updateDoc(doc(db, "announcements", id), { title: title.trim(), body: (body || "").trim() });
   const deleteAnnouncement = (id) => deleteDoc(doc(db, "announcements", id));
 
-  const eventsRaw = useAudienceCollection("events", user);
-  const groupsList = useCollection("groups", orderBy("name"));
+  const eventsRaw = useAudienceCollection("events", user, null, activeTeamId);
+  const groupsList = useCollection("groups", where("teamId", "==", activeTeamId), orderBy("name"));
   // Admin-only view of signed-in players for the Groups picker. Defer the
   // listener until the user is known + actually an admin (rules deny otherwise).
+  // Roster for the active team only (a coach picks players from their own
+  // team; the org admin switches teams to see the others).
   const allUsers = useCollection(
-    user?.role === "admin" ? "users" : null,
+    isCoach ? "users" : null,
+    where("teamIds", "array-contains", activeTeamId),
     orderBy("name"),
   );
   const events = useMemo(() => {
@@ -7647,6 +7725,7 @@ export default function TeamHubRolesApp() {
   const addEvent = (data) =>
     addDoc(collection(db, "events"), {
       ...data,
+      teamId: activeTeamId,
       audienceKeys: audienceKeysFor(data.visibleTo, groupsList),
       createdAt: serverTimestamp(),
     });
@@ -7656,6 +7735,7 @@ export default function TeamHubRolesApp() {
     const batch = writeBatch(db);
     rows.forEach((r) => batch.set(doc(collection(db, "events")), {
       ...r,
+      teamId: activeTeamId,
       audienceKeys: audienceKeysFor(r.visibleTo, groupsList),
       createdAt: serverTimestamp(),
       ...(notify ? {} : { notify: false }),
@@ -7675,6 +7755,7 @@ export default function TeamHubRolesApp() {
   // Groups — admin manages, signed-in reads for the event visibility filter.
   const addGroup = (name) =>
     addDoc(collection(db, "groups"), {
+      teamId: activeTeamId,
       name: name.trim(),
       memberUids: [],
       createdBy: user.name,
@@ -7722,7 +7803,7 @@ export default function TeamHubRolesApp() {
   const deleteDrill = (id) => deleteDoc(doc(db, "drills", id));
 
   // Practices — saved sessions assembled from drills (mirrors teamWorkouts).
-  const practices = useCollection("practices", orderBy("createdAt", "desc"));
+  const practices = useCollection("practices", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   // Accepts a plain name (string) or a full template object (blank / starter / copy).
   const addPractice = (input) => {
     const base = typeof input === "string" ? { name: input } : (input || {});
@@ -7730,6 +7811,7 @@ export default function TeamHubRolesApp() {
       desc: "", cat: "", blocks: [], published: false,
       createdByName: user.name, createdAt: serverTimestamp(),
       ...base,
+      teamId: activeTeamId,
       name: (base.name || "").trim(),
     });
   };
@@ -7737,17 +7819,18 @@ export default function TeamHubRolesApp() {
   const deletePractice = (id) => deleteDoc(doc(db, "practices", id));
 
   // Programs — ordered sequences of practices (dates assigned at assign-time).
-  const programs = useCollection("programs", orderBy("createdAt", "desc"));
+  const programs = useCollection("programs", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const addProgram = (name) =>
-    addDoc(collection(db, "programs"), { name: name.trim(), desc: "", days: [], published: false, createdByName: user.name, createdAt: serverTimestamp() });
+    addDoc(collection(db, "programs"), { teamId: activeTeamId, name: name.trim(), desc: "", days: [], published: false, createdByName: user.name, createdAt: serverTimestamp() });
   const updateProgram = (id, data) => updateDoc(doc(db, "programs", id), data);
   const deleteProgram = (id) => deleteDoc(doc(db, "programs", id));
 
   // Game-day starting line-ups — coach assembles players onto a pitch and
   // saves the "field" under a custom name (mirrors practices CRUD).
-  const lineups = useCollection("lineups", orderBy("createdAt", "desc"));
+  const lineups = useCollection("lineups", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const addLineup = (data) =>
     addDoc(collection(db, "lineups"), {
+      teamId: activeTeamId,
       name: (data?.name || "").trim(), formation: data?.formation || "", slots: data?.slots || [],
       createdByName: user.name, createdAt: serverTimestamp(),
     });
@@ -7812,13 +7895,14 @@ export default function TeamHubRolesApp() {
 
   // Wellness — guide §4 + §8 (one doc per player per day, ID = `${uid}_${date}`)
   const today = new Date().toISOString().slice(0, 10);
-  const wellnessRaw = useCollection("wellnessCheckins", where("date", "==", today));
+  const wellnessRaw = useCollection("wellnessCheckins", where("teamId", "==", activeTeamId), where("date", "==", today));
   const wellness = useMemo(
     () => wellnessRaw.map((w) => ({ ...w, time: formatAgo(w.updatedAt) })),
     [wellnessRaw],
   );
   const submitWellness = ({ feeling, soreness, tiredness }) =>
     setDoc(doc(db, "wellnessCheckins", `${user.uid}_${today}`), {
+      teamId: activeTeamId,
       uid: user.uid,
       name: user.name,
       initials: user.initials,
@@ -7834,6 +7918,7 @@ export default function TeamHubRolesApp() {
     const ref = await addDoc(collection(db, logsPath), { ...data, createdAt: serverTimestamp() });
     // Bump the activity marker so coach compliance view sees this player today.
     setDoc(doc(db, "mealLogActivity", `${user.uid}_${today}`), {
+      teamId: activeTeamId,
       uid: user.uid,
       date: today,
       lastLoggedAt: serverTimestamp(),
@@ -7869,9 +7954,10 @@ export default function TeamHubRolesApp() {
 
   // Nutrition targets — coach sets a daily kcal/protein goal for everyone or
   // specific players; the player's Today shows progress from their food log.
-  const nutritionTargets = useCollection("nutritionTargets", orderBy("createdAt"));
+  const nutritionTargets = useCollection("nutritionTargets", where("teamId", "==", activeTeamId), orderBy("createdAt"));
   const addNutritionTarget = ({ cal, protein, visibleTo }) =>
     addDoc(collection(db, "nutritionTargets"), {
+      teamId: activeTeamId,
       cal: Number(cal) || 0,
       protein: Number(protein) || 0,
       visibleTo: visibleTo || { groupIds: [], emails: [] },
@@ -7900,7 +7986,8 @@ export default function TeamHubRolesApp() {
 
   // Coach-only compliance view — players' read rule would deny these.
   const mealLogActivityToday = useCollection(
-    user?.role === "admin" ? "mealLogActivity" : null,
+    isCoach ? "mealLogActivity" : null,
+    where("teamId", "==", activeTeamId),
     where("date", "==", today),
   );
 
@@ -7918,14 +8005,15 @@ export default function TeamHubRolesApp() {
   );
 
   // Team documents + e-sign — coach uploads, everyone signs (signatures array).
-  const documents = useCollection("documents", orderBy("createdAt", "desc"));
+  const documents = useCollection("documents", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const addDocument = async ({ title, file }) => {
     if (!file) throw new Error("No file selected.");
-    const path = `documents/${user.uid}/${Date.now()}-${file.name}`;
+    const path = `documents/${activeTeamId}/${user.uid}/${Date.now()}-${file.name}`;
     const r = storageRef(storage, path);
     const snap = await uploadBytes(r, file, { contentType: file.type || "application/octet-stream" });
     const url = await getDownloadURL(snap.ref);
     return addDoc(collection(db, "documents"), {
+      teamId: activeTeamId,
       title: (title || "").trim() || file.name,
       url, path, name: file.name || "", fileType: file.type || "",
       createdByName: user.name, signatures: [], createdAt: serverTimestamp(),
@@ -7936,31 +8024,36 @@ export default function TeamHubRolesApp() {
     updateDoc(doc(db, "documents", id), { signatures: arrayUnion({ uid: user.uid, name, ts: new Date().toISOString() }) });
 
   // Daily attendance — one doc per day (id = date); admin marks present/absent.
-  const attendanceDocs = useCollection(user ? "attendance" : null, where("date", "==", today));
+  const attendanceDocs = useCollection(user ? "attendance" : null, where("teamId", "==", activeTeamId), where("date", "==", today));
   const attendanceToday = attendanceDocs[0]?.statuses || {};
+  // One attendance doc per team per day (id = `${teamId}_${date}`) so the
+  // three teams never share a statuses map.
+  const attendanceDocId = `${activeTeamId}_${today}`;
   const setAttendanceStatus = (email, status) =>
-    setDoc(doc(db, "attendance", today), { date: today, statuses: { [email]: status }, updatedAt: serverTimestamp() }, { merge: true });
+    setDoc(doc(db, "attendance", attendanceDocId), { teamId: activeTeamId, date: today, statuses: { [email]: status }, updatedAt: serverTimestamp() }, { merge: true });
   // Player self check-in — writes only their own status into today's doc
   // (allowed by the attendance rule for the signed-in user's own email).
   const myAttendanceStatus = user ? (attendanceToday[user.email] || "") : "";
   const selfCheckIn = (status) =>
-    setDoc(doc(db, "attendance", today), { date: today, statuses: { [user.email]: status }, updatedAt: serverTimestamp() }, { merge: true });
+    setDoc(doc(db, "attendance", attendanceDocId), { teamId: activeTeamId, date: today, statuses: { [user.email]: status }, updatedAt: serverTimestamp() }, { merge: true });
 
   // Recent attendance history (coach archive + lets a player find their own past
   // absences). One small doc per day; cap the window so it stays cheap.
-  const attendanceHistory = useCollection(user ? "attendance" : null, orderBy("date", "desc"), limit(60));
+  const attendanceHistory = useCollection(user ? "attendance" : null, where("teamId", "==", activeTeamId), orderBy("date", "desc"), limit(60));
   // Absence reasons: the coach reads everyone's (recent); a player reads only
   // their own (to know which absences they've already explained).
   const allAbsenceReasons = useCollection(
-    user && user.role === "admin" ? "attendanceReasons" : null,
+    user && isCoach ? "attendanceReasons" : null,
+    where("teamId", "==", activeTeamId),
     orderBy("date", "desc"), limit(300),
   );
   const myAbsenceReasons = useCollection(
-    user && user.role !== "admin" ? "attendanceReasons" : null,
+    user && !isCoach ? "attendanceReasons" : null,
     where("uid", "==", user?.uid || "__none__"),
   );
   const submitAbsenceReason = (date, reason) =>
     setDoc(doc(db, "attendanceReasons", `${date}__${user.uid}`), {
+      teamId: activeTeamId,
       date, uid: user.uid, email: (user.email || "").toLowerCase(),
       name: user.name || "", reason: (reason || "").trim(), createdAt: serverTimestamp(),
     }, { merge: true });
@@ -7979,9 +8072,10 @@ export default function TeamHubRolesApp() {
 
   // Assignments — coach gives a task (optionally a team workout) a due date +
   // audience; players see it on Today and mark it done; coach sees completion.
-  const assignments = useCollection("assignments", orderBy("date"));
+  const assignments = useCollection("assignments", where("teamId", "==", activeTeamId), orderBy("date"));
   const addAssignment = ({ title, workoutId, workoutName, body, link, date, visibleTo }) =>
     addDoc(collection(db, "assignments"), {
+      teamId: activeTeamId,
       title: (title || workoutName || "Workout").trim(),
       workoutId: workoutId || "",
       workoutName: workoutName || "",
@@ -8016,13 +8110,22 @@ export default function TeamHubRolesApp() {
   }, [assignments, user, myAssignmentGroupIds]);
 
   // Roster (invite gate) — admin manages, useAuth reads on first signup
-  const invites = useCollection("invitedEmails", orderBy("email"));
+  // TODO (invite links, follow-up fix): team-specific invite LINKS live in
+  // the `inviteLinks` collection (shape documented in src/data/teams.js, rules
+  // in firestore.rules). A coach generates a link for ONE team and shares it;
+  // the link-generation UI + redemption in useAuth land here — this
+  // email-list invite flow stays until the link flow ships.
+  const invites = useCollection("invitedEmails", where("teamId", "==", activeTeamId), orderBy("email"));
   const addInvite = (email) => {
     const e = email.trim().toLowerCase();
     if (!e.includes("@")) return Promise.reject(new Error("Invalid email."));
+    // The invite carries the team so a new player lands on the right team
+    // (useAuth reads it at first sign-in). Defaults to the team the coach is
+    // currently viewing; the invite UI gets a team picker in a later fix.
     return setDoc(doc(db, "invitedEmails", e), {
       email: e,
       role: "player",
+      teamId: activeTeamId,
       addedBy: user.name,
       addedAt: serverTimestamp(),
     });
@@ -8034,6 +8137,7 @@ export default function TeamHubRolesApp() {
       batch.set(doc(db, "invitedEmails", e), {
         email: e,
         role: "player",
+        teamId: activeTeamId,
         addedBy: user.name,
         addedAt: serverTimestamp(),
       });
@@ -8070,12 +8174,13 @@ export default function TeamHubRolesApp() {
     updateDoc(doc(db, myWorkoutsPath, id), { ...data, updatedAt: serverTimestamp() });
   const deleteMyWorkout = (id) => deleteDoc(doc(db, myWorkoutsPath, id));
 
-  const teamWorkouts = useCollection("teamWorkouts", orderBy("updatedAt", "desc"));
+  const teamWorkouts = useCollection("teamWorkouts", where("teamId", "==", activeTeamId), orderBy("updatedAt", "desc"));
   const addTeamWorkout = (input) => {
     const base = typeof input === "string" ? { name: input } : (input || {});
     return addDoc(collection(db, "teamWorkouts"), {
       exercises: [],
       ...base,
+      teamId: activeTeamId,
       name: (base.name || "").trim(),
       createdByUid: user.uid,
       createdByName: user.name,
@@ -8095,7 +8200,7 @@ export default function TeamHubRolesApp() {
     if (fresh.length) {
       const batch = writeBatch(db);
       fresh.forEach((w) => batch.set(doc(collection(db, "teamWorkouts")), {
-        ...w, createdByUid: user.uid, createdByName: user.name || "Starter",
+        ...w, teamId: activeTeamId, createdByUid: user.uid, createdByName: user.name || "Starter",
         createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       }));
       await batch.commit();
@@ -8104,7 +8209,7 @@ export default function TeamHubRolesApp() {
   };
 
   // Chat — pinned status lives on each message doc (guide §4)
-  const messages = useAudienceCollection("messages", user, "createdAt");
+  const messages = useAudienceCollection("messages", user, "createdAt", activeTeamId);
   const addMessage = (text, { attachment, pinned, replyTo, poll, channel } = {}) => {
     // A message inherits the audience of its channel so hidden channels stay
     // private server-side; the Team channel is visible to everyone.
@@ -8116,6 +8221,9 @@ export default function TeamHubRolesApp() {
       text: (text || "").trim(),
       pinned: !!pinned,
       channel: channel || "team",
+      // A message belongs to its channel's team (the "team" channel is the
+      // active team's main channel). Rules + queries scope by this field.
+      teamId: ch?.teamId || activeTeamId,
       audienceKeys: ch?.audienceKeys?.length ? ch.audienceKeys : ["*"],
       isCoach: user.role === "admin",
       readBy: { [user.uid]: serverTimestamp() },
@@ -8143,7 +8251,8 @@ export default function TeamHubRolesApp() {
   // exactly like a shared photo.
   const postLineupImage = async (blob, channel, name) => {
     const ch = channel || "team";
-    const path = `chat/${ch}/${user.uid}/${Date.now()}.jpg`;
+    const chDoc = ch !== "team" ? chatGroups.find((c) => c.id === ch) : null;
+    const path = `chat/${chDoc?.teamId || activeTeamId}/${ch}/${user.uid}/${Date.now()}.jpg`;
     const r = storageRef(storage, path);
     const snap = await uploadBytes(r, blob, { contentType: "image/jpeg" });
     const url = await getDownloadURL(snap.ref);
@@ -8177,9 +8286,10 @@ export default function TeamHubRolesApp() {
 
   // Chat channels ("group chats") — admin creates, sets who can see each one.
   // Empty visibleTo = everyone. `audienceKeys` enforces this server-side.
-  const chatGroups = useAudienceCollection("chatGroups", user, "createdAt");
+  const chatGroups = useAudienceCollection("chatGroups", user, "createdAt", activeTeamId);
   const addChatGroup = (name, visibleTo) =>
     addDoc(collection(db, "chatGroups"), {
+      teamId: activeTeamId,
       name: name.trim(),
       visibleTo: visibleTo || { groupIds: [], uids: [] },
       audienceKeys: audienceKeysFor(visibleTo, groupsList),
@@ -8207,10 +8317,11 @@ export default function TeamHubRolesApp() {
 
   // Scheduled reminders + polls — coach queues them; a Cloud Function fires
   // each at its sendAt time (see functions/index.js runScheduled).
-  const scheduled = useCollection(user?.role === "admin" ? "scheduled" : null, orderBy("sendAt"));
+  const scheduled = useCollection(isCoach ? "scheduled" : null, where("teamId", "==", activeTeamId), orderBy("sendAt"));
   const addScheduled = (data) =>
     addDoc(collection(db, "scheduled"), {
       ...data,
+      teamId: activeTeamId,
       sent: false,
       createdByUid: user.uid,
       createdByName: user.name,
@@ -8229,7 +8340,7 @@ export default function TeamHubRolesApp() {
   // (Team / unknown channel → everyone), matching today's all-readable behaviour.
   const backfilledRef = useRef(false);
   useEffect(() => {
-    if (user?.role !== "admin" || backfilledRef.current) return;
+    if (!isCoach || backfilledRef.current) return;
     const updates = [];
     eventsRaw.forEach((e) => {
       if (e.audienceKeys === undefined) updates.push({ ref: doc(db, "events", e.id), data: { audienceKeys: audienceKeysFor(e.visibleTo, groupsList) } });
@@ -8256,16 +8367,18 @@ export default function TeamHubRolesApp() {
         backfilledRef.current = false; // let it retry on the next render
       }
     })();
-  }, [user?.role, eventsRaw, chatGroups, messages, groupsList]);
+  }, [isCoach, eventsRaw, chatGroups, messages, groupsList]);
 
   // Direct messages with the coach. Players read only their own thread; the
   // coach reads all. (No orderBy in the query to avoid a composite index.)
   const dms = useCollection(
     user ? "dms" : null,
-    ...(user?.role === "admin" ? [] : [where("threadId", "==", user?.uid || "_")]),
+    where("teamId", "==", activeTeamId),
+    ...(isCoach ? [] : [where("threadId", "==", user?.uid || "_")]),
   );
   const addDM = (text, threadId) =>
     addDoc(collection(db, "dms"), {
+      teamId: activeTeamId,
       threadId,
       senderUid: user.uid,
       senderName: user.name,
@@ -8275,10 +8388,10 @@ export default function TeamHubRolesApp() {
     });
 
   // Quote of the Day — latest coach-posted quote; posting one fans out a push.
-  const quotes = useCollection("quotes", orderBy("createdAt", "desc"));
+  const quotes = useCollection("quotes", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const todayQuote = quotes[0] || null;
   const addQuote = ({ text, author }) =>
-    addDoc(collection(db, "quotes"), { text, author: author || "", createdByName: user.name, createdAt: serverTimestamp() });
+    addDoc(collection(db, "quotes"), { teamId: activeTeamId, text, author: author || "", createdByName: user.name, createdAt: serverTimestamp() });
 
   // Total unread chat messages for this user → number badge on the Chat tab.
   // Mirrors the inbox: channel messages not sent by me and not yet in readBy.
@@ -8305,8 +8418,14 @@ export default function TeamHubRolesApp() {
 
   // "View as player" preview — a real coach can drop their effective role to
   // player to see exactly what the team sees. Identity (uid/name) stays real.
-  const realIsAdmin = user.role === "admin";
-  const effUser = previewAsPlayer && realIsAdmin ? { ...user, role: "player" } : user;
+  const realIsAdmin = user.role === "admin" || user.role === "orgAdmin";
+  // An org admin gets the full coach UI (same tabs/buttons as a coach); the
+  // team switcher above is what scopes them to one team at a time.
+  const effUser = previewAsPlayer && realIsAdmin
+    ? { ...user, role: "player" }
+    : user.role === "orgAdmin"
+      ? { ...user, role: "admin" }
+      : user;
 
   // Both roles get a slim 5-tab nav. Workouts/Nutrition/Videos live under a
   // single "Train" hub so coaches aren't juggling three training-content tabs
@@ -8355,6 +8474,7 @@ export default function TeamHubRolesApp() {
       <div className="w-full max-w-md shadow-2xl flex flex-col z-10" style={{ position: "fixed", top: 0, bottom: 0, left: 0, right: 0, margin: "0 auto", maxWidth: "28rem", backgroundColor: COLORS.bg }}>
         {updateReady && <UpdateBanner onReload={reload} color={COLORS.primary} />}
         <Header title={title} user={effUser} onAvatarClick={() => setSettingsOpen(true)} onPreview={() => { setPreviewAsPlayer(true); setTab("home"); }} />
+        {canSeeMultipleTeams && <TeamSwitcher teams={visibleTeams} activeTeamId={activeTeamId} onSelect={setPreferredTeamId} />}
         {settingsOpen && <SettingsModal user={user} onClose={() => setSettingsOpen(false)} onSignOut={() => signOut(auth)} onReplayTour={() => { setSettingsOpen(false); setShowTour(true); }} onWhatsNew={() => { setSettingsOpen(false); setWhatsNewOpen(true); }} />}
         {whatsNewOpen && <WhatsNewModal onClose={() => setWhatsNewOpen(false)} accent={COLORS.accent} soft={COLORS.accentSoft} />}
         <WelcomeTour open={showTour} role={effUser.role} onClose={closeTour} />
@@ -8386,7 +8506,7 @@ export default function TeamHubRolesApp() {
             />
           )}
           {activeTab === "calendar" && <CalendarPage user={effUser} events={events} practices={practices} teamWorkouts={teamWorkouts} personalEvents={personalEvents} addEvent={addEvent} updateEvent={updateEvent} addPersonalEvent={addPersonalEvent} updatePersonalEvent={updatePersonalEvent} deleteEvent={deleteEvent} deletePersonalEvent={deletePersonalEvent} importEvents={importEvents} groups={groupsList} addGroup={addGroup} updateGroupMembers={updateGroupMembers} deleteGroup={deleteGroup} invites={invites} allUsers={allUsers} chatGroups={chatGroups} />}
-          {activeTab === "messages" && <MessagesPage user={effUser} allUsers={allUsers} messages={messages} addMessage={addMessage} togglePinMessage={togglePinMessage} deleteMessage={deleteMessage} markMessagesRead={markMessagesRead} voteOnPoll={voteOnPoll} reactToMessage={reactToMessage} rosterCount={invites.length} chatGroups={chatGroups} addChatGroup={addChatGroup} deleteChatGroup={deleteChatGroup} updateChatGroup={updateChatGroup} onPinChannel={pinChatGroup} groups={groupsList} invites={invites} announcements={announcements} addAnnouncement={addAnnouncement} deleteAnnouncement={deleteAnnouncement} dms={dms} addDM={addDM} scheduled={scheduled} addScheduled={addScheduled} deleteScheduled={deleteScheduled} />}
+          {activeTab === "messages" && <MessagesPage user={effUser} activeTeamId={activeTeamId} allUsers={allUsers} messages={messages} addMessage={addMessage} togglePinMessage={togglePinMessage} deleteMessage={deleteMessage} markMessagesRead={markMessagesRead} voteOnPoll={voteOnPoll} reactToMessage={reactToMessage} rosterCount={invites.length} chatGroups={chatGroups} addChatGroup={addChatGroup} deleteChatGroup={deleteChatGroup} updateChatGroup={updateChatGroup} onPinChannel={pinChatGroup} groups={groupsList} invites={invites} announcements={announcements} addAnnouncement={addAnnouncement} deleteAnnouncement={deleteAnnouncement} dms={dms} addDM={addDM} scheduled={scheduled} addScheduled={addScheduled} deleteScheduled={deleteScheduled} />}
         </main>
         <nav className="flex-shrink-0 w-full bg-white border-t border-slate-200 z-20" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
           <div className="grid px-1 pt-2" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>

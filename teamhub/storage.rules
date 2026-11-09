@@ -9,40 +9,74 @@ service firebase.storage {
               'email:' + (request.auth.token.email == null ? '' : request.auth.token.email),
               'email:' + (request.auth.token.email == null ? '' : request.auth.token.email.lower())];
     }
+    function myUserData() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+    function myRole() {
+      let d = myUserData();
+      return d == null ? 'player' : d.get('role', 'player');
+    }
+    function myTeamIds() {
+      let d = myUserData();
+      return d == null ? [] : d.get('teamIds', []);
+    }
+    function isOrgAdminUser() { return request.auth != null && myRole() == 'orgAdmin'; }
     function isAdminUser() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return request.auth != null && (myRole() == 'admin' || myRole() == 'orgAdmin');
+    }
+    function isMemberOfTeam(teamId) {
+      return request.auth != null && (isOrgAdminUser() || myTeamIds().hasAny([teamId]));
+    }
+    // The caller shares at least one team with the user who owns `uid`'s
+    // profile (used for avatars). Returns false when either doc is missing.
+    function sharesTeamWith(uid) {
+      if (request.auth == null) return false;
+      if (isOrgAdminUser() || request.auth.uid == uid) return true;
+      let other = firestore.get(/databases/(default)/documents/users/$(uid)).data;
+      if (other == null) return false;
+      return myTeamIds().hasAny(other.get('teamIds', []));
     }
 
-    // Chat images. Path shape: chat/{channel}/{uid}/{filename}, where channel
-    // is the chatGroup id ("team" = everyone). Uploader writes their own
-    // folder (image, max 10MB); reads are gated to the channel's audience so
-    // images in a hidden channel stay private, matching the message rules.
-    match /chat/{channel}/{uid}/{filename} {
-      allow read: if request.auth != null && (
+    // Chat images. Path shape: chat/{teamId}/{channel}/{uid}/{filename},
+    // where channel is the chatGroup id ("team" = the team's main channel).
+    // The team segment is what isolates the three Brophy teams: a caller can
+    // only read/write images under a team they're on. Reads are additionally
+    // gated to the channel's audience so images in a hidden channel stay
+    // private, matching the message rules. Uploader writes their own folder
+    // (image, max 10MB).
+    match /chat/{teamId}/{channel}/{uid}/{filename} {
+      allow read: if request.auth != null && isMemberOfTeam(teamId) && (
         channel == 'team'
         || isAdminUser()
         || firestore.get(/databases/(default)/documents/chatGroups/$(channel))
              .data.get('audienceKeys', ['*']).hasAny(myAudienceKeys())
       );
       allow write: if request.auth != null
+        && isMemberOfTeam(teamId)
         && request.auth.uid == uid
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
 
-    // Legacy chat images uploaded before channel-scoped paths existed
-    // (chat/{uid}/{filename}). Read-only for signed-in members; no new writes.
+    // Legacy chat images uploaded before team-scoped paths existed
+    // (chat/{channel}/{uid}/{filename} and chat/{uid}/{filename}).
+    // Read-only for signed-in members; no new writes.
+    match /chat/{channel}/{uid}/{filename} {
+      allow read: if request.auth != null;
+    }
     match /chat/{uid}/{filename} {
       allow read: if request.auth != null;
     }
 
-    // Profile photos. Path shape: avatars/{uid}/{filename}. Any signed-in team
-    // member reads (so faces show in the roster / line-ups); only the owner
-    // writes to their own folder (image, max 10MB). A coach sets a player's
-    // photo from the player's own folder is not possible here, so coaches write
-    // under their own uid too and the URL is stored on the target user doc.
+    // Profile photos. Path shape: avatars/{uid}/{filename}. Readable by the
+    // owner, the org admin, and anyone who shares a team with the owner (so
+    // faces show in the roster / line-ups of their team, but not to the
+    // other teams). Only the owner writes to their own folder (image, max
+    // 10MB). A coach sets a player's photo from the player's own folder is
+    // not possible here, so coaches write under their own uid too and the URL
+    // is stored on the target user doc.
     match /avatars/{uid}/{filename} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null && sharesTeamWith(uid);
       allow write: if request.auth != null
         && request.auth.uid == uid
         && request.resource.size < 10 * 1024 * 1024
@@ -61,7 +95,8 @@ service firebase.storage {
     }
 
     // Drill photos + diagrams. Path shape: drills/{uid}/{filename}.
-    // Any signed-in team member can read; only the uploader writes to their
+    // The drill library is shared across all three Brophy teams, so any
+    // signed-in team member can read; only the uploader writes to their
     // own folder, must be an image, max 10MB.
     match /drills/{uid}/{filename} {
       allow read: if request.auth != null;
@@ -72,6 +107,7 @@ service firebase.storage {
     }
 
     // Coach-authored exercise photos. Path shape: exercises/{uid}/{filename}.
+    // Shared exercise library — same as drills.
     match /exercises/{uid}/{filename} {
       allow read: if request.auth != null;
       allow write: if request.auth != null
@@ -81,14 +117,22 @@ service firebase.storage {
     }
 
     // Team documents (PDF, Office files, images, etc.). Path shape:
-    // documents/{uid}/{filename}. Any signed-in member reads; only the uploader
-    // writes, max 50MB (presentations with media run large). No content-type
+    // documents/{teamId}/{uid}/{filename}. Readable only by members of that
+    // team; only a member of the team writes, under their own uid folder,
+    // max 50MB (presentations with media run large). No content-type
     // restriction — the app curates which types coaches can pick.
-    match /documents/{uid}/{filename} {
-      allow read: if request.auth != null;
+    match /documents/{teamId}/{uid}/{filename} {
+      allow read: if request.auth != null && isMemberOfTeam(teamId);
       allow write: if request.auth != null
+        && isMemberOfTeam(teamId)
         && request.auth.uid == uid
         && request.resource.size < 50 * 1024 * 1024;
+    }
+
+    // Legacy team documents uploaded before team-scoped paths existed
+    // (documents/{uid}/{filename}). Read-only for signed-in members; no new writes.
+    match /documents/{uid}/{filename} {
+      allow read: if request.auth != null;
     }
   }
 }

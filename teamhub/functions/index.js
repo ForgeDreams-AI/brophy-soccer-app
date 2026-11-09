@@ -16,12 +16,20 @@ const db = getFirestore();
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
-async function collectTokens({ excludeUid } = {}) {
-  const snap = await db.collection("users").get();
+// Team-scoped token collection. With a teamId, only users on that team
+// (teamIds array-contains teamId) plus the org admin (who belongs to all
+// three teams) get the push. Without a teamId it falls back to everyone —
+// used only for docs that predate teams.
+async function collectTokens({ teamId, excludeUid } = {}) {
+  const snap = teamId
+    ? await db.collection("users").where("teamIds", "array-contains", teamId).get()
+    : await db.collection("users").get();
   const all = [];
   const tokenToUid = new Map();
   snap.forEach((d) => {
     if (excludeUid && d.id === excludeUid) return;
+    // NOTE: org admins carry all three teamIds, so the array-contains
+    // query above already includes them.
     const tokens = d.data().fcmTokens;
     if (Array.isArray(tokens)) {
       tokens.forEach((t) => {
@@ -113,15 +121,24 @@ async function adminUids() {
   return snap.docs.map((d) => d.id);
 }
 
+// Coaches of one team (role admin on that team) plus the org admin, who
+// coaches all three. Used wherever a push must reach "the coaches" of the
+// team a doc belongs to — never the whole program.
+async function coachUidsForTeam(teamId) {
+  if (!teamId) return adminUids();
+  const snap = await db.collection("users").where("teamIds", "array-contains", teamId).get();
+  return snap.docs.filter((d) => d.data().role === "admin" || d.data().role === "orgAdmin").map((d) => d.id);
+}
+
 // Resolve an assignment/visibleTo audience to FCM tokens. Empty audience =
 // everyone; otherwise the union of listed emails + members of listed groups
 // (group memberUids may hold either uids or emails).
-async function tokensForAudience(visibleTo, { excludeUid } = {}) {
+async function tokensForAudience(visibleTo, { teamId, excludeUid } = {}) {
   const v = visibleTo || {};
   const emails = (v.emails || []).map((e) => (e || "").toLowerCase());
   const gids = v.groupIds || [];
   const directUids = v.uids || []; // events address people by uid
-  if (!emails.length && !gids.length && !directUids.length) return collectTokens({ excludeUid });
+  if (!emails.length && !gids.length && !directUids.length) return collectTokens({ teamId, excludeUid });
   const groupMembers = new Set();
   await Promise.all(gids.map(async (gid) => {
     const g = await db.doc(`groups/${gid}`).get();
@@ -144,16 +161,16 @@ async function tokensForAudience(visibleTo, { excludeUid } = {}) {
 // `visibleTo`: the keys are what the rules enforce, and for a message they're a
 // snapshot of its channel's audience at post time. Re-resolving would let a
 // notification reach a phone that can't open what it's announcing.
-async function tokensForAudienceKeys(audienceKeys, { excludeUid } = {}) {
+async function tokensForAudienceKeys(audienceKeys, { teamId, excludeUid } = {}) {
   const keys = Array.isArray(audienceKeys) ? audienceKeys.filter(Boolean) : [];
-  if (!keys.length || keys.includes("*")) return collectTokens({ excludeUid });
+  if (!keys.length || keys.includes("*")) return collectTokens({ teamId, excludeUid });
   const uids = new Set(keys.filter((k) => k.startsWith("uid:")).map((k) => k.slice(4)));
   const emails = new Set(keys.filter((k) => k.startsWith("email:")).map((k) => k.slice(6).toLowerCase()));
   if (emails.size) {
     const members = await loadMembers();
     members.forEach((m) => { if (emails.has((m.email || "").toLowerCase())) uids.add(m.uid); });
   }
-  (await adminUids()).forEach((uid) => uids.add(uid));
+  (await coachUidsForTeam(teamId)).forEach((uid) => uids.add(uid));
   return tokensForUids([...uids], { excludeUid });
 }
 
@@ -170,7 +187,7 @@ function humanLead(min) {
 exports.onAnnouncementCreated = onDocumentCreated("announcements/{id}", async (event) => {
   const data = event.data?.data();
   if (!data) return;
-  const bundle = await collectTokens();
+  const bundle = await collectTokens({ teamId: data.teamId });
   await sendToTokens(bundle, {
     title: `📣 ${data.title || "New announcement"}`,
     body: trunc(data.body || "Tap to read."),
@@ -185,7 +202,7 @@ exports.onQuoteCreated = onDocumentCreated("quotes/{id}", async (event) => {
   if (!data || !data.text) return;
   if (data.notify === false) return;
   const body = data.author ? `"${trunc(data.text, 160)}" — ${data.author}` : trunc(data.text, 180);
-  const bundle = await collectTokens();
+  const bundle = await collectTokens({ teamId: data.teamId });
   await sendToTokens(bundle, {
     title: "💬 Quote of the Day",
     body,
@@ -200,8 +217,9 @@ exports.onEventCreated = onDocumentCreated("events/{id}", async (event) => {
   if (data.notify === false) return; // silent bulk imports skip the fan-out
   const when = [data.date, data.start && `· ${data.start}–${data.end}`, data.location && `· ${data.location}`].filter(Boolean).join(" ");
   // Events carry an audience too — a group-only event must not push its title,
-  // time and location to the whole team.
-  const bundle = await tokensForAudienceKeys(data.audienceKeys);
+  // time and location to the whole team. Team-scoped first: a JVB event
+  // never pushes to Varsity phones.
+  const bundle = await tokensForAudienceKeys(data.audienceKeys, { teamId: data.teamId });
   await sendToTokens(bundle, {
     title: `📅 ${data.type || "Event"}: ${data.title || "Untitled"}`,
     body: trunc(when),
@@ -219,8 +237,8 @@ exports.onMessageCreated = onDocumentCreated("messages/{id}", async (event) => {
   else body = trunc(data.text);
   if (!body) return;
   // Only the message's own audience — a hidden channel's text must not go out
-  // as a push to phones that can't open the channel.
-  const bundle = await tokensForAudienceKeys(data.audienceKeys, { excludeUid: data.senderUid });
+  // as a push to phones that can't open the channel. Team-scoped first.
+  const bundle = await tokensForAudienceKeys(data.audienceKeys, { teamId: data.teamId, excludeUid: data.senderUid });
   await sendToTokens(bundle, {
     title: data.sender || "New message",
     body,
@@ -230,13 +248,13 @@ exports.onMessageCreated = onDocumentCreated("messages/{id}", async (event) => {
 });
 
 // Direct messages: notify only the people in the thread — the player who owns
-// it (threadId) plus the coaches (admins) — never the whole team.
+// it (threadId) plus the coaches of that team — never the whole team.
 exports.onDMCreated = onDocumentCreated("dms/{id}", async (event) => {
   const data = event.data?.data();
   if (!data) return;
   const body = trunc(data.text);
   if (!body) return;
-  const admins = await adminUids();
+  const admins = await coachUidsForTeam(data.teamId);
   const recipients = [...new Set([data.threadId, ...admins])].filter((uid) => uid && uid !== data.senderUid);
   const bundle = await tokensForUids(recipients);
   await sendToTokens(bundle, {
@@ -251,7 +269,7 @@ exports.onDMCreated = onDocumentCreated("dms/{id}", async (event) => {
 exports.onAssignmentCreated = onDocumentCreated("assignments/{id}", async (event) => {
   const data = event.data?.data();
   if (!data) return;
-  const bundle = await tokensForAudience(data.visibleTo, { excludeUid: data.createdByUid });
+  const bundle = await tokensForAudience(data.visibleTo, { teamId: data.teamId, excludeUid: data.createdByUid });
   await sendToTokens(bundle, {
     title: `✅ New: ${data.title || data.workoutName || "Assignment"}`,
     body: trunc(data.body || (data.link ? "Tap to open the link." : "Tap for details.")),
@@ -300,7 +318,7 @@ exports.onEventReminderSync = onDocumentWritten("events/{id}", async (event) => 
       if (sendMs <= Date.now()) continue; // fire time already passed
       const ref = db.collection("scheduled").doc();
       const common = {
-        eventId: id, reminderId: r.id || ref.id, auto: true, sent: false,
+        eventId: id, teamId: after.teamId || null, reminderId: r.id || ref.id, auto: true, sent: false,
         sendAt: Timestamp.fromMillis(sendMs),
         createdByUid: after.runByUid || "", createdByName: after.runByName || "Coach", createdByInitials: "",
         createdAt: Timestamp.now(),
@@ -400,6 +418,7 @@ exports.runScheduled = onSchedule("every 5 minutes", async () => {
           text: "",
           pinned: false,
           channel: d.channel || "team",
+          teamId: d.teamId || null,
           audienceKeys,
           isCoach: true,
           readBy: {},
@@ -412,7 +431,7 @@ exports.runScheduled = onSchedule("every 5 minutes", async () => {
         });
         // onMessageCreated fans the poll out as a push.
       } else {
-        const bundle = await tokensForAudience(d.visibleTo);
+        const bundle = await tokensForAudience(d.visibleTo, { teamId: d.teamId });
         await sendToTokens(bundle, {
           title: `🔔 ${d.title || "Reminder"}`,
           body: trunc(d.body || "Tap to open the app."),

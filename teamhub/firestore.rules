@@ -4,10 +4,46 @@ service cloud.firestore {
 
     function signedIn() { return request.auth != null; }
     function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
-    function isAdmin() {
-      return signedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+    // ── Teams (Brophy: JVB + JVA + Varsity under one account) ──────────
+    // A user belongs to one or more teams: `teamIds[]` + `primaryTeamId` on
+    // their users/{uid} doc (set from the invite at first sign-in).
+    // Every team-scoped doc carries a `teamId` field; every rule below
+    // requires the caller to be on that team. A doc with no teamId (legacy)
+    // is unreadable — fail closed.
+    function isTeamId(id) { return id == 'jvb' || id == 'jva' || id == 'varsity'; }
+    // teamId of the doc being read/updated/deleted ('' if absent → deny).
+    function rTeam() { return resource.data.get('teamId', ''); }
+    // teamId of the doc being created.
+    function wTeam() { return request.resource.data.get('teamId', ''); }
+    // The write must not move a doc to another team.
+    function teamUnchanged() { return request.resource.data.get('teamId', '') == resource.data.get('teamId', ''); }
+
+    // The caller's user doc (null when it doesn't exist yet — a brand-new
+    // user has no doc until the invite gate creates one).
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function myRole() {
+      let d = me();
+      return d == null ? 'player' : d.get('role', 'player');
     }
+    function myTeamIds() {
+      let d = me();
+      return d == null ? [] : d.get('teamIds', []);
+    }
+    function isOrgAdmin() { return signedIn() && myRole() == 'orgAdmin'; }
+    // Any coach-level role (a per-team coach or the org admin). Used for
+    // shared (non-team) collections only; team-scoped writes use isCoachOf.
+    function isAdmin() { return signedIn() && (myRole() == 'admin' || myRole() == 'orgAdmin'); }
+    // The caller belongs to this team (org admin belongs to all three).
+    function isMemberOf(teamId) { return signedIn() && (isOrgAdmin() || myTeamIds().hasAny([teamId])); }
+    // The caller coaches this team (org admin coaches all three).
+    function isCoachOf(teamId) { return signedIn() && (isOrgAdmin() || (myRole() == 'admin' && myTeamIds().hasAny([teamId]))); }
+    // The caller shares at least one team with the given teamIds list.
+    function sharesTeam(teamIds) { return signedIn() && (isOrgAdmin() || myTeamIds().hasAny(teamIds)); }
+    // Team-scoped write helpers.
+    function coachCreate() { return isCoachOf(wTeam()) && isTeamId(wTeam()); }
+    function coachUpdate() { return isCoachOf(rTeam()) && teamUnchanged(); }
+    function coachDelete() { return isCoachOf(rTeam()); }
 
     // The audience keys the current user satisfies. A doc with an
     // `audienceKeys` array is readable if it contains any of these (or '*').
@@ -24,103 +60,160 @@ service cloud.firestore {
       return signedIn() &&
         resource.data.get('audienceKeys', ['*']).hasAny(myAudienceKeys());
     }
-    // The audience of a chat channel, read live from its doc. "team" (and any
-    // channel that no longer exists) is everyone. Used to stop a player from
-    // posting into — or forging a wider audience than — a channel they're in.
-    function channelKeys(ch) {
-      return (ch == 'team' || !exists(/databases/$(database)/documents/chatGroups/$(ch)))
-        ? ['*']
-        : get(/databases/$(database)/documents/chatGroups/$(ch)).data.get('audienceKeys', ['*']);
-    }
     // Whether `msg` is a legitimate post by the current player: into a channel
     // they can see, carrying an audience no wider than that channel's, with
     // themselves inside it, and not masquerading as a coach (`isCoach` is what
     // drives the coach styling in the chat UI, and the client sets it freely).
+    // Team-scoped: the message must belong to a team the poster is on, and a
+    // group channel's team must match the message's team (so a JVB player
+    // can't post a Varsity message into a JVB channel or vice versa).
+    // The "team" channel has no doc — its team is the message's teamId.
     // Resolves the channel once — rules cap document lookups per request.
     function canPostAsPlayer(msg) {
-      let chKeys = channelKeys(msg.get('channel', 'team'));
+      let ch = msg.get('channel', 'team');
+      let chDoc = ch == 'team' ? null : get(/databases/$(database)/documents/chatGroups/$(ch)).data;
+      let chKeys = chDoc == null ? ['*'] : chDoc.get('audienceKeys', ['*']);
+      let chTeam = chDoc == null ? '' : chDoc.get('teamId', '');
       let msgKeys = msg.get('audienceKeys', ['*']);
       let mine = myAudienceKeys();
-      return chKeys.hasAny(mine)
+      let teamId = msg.get('teamId', '');
+      return isMemberOf(teamId)
+        && (chTeam == '' || chTeam == teamId)
+        && chKeys.hasAny(mine)
         && msgKeys.hasOnly(chKeys)
         && msgKeys.hasAny(mine)
         && msg.get('isCoach', false) == false;
     }
 
-    // Profiles: anyone signed in can read; you create your own; only admin changes roles
+    // Teams: the three Brophy teams. Coaches may create their own team's doc
+    // if it's missing (the app seeds it on first login); only the org admin
+    // may change or delete a team.
+    match /teams/{teamId} {
+      allow read:   if isOrgAdmin() || isMemberOf(teamId);
+      allow create: if isCoachOf(teamId);
+      allow update, delete: if isOrgAdmin();
+    }
+
+    // Profiles: anyone on a shared team can read; you create your own; a
+    // coach edits users on their team (org admin: anyone); only admin
+    // changes roles. A signed-in user can update their own doc, but only the
+    // FCM-token and notification-pref fields (so they can opt themselves
+    // in/out of push without being able to grant themselves admin) — plus a
+    // one-time backfill of their own teamIds/primaryTeamId when the doc
+    // predates teams (a fresh project never hits this).
     match /users/{uid} {
-      allow read:   if signedIn();
+      allow read:   if isOwner(uid) || isOrgAdmin() || sharesTeam(resource.data.get('teamIds', []));
       allow create: if isOwner(uid);
-      // Admin can edit anything on any user doc.
-      // A signed-in user can update their own doc, but only the FCM-token
-      // and notification-pref fields (so they can opt themselves in/out
-      // of push without being able to grant themselves admin).
-      allow update: if isAdmin()
+      // Team assignment (teamIds / primaryTeamId) is org-admin-only: a player
+      // may never change their own teams, and a team coach may never move a
+      // player between teams (JVB -> JVA -> Varsity) or add a second team —
+      // only the org admin (who sees all three teams) does that. A coach may
+      // still edit the other profile fields of a player they share a team
+      // with (photo, name, notification prefs); a player edits only their own
+      // profile fields. There is deliberately NO self-backfill clause for
+      // teamIds: a user doc is created with its teams in useAuth, and the
+      // hook degrades to in-memory values if a write is denied.
+      allow update: if isOrgAdmin()
+        || (isAdmin() && sharesTeam(resource.data.get('teamIds', []))
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['teamIds', 'primaryTeamId']))
         || (isOwner(uid)
             && request.resource.data.diff(resource.data).affectedKeys()
                  .hasOnly(['fcmTokens', 'notificationsEnabledAt', 'name', 'initials', 'photoURL', 'photoPath']));
-      allow delete: if isAdmin();
+      allow delete: if isOrgAdmin() || (isAdmin() && sharesTeam(resource.data.get('teamIds', [])));
     }
 
-    // Admin-writes / everyone-reads
-    match /announcements/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
-    // Events carry an audience: coach reads all, a player only reads events
-    // addressed to them (everyone / their group / them specifically).
-    match /events/{id}        { allow read: if isAdmin() || inAudience(); allow write: if isAdmin(); }
+    // Announcements: team-scoped. Coach of the team writes; members read.
+    match /announcements/{id} {
+      allow read:   if isMemberOf(rTeam());
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
+    }
+    // Events carry an audience: coach reads all on their team, a player only
+    // reads events addressed to them (everyone / their group / them specifically).
+    match /events/{id} {
+      allow read:   if isCoachOf(rTeam()) || (isMemberOf(rTeam()) && inAudience());
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
+    }
+    // Shared libraries (no teamId — one library for all three Brophy teams).
     match /videos/{id}        { allow read: if signedIn(); allow write: if isAdmin(); }
     match /drills/{id}          { allow read: if signedIn(); allow write: if isAdmin(); }
-    match /practices/{id}       { allow read: if signedIn(); allow write: if isAdmin(); }
-    match /programs/{id}        { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /practices/{id} {
+      allow read:   if isMemberOf(rTeam());
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
+    }
+    match /programs/{id} {
+      allow read:   if isMemberOf(rTeam());
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
+    }
     // Game-day starting line-ups: coach builds/saves; everyone on the team reads.
-    match /lineups/{id}         { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /lineups/{id} {
+      allow read:   if isMemberOf(rTeam());
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
+    }
     match /customExercises/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
 
-    // Team documents: admin uploads/deletes; any signed-in player may add their
-    // own signature (only the `signatures` field), like message readBy/votes.
+    // Team documents: coach of the team uploads/deletes; any member of the
+    // team may add their own signature (only the `signatures` field), like
+    // message readBy/votes.
     match /documents/{id} {
-      allow read:   if signedIn();
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin()
-        || (signedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signatures']));
+      allow read:   if isMemberOf(rTeam());
+      allow create: if coachCreate();
+      allow delete: if coachDelete();
+      allow update: if coachUpdate()
+        || (isMemberOf(rTeam()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signatures']));
     }
 
-    // Daily attendance: everyone reads; the coach marks anyone present/absent,
-    // and a player may self check-in — but ONLY their own status (keyed by their
-    // email) and nothing else on the shared day doc.
+    // Daily attendance: one doc per team per day (id = `${teamId}_${date}`).
+    // Members read their team's doc; the coach marks anyone present/absent,
+    // and a player may self check-in — but ONLY their own status (keyed by
+    // their email) and nothing else on the shared day doc. A self check-in
+    // must not move the doc to another team.
     match /attendance/{id} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
-      allow create: if signedIn() && request.auth.token.email != null
-        && request.resource.data.diff({}).affectedKeys().hasOnly(['date', 'statuses', 'updatedAt'])
-        && request.resource.data.statuses.keys().hasOnly([request.auth.token.email])
-        && request.resource.data.statuses[request.auth.token.email] in ['present', 'absent', ''];
-      allow update: if signedIn() && request.auth.token.email != null
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['date', 'statuses', 'updatedAt'])
-        && request.resource.data.statuses.diff(resource.data.get('statuses', {})).affectedKeys().hasOnly([request.auth.token.email])
-        && request.resource.data.statuses[request.auth.token.email] in ['present', 'absent', ''];
+      allow read: if isMemberOf(rTeam());
+      allow delete: if coachDelete();
+      allow update: if coachUpdate()
+        || (isMemberOf(rTeam()) && request.auth.token.email != null
+            && request.resource.data.get('teamId', '') == resource.data.get('teamId', '')
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teamId', 'date', 'statuses', 'updatedAt'])
+            && request.resource.data.statuses.diff(resource.data.get('statuses', {})).affectedKeys().hasOnly([request.auth.token.email])
+            && request.resource.data.statuses[request.auth.token.email] in ['present', 'absent', '']);
+      // Creating today's doc — either the coach starting it, or a player
+      // self-checking-in before the coach has created it.
+      allow create: if (isCoachOf(wTeam()) && isTeamId(wTeam()))
+        || (isMemberOf(wTeam()) && request.auth.token.email != null
+            && request.resource.data.diff({}).affectedKeys().hasOnly(['teamId', 'date', 'statuses', 'updatedAt'])
+            && request.resource.data.statuses.keys().hasOnly([request.auth.token.email])
+            && request.resource.data.statuses[request.auth.token.email] in ['present', 'absent', '']);
     }
 
     // Absence reasons: a player explains their own absence for a given date.
-    // A player may create/update only their own (the doc's uid must be theirs);
-    // the coach reads everyone's. Doc id is `${date}__${uid}`.
+    // A player may create/update only their own (the doc's uid must be theirs)
+    // on a team they're on; the coach reads everyone's on their team.
+    // Doc id is `${date}__${uid}`.
     match /attendanceReasons/{id} {
-      allow read:          if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
-      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid;
-      allow delete:        if isAdmin();
+      allow read:          if isCoachOf(rTeam()) || (signedIn() && resource.data.uid == request.auth.uid);
+      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid && isMemberOf(wTeam());
+      allow delete:        if coachDelete();
     }
 
-    // Group chats (channels): admin creates/deletes + sets visibility.
-    // A hidden channel is only readable by its audience (enforced server-side
-    // via audienceKeys); its messages are gated the same way below.
-    // Coaches can also edit membership after creation, which rewrites
-    // `visibleTo` + `audienceKeys` and re-stamps the channel's messages. Any
-    // edit that touches the audience must leave a non-empty `audienceKeys`
-    // behind, so enforcement can never be dropped by an edit; edits that don't
-    // touch it (e.g. pin/rename) are unaffected, including on pre-backfill docs.
+    // Group chats (channels): coach of the team creates/deletes + sets
+    // visibility. A hidden channel is only readable by its audience (enforced
+    // server-side via audienceKeys) on that team; its messages are gated the
+    // same way below. Coaches can also edit membership after creation, which
+    // rewrites `visibleTo` + `audienceKeys` and re-stamps the channel's
+    // messages. Any edit that touches the audience must leave a non-empty
+    // `audienceKeys` behind, so enforcement can never be dropped by an edit;
+    // edits that don't touch it (e.g. pin/rename) are unaffected, including
+    // on pre-backfill docs.
     match /chatGroups/{id} {
-      allow read: if isAdmin() || inAudience();
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin() && (
+      allow read: if isCoachOf(rTeam()) || (isMemberOf(rTeam()) && inAudience());
+      allow create: if coachCreate();
+      allow delete: if coachDelete();
+      allow update: if coachUpdate() && (
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['visibleTo', 'audienceKeys'])
         || (request.resource.data.audienceKeys is list
             && request.resource.data.audienceKeys.size() > 0)
@@ -128,31 +221,42 @@ service cloud.firestore {
     }
 
     // Direct messages with the coach: a player can read/write only their own
-    // thread (threadId == their uid); the coach can read/write any thread.
+    // thread (threadId == their uid) on their team; the coach can read/write
+    // any thread on their team.
     match /dms/{id} {
-      allow read:   if isAdmin() || (signedIn() && resource.data.threadId == request.auth.uid);
+      allow read:   if isCoachOf(rTeam()) || (signedIn() && resource.data.threadId == request.auth.uid && isMemberOf(rTeam()));
       allow create: if signedIn() && request.resource.data.senderUid == request.auth.uid
-                    && (isAdmin() || request.resource.data.threadId == request.auth.uid);
-      allow update, delete: if isAdmin();
+                    && isMemberOf(wTeam())
+                    && (isCoachOf(wTeam()) || request.resource.data.threadId == request.auth.uid);
+      allow update, delete: if coachDelete();
     }
 
-    // Nutrition targets: coach sets daily kcal/protein goals; everyone reads.
-    match /nutritionTargets/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
+    // Nutrition targets: coach sets daily kcal/protein goals; team members read.
+    match /nutritionTargets/{id} {
+      allow read:   if isMemberOf(rTeam());
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
+    }
 
     // App-wide prompts (e.g. "everyone update your profile"): coach sets, all read.
     match /appConfig/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
 
-    // Scheduled reminders + polls: coach-only. A Cloud Function (admin SDK,
-    // bypasses rules) fires them at their sendAt time.
-    match /scheduled/{id} { allow read, write: if isAdmin(); }
+    // Scheduled reminders + polls: coach-only, team-scoped. A Cloud Function
+    // (admin SDK, bypasses rules) fires them at their sendAt time.
+    match /scheduled/{id} {
+      allow read:   if isCoachOf(rTeam());
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
+    }
 
-    // Assignments: coach creates/deletes; any signed-in player may mark
+    // Assignments: coach creates/deletes; any member of the team may mark
     // themselves done (only the `completedBy` map), like message readBy.
     match /assignments/{id} {
-      allow read:   if signedIn();
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin()
-        || (signedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completedBy']));
+      allow read:   if isMemberOf(rTeam());
+      allow create: if coachCreate();
+      allow delete: if coachDelete();
+      allow update: if coachUpdate()
+        || (isMemberOf(rTeam()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completedBy']));
     }
     // Tester feedback: any signed-in user submits their own; only admins read.
     match /feedback/{id} {
@@ -162,38 +266,47 @@ service cloud.firestore {
     }
     match /recipes/{id}       { allow read: if signedIn(); allow write: if isAdmin(); }
     match /categories/{id}    { allow read: if signedIn(); allow write: if isAdmin(); }
-    match /quotes/{id}        { allow read: if signedIn(); allow write: if isAdmin(); }
+    // Quote of the Day: one per team; coach of the team posts, members read.
+    match /quotes/{id} {
+      allow read:   if isMemberOf(rTeam());
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
+    }
 
-    // Chat: anyone can post as themselves; only the coach edits/deletes/pins.
-    // Reads are scoped to the message's audience (copied from its channel), so
-    // a player never receives messages from a channel they can't see.
+    // Chat: anyone on the team can post as themselves; only the team's coach
+    // edits/deletes/pins. Reads are scoped to the message's team AND audience
+    // (copied from its channel), so a player never receives messages from a
+    // channel they can't see — or from another team.
     match /messages/{id} {
-      allow read:   if isAdmin() || inAudience();
+      allow read:   if isCoachOf(rTeam()) || (isMemberOf(rTeam()) && inAudience());
       // A message copies its channel's audience at post time, so that audience
       // has to be checked against the channel rather than taken on trust from
-      // the client (see canPostAsPlayer). Coaches post freely.
+      // the client (see canPostAsPlayer). Coaches post freely on their team.
       // Note: a player posting in the instant between a coach narrowing a
       // channel and their own snapshot catching up is denied and must retry —
       // failing closed is the right side to err on for a privacy control.
       allow create: if signedIn()
         && request.resource.data.senderUid == request.auth.uid
-        && (isAdmin() || canPostAsPlayer(request.resource.data));
-      // Admin can edit/pin/delete. Any signed-in player can mark messages
-      // read (readBy), vote on a poll (votes) or react — but only those fields,
+        && (isCoachOf(wTeam()) || canPostAsPlayer(request.resource.data));
+      // Coach can edit/pin/delete. Any team member can mark messages read
+      // (readBy), vote on a poll (votes) or react — but only those fields,
       // and only on messages they're still in the audience for. Without the
-      // audience check a player removed from a channel could keep voting on and
-      // reacting to its polls using ids they collected while they were a member.
-      allow update: if isAdmin()
-        || (inAudience() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']))
-        || (inAudience() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']))
-        || (inAudience() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']));
-      allow delete: if isAdmin();
+      // audience check a player removed from a channel could keep voting on
+      // and reacting to its polls using ids they collected while they were a
+      // member.
+      allow update: if coachUpdate()
+        || (isMemberOf(rTeam()) && inAudience() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']))
+        || (isMemberOf(rTeam()) && inAudience() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']))
+        || (isMemberOf(rTeam()) && inAudience() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']));
+      allow delete: if coachDelete();
     }
 
-    // Wellness: player writes only their own; coach reads the whole team
+    // Wellness: player writes only their own, on a team they're on; coach
+    // reads their team's.
     match /wellnessCheckins/{docId} {
-      allow read:  if isAdmin() || isOwner(resource.data.uid);
-      allow write: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow read:  if isCoachOf(rTeam()) || isOwner(resource.data.uid);
+      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid && isMemberOf(wTeam());
+      allow delete: if coachDelete();
     }
 
     // Food log: completely private to each player
@@ -211,16 +324,62 @@ service cloud.firestore {
       allow read, write: if isOwner(uid);
     }
 
-    // Team-published workouts: everyone reads, only admin writes
+    // Team-published workouts: team members read, only their coach writes
     match /teamWorkouts/{wid} {
-      allow read:  if signedIn();
-      allow write: if isAdmin();
+      allow read:   if isMemberOf(rTeam());
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
     }
 
-    // Invite roster: admin manages, signed-in can read (so first-login gate works)
+    // Invite roster: a coach manages their team's invites; any signed-in user
+    // can read their own invite (so the first-login gate works) or an invite
+    // for a team they're on.
     match /invitedEmails/{email} {
-      allow read:  if signedIn();
-      allow write: if isAdmin();
+      allow read:  if signedIn() && (
+        email == (request.auth.token.email == null ? '' : request.auth.token.email.lower())
+        || isOrgAdmin()
+        || isMemberOf(resource.data.get('teamId', '')));
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
+    }
+
+    // Team invite LINKS (decision 2026-11-08): a coach generates a link for
+    // ONE team; a player signing up via that link lands on that team. Shape:
+    //   inviteLinks/{code} = { teamId, createdByUid, createdByName, code,
+    //     createdAt, expiresAt (timestamp or null = never expires),
+    //     maxUses (number or null = unlimited), uses (number) }
+    // The doc id IS the code (a random token) — knowing the code is the
+    // capability to redeem it. Full generation + redemption flow lands in a
+    // follow-up fix; the rules below already support it:
+    //  - create: a coach of the team (or org admin) mints a link for their team.
+    //  - get: anyone signed in who knows the exact code (redemption lookup).
+    //  - list: only coaches of that team / org admin (so players can't
+    //    enumerate every team's codes).
+    //  - update: coach/org admin may change expiry/cap; anyone signed in may
+    //    bump `uses` by exactly 1 while the link is live (the redemption
+    //    increment) — nothing else.
+    //  - delete: org admin, or the coach who created the link.
+    match /inviteLinks/{code} {
+      allow get:   if signedIn();
+      allow list:  if isCoachOf(rTeam());
+      allow create: if isCoachOf(wTeam()) && isTeamId(wTeam())
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.get('code', '') == code
+        && request.resource.data.get('uses', -1) == 0
+        && request.resource.data.diff({}).affectedKeys()
+             .hasOnly(['teamId', 'createdByUid', 'createdByName', 'code', 'createdAt', 'expiresAt', 'maxUses', 'uses']);
+      allow update: if isOrgAdmin()
+        || (isCoachOf(rTeam())
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['expiresAt', 'maxUses']))
+        || (signedIn()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses'])
+            && request.resource.data.uses == resource.data.get('uses', 0) + 1
+            && (resource.data.get('maxUses', null) == null
+                || request.resource.data.uses <= resource.data.get('maxUses', 0))
+            && (resource.data.get('expiresAt', null) == null
+                || resource.data.expiresAt > request.time));
+      allow delete: if isOrgAdmin()
+        || (isCoachOf(rTeam()) && resource.data.createdByUid == request.auth.uid);
     }
 
     // Water tracking: one doc per player per day. Player writes own, reads own.
@@ -231,9 +390,11 @@ service cloud.firestore {
 
     // Meal log activity: small "did this player log today" markers so the
     // coach can see compliance without reading what they actually ate.
+    // Team-scoped: a coach sees only their team's markers.
     match /mealLogActivity/{docId} {
-      allow read:  if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
-      allow write: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow read:  if isCoachOf(rTeam()) || (signedIn() && resource.data.uid == request.auth.uid);
+      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid && isMemberOf(wTeam());
+      allow delete: if coachDelete();
     }
 
     // Personal calendar events: completely private to each player.
@@ -241,10 +402,12 @@ service cloud.firestore {
       allow read, write: if isOwner(uid);
     }
 
-    // Groups: admin manages; signed-in can read so the visibility filter works.
+    // Groups: coach of the team manages; team members can read so the
+    // visibility filter works.
     match /groups/{id} {
-      allow read:  if signedIn();
-      allow write: if isAdmin();
+      allow read:   if isMemberOf(rTeam());
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
     }
   }
 }
