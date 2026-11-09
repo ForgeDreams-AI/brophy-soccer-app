@@ -6,7 +6,7 @@ import {
   Link as LinkIcon, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Wind, Activity, Dumbbell, Snowflake, StretchHorizontal, FileText,
   Image as ImageIcon, Mail, ArrowRight, Layers, Reply, BarChart3, ScanLine, Camera,
-  Bell, BellOff, Pencil, Copy, Download, Megaphone,
+  Bell, BellOff, Pencil, Copy, Download, Printer, Megaphone,
   Users, Tag, Target, Footprints, Repeat, Flag, Zap, ImagePlus, Goal, Hash, Eye,
   ClipboardList, ExternalLink, Star, Shuffle, CornerDownRight, Crosshair, Swords, LayoutGrid, SquareDashed,
 } from "lucide-react";
@@ -70,7 +70,9 @@ import { useAppUpdate } from "./hooks/useAppUpdate";
 import { BUILD_ID } from "./lib/appVersion";
 import { UpdateBanner } from "./components/UpdateUI";
 import TacticsBoard, { BoardSvg } from "./components/TacticsBoard";
+import DrillPrintSheet from "./components/DrillPrintSheet";
 import { normalizeDrillDoc } from "./lib/drillDoc";
+import { isLockedOutRole } from "./lib/teamRoles";
 import { ARROW_LEGEND, wavyPath } from "./components/boardData";
 import QuoteOfDay from "./components/QuoteOfDay";
 
@@ -292,10 +294,12 @@ const seedEvents = [];
 const VIDEO_CATS = ["Film", "Breathing", "Stretching", "Mobility", "Strength", "Cooldown"];
 const CAT_ICON = { Film: Video, Breathing: Wind, Stretching: StretchHorizontal, Mobility: Activity, Strength: Dumbbell, Cooldown: Snowflake };
 
-// Drill library categories — Brophy's 17 tactical topics. Coaches can also
-// add their own from the drill form; those show in the filter once a drill
-// uses them, but they are not part of this built-in list.
-const DRILL_CATS = ["Playing from back", "Transitions to the middle third", "Possession in the middle third", "Transitions to the final third", "Possession in the final third", "Switching the point of attack", "Crossing", "Finishing", "Passing patterns", "Passing patterns to finish", "Warm up games", "Pressing when losing the ball", "Getting into shapes", "Line of confrontation", "Set pieces", "Technique Drills", "Staple Drills"];
+// Drill library categories — Brophy's 17 tactical topics, in session-flow
+// order: warm up, technique, passing, staples, possessions, attacking,
+// then the rest. Coaches can also add their own from the drill form; those
+// show in the filter once a drill uses them, but they are not part of this
+// built-in list.
+const DRILL_CATS = ["Warm up games", "Technique Drills", "Passing patterns", "Passing patterns to finish", "Staple Drills", "Possession in the middle third", "Possession in the final third", "Transitions to the final third", "Switching the point of attack", "Crossing", "Finishing", "Playing from back", "Transitions to the middle third", "Pressing when losing the ball", "Getting into shapes", "Line of confrontation", "Set pieces"];
 const DRILL_CAT_ICON = {
   "Playing from back": Shield, "Transitions to the middle third": ArrowRight, "Possession in the middle third": Repeat,
   "Transitions to the final third": Zap, "Possession in the final third": Target, "Switching the point of attack": Shuffle,
@@ -508,6 +512,58 @@ const LoginScreen = ({ externalError, clearExternalError }) => {
     </div>
   );
 };
+
+// ── locked door for accounts with no team-app role ───────────────────────
+// A signed-in account whose role is NOT one of the three team roles has no
+// team-app access. Today that is the drillBuilder role: those accounts build
+// drills in the standalone Drill Library site (brophy-drill-library.web.app)
+// and never see team content here. NoAccessScreen renders INSTEAD of the app
+// shell (see the lockedOut early return in TeamHubRolesApp); the account
+// stays signed in — signing out is their choice via the button below.
+// Firestore rules fail closed for these accounts anyway; this is the UX lock.
+// (Role list lives in ./lib/teamRoles.js — this file only exports components.)
+export const NoAccessScreen = ({ user }) => (
+  <div className="min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
+    <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/brand/login-bg.jpg')" }} />
+    <div
+      className="absolute inset-0"
+      style={{
+        background: `radial-gradient(ellipse 90% 70% at 50% 50%, ${COLORS.primary}CC 0%, ${COLORS.primary}66 70%, ${COLORS.primary}33 100%)`,
+      }}
+    />
+    <div className="w-full max-w-sm relative z-10 text-center">
+      <img
+        src="/brand/logo-white.png"
+        alt="Brophy College Preparatory"
+        className="w-28 h-28 mx-auto mb-3 object-contain drop-shadow-lg"
+      />
+      <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-white/15 flex items-center justify-center">
+        <Lock className="w-6 h-6 text-white" />
+      </div>
+      <h1 className="text-white font-black text-2xl tracking-tight">Drill Library account</h1>
+      <p className="text-white/80 text-sm mt-3 leading-relaxed">
+        This account is set up for the Brophy Drill Library only, so it
+        doesn&rsquo;t have access to the team app.
+      </p>
+      {user?.email ? (
+        <p className="text-white/60 text-xs mt-2 font-medium">Signed in as {user.email}</p>
+      ) : null}
+      <a
+        href="https://brophy-drill-library.web.app"
+        className="mt-6 w-full py-3 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2 hover:opacity-90"
+        style={{ backgroundColor: COLORS.primary }}
+      >
+        Open the Drill Library <ExternalLink className="w-4 h-4" />
+      </a>
+      <button
+        onClick={() => signOut(auth)}
+        className="mt-3 w-full py-3 rounded-xl font-bold text-sm bg-white text-slate-700 hover:bg-slate-50"
+      >
+        Sign out
+      </button>
+    </div>
+  </div>
+);
 
 /* ── shared bits ── */
 // Circular profile photo, falling back to initials on a colored tile. Used
@@ -2601,7 +2657,8 @@ const ArrowLegendChips = () => (
 
 // Full uniform drill card: clear title → diagram (Brophy watermark) → setup
 // block → How to run it → Look for. Empty sections are hidden.
-const DrillModal = ({ item, onClose }) => {
+export const DrillModal = ({ item, onClose }) => {
+  const [printOpen, setPrintOpen] = useState(false);
   const embedUrl = item.videoUrl ? toEmbedUrl(item.videoUrl) : null;
   const Icon = DRILL_CAT_ICON[item.cat] || Target;
   const title = item.title || item.name;
@@ -2627,6 +2684,7 @@ const DrillModal = ({ item, onClose }) => {
   const source = infoStr.startsWith("Source: ") ? infoStr.slice(8) : "";
   const coachNotes = infoStr && !infoStr.startsWith("Source: ") ? infoStr : "";
   return (
+    <>
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-3xl w-full max-w-md max-h-[88vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="h-1.5 w-full rounded-t-3xl" style={{ backgroundColor: COLORS.primary }} />
@@ -2638,7 +2696,16 @@ const DrillModal = ({ item, onClose }) => {
             </div>
             <h3 className="text-lg font-bold text-slate-900 mt-2 leading-tight">{title}</h3>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); setPrintOpen(true); }}
+              className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full bg-white border border-slate-200 text-slate-700 min-h-11"
+              title="Print / Save PDF"
+            >
+              <Printer className="w-3.5 h-3.5" /> Print / Save PDF
+            </button>
+            <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0"><X className="w-4 h-4" /></button>
+          </div>
         </div>
         <div className="p-5 space-y-4">
           <DrillDiagram d={item} icon={Icon} className="w-full aspect-[4/3]" />
@@ -2696,13 +2763,15 @@ const DrillModal = ({ item, onClose }) => {
         </div>
       </div>
     </div>
+    {printOpen && <DrillPrintSheet drill={item} onClose={() => setPrintOpen(false)} />}
+    </>
   );
 };
 
 const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCreating = false }) => {
   const isAdmin = user.role === "admin";
   const blank = { name: "", title: "", kind: "drill", cat: DRILL_CATS[0], tags: "", dur: "", players: "", equipment: "", setupLengthYd: "", setupWidthYd: "", setupCones: "", setupBalls: "", setupGoals: "", setupMannequins: "", setupTeams: "", howTo: "", objectives: "", desc: "", info: "", videoUrl: "", photos: [], diagram: "", diagramData: null, diagramImage: "", scenario: "", cues: "" };
-  const [cat, setCat] = useState(DRILL_CATS[0]);
+  const [cat, setCat] = useState("All");
   const [tag, setTag] = useState("All");
   const [adding, setAdding] = useState(startCreating);
   const [editingId, setEditingId] = useState(null);
@@ -2740,13 +2809,13 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
     drills.filter((d) => (d.kind || "drill") !== "point").forEach((d) => d.cat && set.add(d.cat));
     return [...set];
   }, [drills]);
-  // Tag pills are scoped to the active category.
+  // Tag pills are scoped to the active category (all drills when viewing All).
   const tags = useMemo(() => {
     const set = new Set();
-    drills.filter((d) => d.cat === cat).forEach((d) => (d.tags || []).forEach((t) => set.add(t)));
+    drills.filter((d) => cat === "All" || d.cat === cat).forEach((d) => (d.tags || []).forEach((t) => set.add(t)));
     return ["All", ...[...set].sort()];
   }, [drills, cat]);
-  const filtered = drills.filter((d) => (d.kind || "drill") !== "point" && d.cat === cat && (tag === "All" || (d.tags || []).includes(tag)));
+  const filtered = drills.filter((d) => (d.kind || "drill") !== "point" && (cat === "All" || d.cat === cat) && (tag === "All" || (d.tags || []).includes(tag)));
 
   const uploadImage = async (file) => {
     const blob = await downscaleToBlob(file);
@@ -2818,7 +2887,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
     try {
       if (editingId) await updateDrill(editingId, data);
       else await addDrill(data);
-      setCat(data.cat);
+      if (cat !== "All") setCat(data.cat); // stay on All — the new drill is already visible there
       cancel();
     } catch (e) { toast("Couldn't save drill — " + (e.message || "check Firestore rules.")); }
   };
@@ -2965,7 +3034,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
       {/* Category pills */}
       <div className="overflow-x-auto px-5">
         <div className="flex gap-2 w-max">
-          {cats.map((c) => (
+          {["All", ...cats].map((c) => (
             <button key={c} onClick={() => { setCat(c); setTag("All"); }} className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap ${cat === c ? "text-white" : "bg-white text-slate-600 border border-slate-200"}`} style={cat === c ? { backgroundColor: COLORS.primary } : {}}>{c}</button>
           ))}
         </div>
@@ -8075,6 +8144,13 @@ export default function TeamHubRolesApp() {
     return [user.primaryTeamId || DEFAULT_TEAM_ID].filter(isValidTeamId);
   }, [user]);
   const isCoach = user?.role === "admin" || user?.role === "orgAdmin";
+  // Locked-out accounts (today: drillBuilder — drill-library-only accounts)
+  // never see the app shell: the early return below renders NoAccessScreen
+  // instead, and every subscription in this component is skipped with a
+  // null collection (lockedOut ? null : ...), so no team data is fetched
+  // behind the lock screen. Firestore rules fail closed anyway; this is
+  // the UX lock. Defined here, before the first subscription.
+  const lockedOut = Boolean(user) && isLockedOutRole(user.role);
   // A per-team coach (role 'admin' only — NOT the org admin). DMs are
   // between a player and their own team's coach, so the org admin never
   // subscribes to DM threads (decision 2026-11-08).
@@ -8186,18 +8262,19 @@ export default function TeamHubRolesApp() {
   }, []);
 
   // Foreground messages — show a quick toast as a notification.
+  // Skipped for locked-out accounts (no team content for them at all).
   useEffect(() => {
-    if (!user) return;
+    if (!user || lockedOut) return;
     return onForegroundMessage((payload) => {
       const n = payload.notification || {};
       try {
         new Notification(n.title || "Brophy Soccer", { body: n.body, icon: "/brand/logo.png" });
       } catch { /* permission revoked since enable; ignore */ }
     });
-  }, [user]);
+  }, [user, lockedOut]);
 
   // Live from Firestore — see Build Guide §4 + §8
-  const announcements = useCollection("announcements", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
+  const announcements = useCollection(lockedOut ? null : ("announcements"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const addAnnouncement = (title, body) =>
     addDoc(collection(db, "announcements"), {
       teamId: activeTeamId,
@@ -8208,7 +8285,7 @@ export default function TeamHubRolesApp() {
     });
 
   // App-wide prompts (e.g. "everyone update your profile"). One doc per kind.
-  const appConfig = useCollection("appConfig");
+  const appConfig = useCollection(lockedOut ? null : ("appConfig"));
   const profilePrompt = appConfig.find((d) => d.id === "profilePrompt");
   // Team logo used as the centered watermark on every game-day line-up.
   const lineupLogo = appConfig.find((d) => d.id === "lineupLogo");
@@ -8225,14 +8302,14 @@ export default function TeamHubRolesApp() {
     updateDoc(doc(db, "announcements", id), { title: title.trim(), body: (body || "").trim() });
   const deleteAnnouncement = (id) => deleteDoc(doc(db, "announcements", id));
 
-  const eventsRaw = useAudienceCollection("events", user, null, activeTeamId);
-  const groupsList = useCollection("groups", where("teamId", "==", activeTeamId), orderBy("name"));
+  const eventsRaw = useAudienceCollection(lockedOut ? null : ("events"), user, null, activeTeamId);
+  const groupsList = useCollection(lockedOut ? null : ("groups"), where("teamId", "==", activeTeamId), orderBy("name"));
   // Admin-only view of signed-in players for the Groups picker. Defer the
   // listener until the user is known + actually an admin (rules deny otherwise).
   // Roster for the active team only (a coach picks players from their own
   // team; the org admin switches teams to see the others).
   const allUsers = useCollection(
-    isCoach ? "users" : null,
+    lockedOut ? null : (isCoach ? "users" : null),
     where("teamIds", "array-contains", activeTeamId),
     orderBy("name"),
   );
@@ -8240,7 +8317,7 @@ export default function TeamHubRolesApp() {
   // the Settings admin model (§10): the program admin manages roles and team
   // assignments here. A team coach never subscribes (rules deny otherwise).
   const orgUsers = useCollection(
-    user?.role === "orgAdmin" ? "users" : null,
+    lockedOut ? null : (user?.role === "orgAdmin" ? "users" : null),
     orderBy("name"),
   );
   const events = useMemo(() => {
@@ -8294,7 +8371,7 @@ export default function TeamHubRolesApp() {
 
   // Personal events — own subcollection, never seen by others.
   const personalPath = user ? `users/${user.uid}/personalEvents` : null;
-  const personalEvents = useCollection(personalPath);
+  const personalEvents = useCollection(lockedOut ? null : (personalPath));
   const addPersonalEvent = (data) =>
     addDoc(collection(db, personalPath), { ...data, createdAt: serverTimestamp() });
   const updatePersonalEvent = (id, data) =>
@@ -8333,7 +8410,7 @@ export default function TeamHubRolesApp() {
   };
   const deleteGroup = (id) => deleteDoc(doc(db, "groups", id));
 
-  const videos = useCollection("videos", orderBy("createdAt", "desc"));
+  const videos = useCollection(lockedOut ? null : ("videos"), orderBy("createdAt", "desc"));
   const addVideo = (data) =>
     addDoc(collection(db, "videos"), { ...data, createdAt: serverTimestamp() });
   const updateVideo = (id, data) => updateDoc(doc(db, "videos", id), data);
@@ -8349,7 +8426,7 @@ export default function TeamHubRolesApp() {
   // this app AND the standalone Drill Library site — a drill made in either
   // shows up in both. The shared document shape lives in src/lib/drillDoc.js.
   // `createdByUid` is stamped on create: the drillLibrary rules require it.
-  const drillsRaw = useCollection("drillLibrary", orderBy("createdAt", "desc"));
+  const drillsRaw = useCollection(lockedOut ? null : ("drillLibrary"), orderBy("createdAt", "desc"));
   const drills = useMemo(() => drillsRaw.map(normalizeDrillDoc), [drillsRaw]);
   const addDrill = (data) =>
     addDoc(collection(db, "drillLibrary"), {
@@ -8362,7 +8439,7 @@ export default function TeamHubRolesApp() {
   const deleteDrill = (id) => deleteDoc(doc(db, "drillLibrary", id));
 
   // Practices — saved sessions assembled from drills (mirrors teamWorkouts).
-  const practices = useCollection("practices", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
+  const practices = useCollection(lockedOut ? null : ("practices"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   // Accepts a plain name (string) or a full template object (blank / starter / copy).
   const addPractice = (input) => {
     const base = typeof input === "string" ? { name: input } : (input || {});
@@ -8378,7 +8455,7 @@ export default function TeamHubRolesApp() {
   const deletePractice = (id) => deleteDoc(doc(db, "practices", id));
 
   // Programs — ordered sequences of practices (dates assigned at assign-time).
-  const programs = useCollection("programs", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
+  const programs = useCollection(lockedOut ? null : ("programs"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   // Accepts a plain name (string) or a full object (copy / shared curriculum).
   const addProgram = (input) => {
     const base = typeof input === "string" ? { name: input } : (input || {});
@@ -8393,7 +8470,7 @@ export default function TeamHubRolesApp() {
 
   // Game-day starting line-ups — coach assembles players onto a pitch and
   // saves the "field" under a custom name (mirrors practices CRUD).
-  const lineups = useCollection("lineups", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
+  const lineups = useCollection(lockedOut ? null : ("lineups"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const addLineup = (data) =>
     addDoc(collection(db, "lineups"), {
       teamId: activeTeamId,
@@ -8410,7 +8487,7 @@ export default function TeamHubRolesApp() {
 
   // Coach-authored exercises — mixed into the public Exercise Library, same
   // shape so they slot under the same equipment/muscle tags.
-  const customExercises = useCollection("customExercises", orderBy("createdAt", "desc"));
+  const customExercises = useCollection(lockedOut ? null : ("customExercises"), orderBy("createdAt", "desc"));
   const addCustomExercise = (data) =>
     addDoc(collection(db, "customExercises"), { ...data, createdAt: serverTimestamp() });
   const updateCustomExercise = (id, data) => updateDoc(doc(db, "customExercises", id), data);
@@ -8427,7 +8504,7 @@ export default function TeamHubRolesApp() {
     return { added: fresh.length, skipped: liftSeedDocs().length - fresh.length };
   };
 
-  const recipeDocs = useCollection("recipes", orderBy("createdAt", "desc"));
+  const recipeDocs = useCollection(lockedOut ? null : ("recipes"), orderBy("createdAt", "desc"));
   const recipes = recipeDocs; // already shaped {id, name, cat, cal, p, c, f, prep, createdAt}
   const addRecipe = (data) =>
     addDoc(collection(db, "recipes"), { ...data, createdAt: serverTimestamp() });
@@ -8439,7 +8516,7 @@ export default function TeamHubRolesApp() {
     await batch.commit();
   };
 
-  const categoryDocs = useCollection("categories", orderBy("name"));
+  const categoryDocs = useCollection(lockedOut ? null : ("categories"), orderBy("name"));
   const categories = useMemo(() => categoryDocs.map((c) => c.name).filter(Boolean), [categoryDocs]);
   const addCategory = (name) =>
     addDoc(collection(db, "categories"), { name: name.trim() });
@@ -8465,7 +8542,7 @@ export default function TeamHubRolesApp() {
   // A readiness verdict (Ready / Modified / Rest) is stored on the doc at
   // submit time and normalized on read, so older docs still render.
   const today = new Date().toISOString().slice(0, 10);
-  const wellnessRaw = useCollection("wellnessCheckins", where("teamId", "==", activeTeamId), where("date", "==", today));
+  const wellnessRaw = useCollection(lockedOut ? null : ("wellnessCheckins"), where("teamId", "==", activeTeamId), where("date", "==", today));
   const wellness = useMemo(
     () => wellnessRaw.map((w) => normalizeWellness({ ...w, time: formatAgo(w.updatedAt) })),
     [wellnessRaw],
@@ -8485,7 +8562,7 @@ export default function TeamHubRolesApp() {
 
   // Food log — private subcollection per player (guide §4 + §5)
   const logsPath = user ? `logs/${user.uid}/entries` : null;
-  const logged = useCollection(logsPath, orderBy("createdAt", "desc"));
+  const logged = useCollection(lockedOut ? null : (logsPath), orderBy("createdAt", "desc"));
   const addLog = async (data) => {
     const ref = await addDoc(collection(db, logsPath), { ...data, createdAt: serverTimestamp() });
     // Bump the activity marker so coach compliance view sees this player today.
@@ -8503,7 +8580,7 @@ export default function TeamHubRolesApp() {
 
   // Saved / favorite foods — private per player, for one-tap re-logging.
   const savedFoodsPath = user ? `logs/${user.uid}/savedFoods` : null;
-  const savedFoods = useCollection(savedFoodsPath, orderBy("createdAt", "desc"));
+  const savedFoods = useCollection(lockedOut ? null : (savedFoodsPath), orderBy("createdAt", "desc"));
   const addSavedFood = (data) =>
     addDoc(collection(db, savedFoodsPath), { ...data, createdAt: serverTimestamp() });
   const deleteSavedFood = (id) => deleteDoc(doc(db, savedFoodsPath, id));
@@ -8511,7 +8588,7 @@ export default function TeamHubRolesApp() {
   // Water tracking — one doc per player per day.
   const waterDocId = user ? `${user.uid}_${today}` : null;
   const waterToday = useCollection(
-    user ? "water" : null,
+    lockedOut ? null : (user ? "water" : null),
     where("uid", "==", user?.uid || "_"),
     where("date", "==", today),
   );
@@ -8530,7 +8607,7 @@ export default function TeamHubRolesApp() {
   // The Today page and the nutrition hero only ever show the player their
   // own goal. (Path must be a valid Firestore document: an even number of
   // segments. logs/{uid}/goal has 3 and crashes the app on sign-in.)
-  const myNutritionGoal = useDoc(user ? `logs/${user.uid}/goals/main` : null);
+  const myNutritionGoal = useDoc(lockedOut ? null : (user ? `logs/${user.uid}/goals/main` : null));
   const saveMyNutritionGoal = ({ cal, protein }) =>
     setDoc(doc(db, "logs", user.uid, "goals", "main"), {
       cal: Number(cal) || 0,
@@ -8551,7 +8628,7 @@ export default function TeamHubRolesApp() {
 
   // Coach-only compliance view — players' read rule would deny these.
   const mealLogActivityToday = useCollection(
-    isCoach ? "mealLogActivity" : null,
+    lockedOut ? null : (isCoach ? "mealLogActivity" : null),
     where("teamId", "==", activeTeamId),
     where("date", "==", today),
   );
@@ -8559,7 +8636,7 @@ export default function TeamHubRolesApp() {
   // Player "Today" completion signals — scoped to the current user so the
   // queries satisfy the per-owner read rules.
   const myWellnessDocs = useCollection(
-    user ? "wellnessCheckins" : null,
+    lockedOut ? null : (user ? "wellnessCheckins" : null),
     where("uid", "==", user?.uid || "_"),
     where("date", "==", today),
   );
@@ -8576,7 +8653,7 @@ export default function TeamHubRolesApp() {
   );
 
   // Team documents + e-sign — coach uploads, everyone signs (signatures array).
-  const documents = useCollection("documents", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
+  const documents = useCollection(lockedOut ? null : ("documents"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const addDocument = async ({ title, file }) => {
     if (!file) throw new Error("No file selected.");
     const path = `documents/${activeTeamId}/${user.uid}/${Date.now()}-${file.name}`;
@@ -8605,7 +8682,7 @@ export default function TeamHubRolesApp() {
   //    team (useAuth redeems ?invite=CODE at first sign-in). The doc id IS
   //    the code (a random token = the capability); shape documented in
   //    src/data/teams.js, rules in firestore.rules.
-  const invites = useCollection("invitedEmails", where("teamId", "==", activeTeamId), orderBy("email"));
+  const invites = useCollection(lockedOut ? null : ("invitedEmails"), where("teamId", "==", activeTeamId), orderBy("email"));
   const addInvite = (email, teamId) => {
     const e = email.trim().toLowerCase();
     if (!e.includes("@")) return Promise.reject(new Error("Invalid email."));
@@ -8665,7 +8742,7 @@ export default function TeamHubRolesApp() {
   // Invite links for the team being viewed. Single-field query (no composite
   // index needed); sorted client-side in the roster UI. Players can't list
   // them (rules) — the hook swallows that permission error.
-  const inviteLinks = useCollection("inviteLinks", where("teamId", "==", activeTeamId));
+  const inviteLinks = useCollection(lockedOut ? null : ("inviteLinks"), where("teamId", "==", activeTeamId));
   // Toggle a roster entry between player and admin. Updates the invite doc
   // (controls role for future first-sign-ins) AND any existing users doc with
   // that email (changes role for already-signed-up players immediately).
@@ -8720,7 +8797,7 @@ export default function TeamHubRolesApp() {
 
   // Workouts — personal (private subcollection) + team-published
   const myWorkoutsPath = user ? `users/${user.uid}/workouts` : null;
-  const myWorkouts = useCollection(myWorkoutsPath, orderBy("updatedAt", "desc"));
+  const myWorkouts = useCollection(lockedOut ? null : (myWorkoutsPath), orderBy("updatedAt", "desc"));
   const addMyWorkout = (input) => {
     const base = typeof input === "string" ? { name: input } : (input || {});
     return addDoc(collection(db, myWorkoutsPath), {
@@ -8735,7 +8812,7 @@ export default function TeamHubRolesApp() {
     updateDoc(doc(db, myWorkoutsPath, id), { ...data, updatedAt: serverTimestamp() });
   const deleteMyWorkout = (id) => deleteDoc(doc(db, myWorkoutsPath, id));
 
-  const teamWorkouts = useCollection("teamWorkouts", where("teamId", "==", activeTeamId), orderBy("updatedAt", "desc"));
+  const teamWorkouts = useCollection(lockedOut ? null : ("teamWorkouts"), where("teamId", "==", activeTeamId), orderBy("updatedAt", "desc"));
   const addTeamWorkout = (input) => {
     const base = typeof input === "string" ? { name: input } : (input || {});
     return addDoc(collection(db, "teamWorkouts"), {
@@ -8770,7 +8847,7 @@ export default function TeamHubRolesApp() {
   };
 
   // Chat — pinned status lives on each message doc (guide §4)
-  const messages = useAudienceCollection("messages", user, "createdAt", activeTeamId);
+  const messages = useAudienceCollection(lockedOut ? null : ("messages"), user, "createdAt", activeTeamId);
   const addMessage = (text, { attachment, pinned, replyTo, poll, channel } = {}) => {
     // A message inherits the audience of its channel so hidden channels stay
     // private server-side; the Team channel is visible to everyone.
@@ -8847,7 +8924,7 @@ export default function TeamHubRolesApp() {
 
   // Chat channels ("group chats") — admin creates, sets who can see each one.
   // Empty visibleTo = everyone. `audienceKeys` enforces this server-side.
-  const chatGroups = useAudienceCollection("chatGroups", user, "createdAt", activeTeamId);
+  const chatGroups = useAudienceCollection(lockedOut ? null : ("chatGroups"), user, "createdAt", activeTeamId);
   const addChatGroup = (name, visibleTo) =>
     addDoc(collection(db, "chatGroups"), {
       teamId: activeTeamId,
@@ -8878,7 +8955,7 @@ export default function TeamHubRolesApp() {
 
   // Scheduled reminders + polls — coach queues them; a Cloud Function fires
   // each at its sendAt time (see functions/index.js runScheduled).
-  const scheduled = useCollection(isCoach ? "scheduled" : null, where("teamId", "==", activeTeamId), orderBy("sendAt"));
+  const scheduled = useCollection(lockedOut ? null : (isCoach ? "scheduled" : null), where("teamId", "==", activeTeamId), orderBy("sendAt"));
   const addScheduled = (data) =>
     addDoc(collection(db, "scheduled"), {
       ...data,
@@ -8896,7 +8973,7 @@ export default function TeamHubRolesApp() {
   // Function, out immediately) or schedules it (stored in `pushNotifications`
   // for the `runScheduled` runner, which also handles the daily wellness
   // auto-nudge). Team-scoped, same audience pattern as announcements.
-  const pushNotifications = useCollection(isCoach ? "pushNotifications" : null, where("teamId", "==", activeTeamId), orderBy("sendAt", "desc"));
+  const pushNotifications = useCollection(lockedOut ? null : (isCoach ? "pushNotifications" : null), where("teamId", "==", activeTeamId), orderBy("sendAt", "desc"));
   const addPushNotification = (data) =>
     addDoc(collection(db, "pushNotifications"), {
       ...data,
@@ -8956,7 +9033,7 @@ export default function TeamHubRolesApp() {
   // team's coach only (decision 2026-11-08). (No orderBy in the query to
   // avoid a composite index.)
   const dms = useCollection(
-    user && user.role !== "orgAdmin" ? "dms" : null,
+    lockedOut ? null : (user && user.role !== "orgAdmin" ? "dms" : null),
     where("teamId", "==", activeTeamId),
     ...(isTeamCoach ? [] : [where("threadId", "==", user?.uid || "_")]),
   );
@@ -8984,7 +9061,7 @@ export default function TeamHubRolesApp() {
   };
 
   // Quote of the Day — latest coach-posted quote; posting one fans out a push.
-  const quotes = useCollection("quotes", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
+  const quotes = useCollection(lockedOut ? null : ("quotes"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const todayQuote = quotes[0] || null;
   const addQuote = ({ text, author }) =>
     addDoc(collection(db, "quotes"), { teamId: activeTeamId, text, author: author || "", createdByName: user.name, createdAt: serverTimestamp() });
@@ -9008,6 +9085,11 @@ export default function TeamHubRolesApp() {
     );
   }
   if (!user) return <LoginScreen externalError={authError} clearExternalError={clearError} />;
+  // Locked door: drill-library-only accounts (role drillBuilder, or any role
+  // outside the three team roles) see the no-access screen instead of the
+  // app shell — no team views render, and every subscription above was
+  // skipped (lockedOut ? null), so no team data is fetched behind it.
+  if (lockedOut) return <NoAccessScreen user={user} />;
 
   // Force a real first+last name before using the app (auto name = email prefix).
   const emailPrefix = (user.email || "").split("@")[0];
@@ -9050,7 +9132,7 @@ export default function TeamHubRolesApp() {
 
   return (
     <div
-      className="min-h-screen min-h-dvh flex justify-center relative"
+      className="app-shell min-h-screen min-h-dvh flex justify-center relative"
       style={{
         backgroundImage: "url('/brand/login-bg.jpg')",
         backgroundSize: "cover",
