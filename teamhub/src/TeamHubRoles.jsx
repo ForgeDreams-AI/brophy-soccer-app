@@ -70,6 +70,7 @@ import { useAppUpdate } from "./hooks/useAppUpdate";
 import { BUILD_ID } from "./lib/appVersion";
 import { UpdateBanner } from "./components/UpdateUI";
 import TacticsBoard, { BoardSvg } from "./components/TacticsBoard";
+import { normalizeDrillDoc } from "./lib/drillDoc";
 import { ARROW_LEGEND, wavyPath } from "./components/boardData";
 import QuoteOfDay from "./components/QuoteOfDay";
 
@@ -291,14 +292,17 @@ const seedEvents = [];
 const VIDEO_CATS = ["Film", "Breathing", "Stretching", "Mobility", "Strength", "Cooldown"];
 const CAT_ICON = { Film: Video, Breathing: Wind, Stretching: StretchHorizontal, Mobility: Activity, Strength: Dumbbell, Cooldown: Snowflake };
 
-// Drill library categories — Brophy's 15 tactical topics.
-const DRILL_CATS = ["Playing from back", "Transitions to the middle third", "Possession in the middle third", "Transitions to the final third", "Possession in the final third", "Switching the point of attack", "Crossing", "Finishing", "Passing patterns", "Passing patterns to finish", "Warm up games", "Pressing when losing the ball", "Getting into shapes", "Line of confrontation", "Set pieces"];
+// Drill library categories — Brophy's 17 tactical topics. Coaches can also
+// add their own from the drill form; those show in the filter once a drill
+// uses them, but they are not part of this built-in list.
+const DRILL_CATS = ["Playing from back", "Transitions to the middle third", "Possession in the middle third", "Transitions to the final third", "Possession in the final third", "Switching the point of attack", "Crossing", "Finishing", "Passing patterns", "Passing patterns to finish", "Warm up games", "Pressing when losing the ball", "Getting into shapes", "Line of confrontation", "Set pieces", "Technique Drills", "Staple Drills"];
 const DRILL_CAT_ICON = {
   "Playing from back": Shield, "Transitions to the middle third": ArrowRight, "Possession in the middle third": Repeat,
   "Transitions to the final third": Zap, "Possession in the final third": Target, "Switching the point of attack": Shuffle,
   "Crossing": CornerDownRight, "Finishing": Crosshair, "Passing patterns": Footprints, "Passing patterns to finish": Goal,
   "Warm up games": Flame, "Pressing when losing the ball": Swords, "Getting into shapes": LayoutGrid,
   "Line of confrontation": ScanLine, "Set pieces": Flag,
+  "Technique Drills": Activity, "Staple Drills": Star,
 };
 // Session phases — suggested tags on the drill form (how Anthony runs practices).
 const DRILL_PHASES = ["Warmup", "Team game", "Small rondo", "Bigger rondo / passing pattern", "Possession game", "Play / structured play", "Finishing pattern", "Passing pattern"];
@@ -2562,7 +2566,9 @@ const DrillDiagram = ({ d, icon: Icon, className = "" }) => (
     <img src="/brand/logo.png" alt="" aria-hidden="true" draggable="false"
       className="absolute inset-0 m-auto w-3/4 max-h-full object-contain pointer-events-none select-none"
       style={{ opacity: 0.2 }} />
-    {d.diagramData ? (
+    {d.diagramImage ? (
+      <img src={d.diagramImage} alt="Drill diagram" className="relative w-full h-full object-cover" loading="lazy" />
+    ) : d.diagramData ? (
       <BoardSvg state={d.diagramData} className="relative w-full h-full" />
     ) : d.diagram ? (
       <img src={d.diagram} alt="Drill diagram" className="relative w-full h-full object-cover" loading="lazy" />
@@ -2695,7 +2701,7 @@ const DrillModal = ({ item, onClose }) => {
 
 const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCreating = false }) => {
   const isAdmin = user.role === "admin";
-  const blank = { name: "", title: "", kind: "drill", cat: DRILL_CATS[0], tags: "", dur: "", players: "", equipment: "", setupLengthYd: "", setupWidthYd: "", setupCones: "", setupBalls: "", setupGoals: "", setupMannequins: "", setupTeams: "", howTo: "", objectives: "", desc: "", info: "", videoUrl: "", photos: [], diagram: "", diagramData: null, scenario: "", cues: "" };
+  const blank = { name: "", title: "", kind: "drill", cat: DRILL_CATS[0], tags: "", dur: "", players: "", equipment: "", setupLengthYd: "", setupWidthYd: "", setupCones: "", setupBalls: "", setupGoals: "", setupMannequins: "", setupTeams: "", howTo: "", objectives: "", desc: "", info: "", videoUrl: "", photos: [], diagram: "", diagramData: null, diagramImage: "", scenario: "", cues: "" };
   const [cat, setCat] = useState(DRILL_CATS[0]);
   const [tag, setTag] = useState("All");
   const [adding, setAdding] = useState(startCreating);
@@ -2708,10 +2714,11 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
 
   // Save the tactics board: rasterize to a PNG diagram (so it renders anywhere a
   // drill diagram shows) and keep the editable JSON so it can be reopened.
+  // Drawing a board replaces a video setup photo (photo-first rule).
   const saveBoard = async (pngBlob, state) => {
     setBoardOpen(false);
     // The board's yard dimensions are the drill's setup dimensions.
-    setForm((p) => ({ ...p, diagramData: state, setupLengthYd: state?.lengthYd ?? p.setupLengthYd, setupWidthYd: state?.widthYd ?? p.setupWidthYd }));
+    setForm((p) => ({ ...p, diagramData: state, diagramImage: "", setupLengthYd: state?.lengthYd ?? p.setupLengthYd, setupWidthYd: state?.widthYd ?? p.setupWidthYd }));
     if (!pngBlob) return;
     setUploading(true);
     try {
@@ -2761,7 +2768,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
   const setDiagram = async (file) => {
     if (!file) return;
     setUploading(true);
-    try { setForm((p) => ({ ...p, diagram: "" })); const url = await uploadImage(file); setForm((p) => ({ ...p, diagram: url })); }
+    try { setForm((p) => ({ ...p, diagram: "", diagramImage: "" })); const url = await uploadImage(file); setForm((p) => ({ ...p, diagram: url })); }
     catch (e) { toast("Couldn't upload diagram — " + (e.message || "check Storage rules.")); }
     finally { setUploading(false); }
   };
@@ -2772,7 +2779,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
     const lenYd = d.setup?.lengthYd ?? d.diagramData?.lengthYd ?? (gridMatch ? gridMatch[1] : "");
     const widYd = d.setup?.widthYd ?? d.diagramData?.widthYd ?? (gridMatch ? gridMatch[2] : "");
     const equipStr = Array.isArray(d.setup?.equipment) ? d.setup.equipment.join(", ") : (d.equipment || "");
-    setForm({ name: d.name || "", title: d.title || "", kind: d.kind || "drill", cat: d.cat || DRILL_CATS[0], tags: (d.tags || []).join(", "), dur: d.dur || "", players: d.players || "", equipment: equipStr, setupLengthYd: lenYd, setupWidthYd: widYd, setupCones: d.setup?.cones ?? "", setupBalls: d.setup?.balls ?? "", setupGoals: d.setup?.goals ?? "", setupMannequins: d.setup?.mannequins ?? "", setupTeams: d.setup?.teams || "", howTo: d.howTo || "", objectives: (d.objectives || []).join("\n"), desc: d.desc || "", info: d.info || "", videoUrl: d.videoUrl || "", photos: d.photos || [], diagram: d.diagram || "", diagramData: d.diagramData || null, scenario: d.scenario || "", cues: (d.cues || []).join("\n") });
+    setForm({ name: d.name || "", title: d.title || "", kind: d.kind || "drill", cat: d.cat || DRILL_CATS[0], tags: (d.tags || []).join(", "), dur: d.dur || "", players: d.players || "", equipment: equipStr, setupLengthYd: lenYd, setupWidthYd: widYd, setupCones: d.setup?.cones ?? "", setupBalls: d.setup?.balls ?? "", setupGoals: d.setup?.goals ?? "", setupMannequins: d.setup?.mannequins ?? "", setupTeams: d.setup?.teams || "", howTo: d.howTo || "", objectives: (d.objectives || []).join("\n"), desc: d.desc || "", info: d.info || "", videoUrl: d.videoUrl || "", photos: d.photos || [], diagram: d.diagram || "", diagramData: d.diagramData || null, diagramImage: d.diagramImage || "", scenario: d.scenario || "", cues: (d.cues || []).join("\n") });
     setAdding(true);
   };
   const cancel = () => { setEditingId(null); setForm(blank); setAdding(false); setNewCat(false); };
@@ -2800,6 +2807,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
       objectives: form.objectives.split("\n").map((t) => t.trim()).filter(Boolean),
       desc: form.desc.trim(), info: form.info.trim(), videoUrl: form.videoUrl.trim(),
       photos: form.photos, diagram: form.diagram, diagramData: form.diagramData || null,
+      diagramImage: form.diagramImage || null,
       scenario: form.scenario.trim(),
       cues: form.cues.split("\n").map((t) => t.trim()).filter(Boolean),
     };
@@ -2818,6 +2826,10 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
   const duplicateDrill = async (d) => {
     const copy = { ...d };
     delete copy.id;
+    // Fresh authorship: the create rule requires createdByUid == the caller,
+    // so a copy stamped with the original coach's uid would be denied.
+    delete copy.createdByUid;
+    delete copy.createdByName;
     copy.name = `${d.name || "Drill"} — Progression`;
     copy.title = `${d.title || d.name || "Drill"} — Progression`;
     try { await addDrill(copy); toast("Duplicated — edit the copy for the progression."); }
@@ -2917,16 +2929,23 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
             </button>
             <label className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600 text-center cursor-pointer flex items-center justify-center gap-1.5">
               <ImageIcon className="w-3.5 h-3.5" /> {form.diagram && !form.diagramData ? "Diagram ✓" : "Diagram"}
-              <input type="file" accept="image/*" className="hidden" onChange={(e) => { setDiagram(e.target.files?.[0]); setForm((p) => ({ ...p, diagramData: null })); e.target.value = ""; }} />
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => { setDiagram(e.target.files?.[0]); setForm((p) => ({ ...p, diagramData: null, diagramImage: "" })); e.target.value = ""; }} />
             </label>
           </div>
-          {form.diagramData && (
+          {/* diagram — photo from the video wins, then the board, then the
+              uploaded raster (photo-first rule, same as the Drill Library) */}
+          {form.diagramImage ? (
+            <div className="relative">
+              <img src={form.diagramImage} alt="Diagram photo from the video" className="w-full rounded-xl border border-slate-100" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+              <button type="button" onClick={() => setForm((p) => ({ ...p, diagramImage: "" }))} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 border border-slate-200 flex items-center justify-center shadow"><X className="w-3.5 h-3.5 text-slate-600" /></button>
+            </div>
+          ) : form.diagramData ? (
             <div className="relative">
               <BoardSvg state={form.diagramData} showLegend className="w-full rounded-xl border border-slate-100" />
               <button type="button" onClick={() => setForm((p) => ({ ...p, diagram: "", diagramData: null }))} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 border border-slate-200 flex items-center justify-center shadow"><X className="w-3.5 h-3.5 text-slate-600" /></button>
             </div>
-          )}
-          {form.diagram && !form.diagramData && (
+          ) : null}
+          {form.diagram && !form.diagramData && !form.diagramImage && (
             <div className="relative">
               <img src={form.diagram} alt="Drill diagram" className="w-full rounded-xl border border-slate-100" />
               <button type="button" onClick={() => setForm((p) => ({ ...p, diagram: "", diagramData: null }))} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 border border-slate-200 flex items-center justify-center shadow"><X className="w-3.5 h-3.5 text-slate-600" /></button>
@@ -3020,7 +3039,9 @@ const DrillThumb = ({ d, className = "w-10 h-10" }) => {
   return (
     <div className={`${className} relative rounded-lg overflow-hidden bg-slate-900 flex-shrink-0`}>
       <img src="/brand/logo.png" alt="" aria-hidden="true" className="absolute inset-0 m-auto w-3/4 max-h-full object-contain pointer-events-none" style={{ opacity: 0.2 }} />
-      {d.diagramData
+      {d.diagramImage
+        ? <img src={d.diagramImage} alt="" className="relative w-full h-full object-cover" loading="lazy" />
+        : d.diagramData
         ? <BoardSvg state={d.diagramData} className="relative w-full h-full" />
         : d.diagram
           ? <img src={d.diagram} alt="" className="relative w-full h-full object-cover" loading="lazy" />
@@ -8324,11 +8345,21 @@ export default function TeamHubRolesApp() {
   };
 
   // Drill library — building blocks for the Practice page (same CRUD as videos).
-  const drills = useCollection("drills", orderBy("createdAt", "desc"));
+  // ONE shared library: the `drillLibrary` collection is read and written by
+  // this app AND the standalone Drill Library site — a drill made in either
+  // shows up in both. The shared document shape lives in src/lib/drillDoc.js.
+  // `createdByUid` is stamped on create: the drillLibrary rules require it.
+  const drillsRaw = useCollection("drillLibrary", orderBy("createdAt", "desc"));
+  const drills = useMemo(() => drillsRaw.map(normalizeDrillDoc), [drillsRaw]);
   const addDrill = (data) =>
-    addDoc(collection(db, "drills"), { ...data, createdAt: serverTimestamp() });
-  const updateDrill = (id, data) => updateDoc(doc(db, "drills", id), data);
-  const deleteDrill = (id) => deleteDoc(doc(db, "drills", id));
+    addDoc(collection(db, "drillLibrary"), {
+      ...data,
+      createdAt: serverTimestamp(),
+      createdByUid: user.uid,
+      createdByName: user.name,
+    });
+  const updateDrill = (id, data) => updateDoc(doc(db, "drillLibrary", id), { ...data, updatedAt: serverTimestamp() });
+  const deleteDrill = (id) => deleteDoc(doc(db, "drillLibrary", id));
 
   // Practices — saved sessions assembled from drills (mirrors teamWorkouts).
   const practices = useCollection("practices", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));

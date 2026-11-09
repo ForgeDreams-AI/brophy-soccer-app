@@ -13,8 +13,8 @@
 
 import { useRef, useState } from "react";
 import {
-  VB_W, LEG_H, clamp, BOARD_PRESETS, TEAM_COLORS, ARROW_LEGEND,
-  wavyPath, normalizeBoardState, boardDims,
+  VB_W, LEG_H, clamp, BOARD_PRESETS, TEAM_COLORS, ARROW_LEGEND, ARROW_COLORS,
+  wavyPath, arrowGeom, normalizeBoardState, boardDims,
 } from "./boardData";
 import {
   X, Trash2, RotateCcw, Undo2, MousePointer2, Spline, Save,
@@ -161,6 +161,96 @@ function GoalMark({ x, y }) {
   );
 }
 
+// Arrowhead markers, one pair per arrow colour. The plain bs-head /
+// bs-open markers below are kept for LegendStrip (which predates colours).
+const colorKey = (c) => (c || ARROW_WHITE).replace("#", "");
+function ArrowMarkers() {
+  return (
+    <>
+      {ARROW_COLORS.map((c) => (
+        <g key={c}>
+          <marker id={`bs-head-${colorKey(c)}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill={c} />
+          </marker>
+          <marker id={`bs-open-${colorKey(c)}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <path d="M 0.5 0.5 L 9 5 L 0.5 9.5" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" />
+          </marker>
+        </g>
+      ))}
+    </>
+  );
+}
+
+// One arrow: visible line(s) + number badge. Uses arrowGeom so bent,
+// coloured and freehand arrows (drawn in the Drill Library's studio) draw
+// exactly as they do there — a bent run stays bent here.
+function ArrowShape({ a, index, px, py }) {
+  const geom = arrowGeom(a, px, py);
+  const color = a.color || ARROW_WHITE;
+  const key = colorKey(color);
+  const head = a.kind === "pass" ? `url(#bs-open-${key})` : `url(#bs-head-${key})`;
+  const width = a.kind === "pass" ? 3.5 : a.kind === "shot" ? 2.5 : 4;
+  const dash = a.kind === "run" ? "10 7" : undefined;
+  return (
+    <g>
+      {geom.d2
+        ? <g>
+          <path d={geom.d} fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" />
+          <path d={geom.d2} fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" markerEnd={head} />
+        </g>
+        : <path d={geom.d} fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeDasharray={dash} markerEnd={head} />}
+      <g>
+        <circle cx={geom.mid.x} cy={geom.mid.y} r={ARROW_NUM_R} fill="#0F172A" stroke="#FFFFFF" strokeWidth={2} />
+        <text x={geom.mid.x} y={geom.mid.y + 5.5} textAnchor="middle" fontSize={16} fontWeight="800" fill="#FFFFFF" style={{ pointerEvents: "none" }}>{index + 1}</text>
+      </g>
+    </g>
+  );
+}
+
+// One token glyph. rot rotates equipment (goal, mannequin, pole, ladder);
+// pole/ladder are Drill Library palette items — they draw properly here
+// instead of falling back to a grey player circle.
+function TokenGlyph({ t, x, y }) {
+  const rot = t.rot ? `rotate(${t.rot} ${x} ${y})` : undefined;
+  if (t.kind === "ball") return (
+    <g transform={rot}>
+      <circle cx={x} cy={y} r={12} fill="#fff" stroke="#111" strokeWidth={2} />
+      <circle cx={x} cy={y} r={4.5} fill="#111" />
+    </g>
+  );
+  if (t.kind === "cone") return (
+    <polygon transform={rot} points={`${x},${y - 16} ${x - 13},${y + 12} ${x + 13},${y + 12}`} fill="#F97316" stroke="#7C2D12" strokeWidth={2} />
+  );
+  if (t.kind === "goal") return <g transform={rot}><GoalMark x={x} y={y} /></g>;
+  if (t.kind === "mannequin") return (
+    <g transform={rot}>
+      <rect x={x - 9} y={y - 18} width={18} height={36} rx={8} fill="#94A3B8" stroke="#475569" strokeWidth={2} />
+      <rect x={x - 13} y={y + 16} width={26} height={5} rx={2.5} fill="#64748B" />
+    </g>
+  );
+  if (t.kind === "pole") return (
+    <g transform={rot}>
+      <rect x={x - 3} y={y - 20} width={6} height={40} rx={3} fill="#FBBF24" stroke="#92400E" strokeWidth={1.5} />
+      <ellipse cx={x} cy={y + 20} rx={8} ry={3} fill="#78350F" />
+    </g>
+  );
+  if (t.kind === "ladder") return (
+    <g transform={rot}>
+      <rect x={x - 20} y={y - 7} width={40} height={14} rx={3} fill="#94A3B8" stroke="#475569" strokeWidth={2} />
+      <line x1={x - 12} y1={y - 7} x2={x - 12} y2={y + 7} stroke="#475569" strokeWidth={2} />
+      <line x1={x - 4} y1={y - 7} x2={x - 4} y2={y + 7} stroke="#475569" strokeWidth={2} />
+      <line x1={x + 4} y1={y - 7} x2={x + 4} y2={y + 7} stroke="#475569" strokeWidth={2} />
+      <line x1={x + 12} y1={y - 7} x2={x + 12} y2={y + 7} stroke="#475569" strokeWidth={2} />
+    </g>
+  );
+  return (
+    <g transform={rot}>
+      <circle cx={x} cy={y} r={R} fill={TEAM_COLORS[t.kind] || "#64748B"} stroke="rgba(0,0,0,0.4)" strokeWidth={2} />
+      {t.label ? <text x={x} y={y + R * 0.34} textAnchor="middle" fontSize={R * 0.85} fontWeight="700" fill="#fff" style={{ pointerEvents: "none" }}>{t.label}</text> : null}
+    </g>
+  );
+}
+
 // Read-only render of a board state (thumbnails, session rows, PDFs). No
 // editing chrome — just the pitch, zones, arrows and markers.
 export function BoardSvg({ state, className = "", showLegend = false }) {
@@ -171,6 +261,7 @@ export function BoardSvg({ state, className = "", showLegend = false }) {
   return (
     <svg viewBox={`0 0 ${VB_W} ${showLegend ? vbH : pitchH}`} className={className} role="img" aria-label="Drill diagram">
       <defs>
+        <ArrowMarkers />
         <marker id="bs-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" fill={ARROW_WHITE} />
         </marker>
@@ -184,59 +275,8 @@ export function BoardSvg({ state, className = "", showLegend = false }) {
           ? <circle key={z.id} cx={px(z.x)} cy={py(z.y)} r={z.r * (VB_W - 2 * M)} fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.7)" strokeWidth={2} strokeDasharray="8 6" />
           : <rect key={z.id} x={px(z.x)} y={py(z.y)} width={z.w * (VB_W - 2 * M)} height={z.h * (pitchH - 2 * M)} fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.7)" strokeWidth={2} strokeDasharray="8 6" rx={6} />
       ))}
-      {s.arrows.map((a, i) => {
-        const p = { x1: px(a.from.x), y1: py(a.from.y), x2: px(a.to.x), y2: py(a.to.y) };
-        const num = <ArrowNumber {...p} n={i + 1} />;
-        if (a.kind === "dribble") return (
-          <g key={a.id}>
-            <path d={wavyPath(p.x1, p.y1, p.x2, p.y2)} fill="none" stroke={ARROW_WHITE} strokeWidth={3.5} strokeLinecap="round" markerEnd="url(#bs-head)" />
-            {num}
-          </g>
-        );
-        if (a.kind === "shot") {
-          const dx = p.x2 - p.x1, dy = p.y2 - p.y1, len = Math.hypot(dx, dy) || 1, ox = (-dy / len) * 4, oy = (dx / len) * 4;
-          return (
-            <g key={a.id}>
-              <line x1={p.x1 + ox} y1={p.y1 + oy} x2={p.x2 + ox} y2={p.y2 + oy} stroke={ARROW_WHITE} strokeWidth={2.5} strokeLinecap="round" />
-              <line x1={p.x1 - ox} y1={p.y1 - oy} x2={p.x2 - ox} y2={p.y2 - oy} stroke={ARROW_WHITE} strokeWidth={2.5} strokeLinecap="round" markerEnd="url(#bs-head)" />
-              {num}
-            </g>
-          );
-        }
-        return (
-          <g key={a.id}>
-            <line {...p} stroke={ARROW_WHITE} strokeWidth={a.kind === "pass" ? 3.5 : 4} strokeLinecap="round"
-              strokeDasharray={a.kind === "run" ? "10 7" : undefined}
-              markerEnd={a.kind === "pass" ? "url(#bs-open)" : "url(#bs-head)"} />
-            {num}
-          </g>
-        );
-      })}
-      {s.tokens.map((t) => {
-        const x = px(t.x), y = py(t.y);
-        if (t.kind === "ball") return (
-          <g key={t.id}>
-            <circle cx={x} cy={y} r={12} fill="#fff" stroke="#111" strokeWidth={2} />
-            <circle cx={x} cy={y} r={4.5} fill="#111" />
-          </g>
-        );
-        if (t.kind === "cone") return (
-          <polygon key={t.id} points={`${x},${y - 16} ${x - 13},${y + 12} ${x + 13},${y + 12}`} fill="#F97316" stroke="#7C2D12" strokeWidth={2} />
-        );
-        if (t.kind === "goal") return <GoalMark key={t.id} x={x} y={y} />;
-        if (t.kind === "mannequin") return (
-          <g key={t.id}>
-            <rect x={x - 9} y={y - 18} width={18} height={36} rx={8} fill="#94A3B8" stroke="#475569" strokeWidth={2} />
-            <rect x={x - 13} y={y + 16} width={26} height={5} rx={2.5} fill="#64748B" />
-          </g>
-        );
-        return (
-          <g key={t.id}>
-            <circle cx={x} cy={y} r={R} fill={TEAM_COLORS[t.kind] || "#64748B"} stroke="rgba(0,0,0,0.4)" strokeWidth={2} />
-            {t.label ? <text x={x} y={y + R * 0.34} textAnchor="middle" fontSize={R * 0.85} fontWeight="700" fill="#fff" style={{ pointerEvents: "none" }}>{t.label}</text> : null}
-          </g>
-        );
-      })}
+      {s.arrows.map((a, i) => <ArrowShape key={a.id} a={a} index={i} px={px} py={py} />)}
+      {s.tokens.map((t) => <TokenGlyph key={t.id} t={t} x={px(t.x)} y={py(t.y)} />)}
       {showLegend && <LegendStrip y={pitchH} />}
     </svg>
   );
