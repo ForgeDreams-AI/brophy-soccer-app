@@ -9,9 +9,9 @@
 //   kind?: "drill" — anything else (e.g. legacy "point" coaching-point
 //     items from the old `drills` collection) is NOT a drill and is
 //     filtered out of every list
-//   cat: string — one of the drill categories (the library lists 17
-//     built-ins, this app 15 — both apps add any cat a drill uses to the
-//     filter pills, so an unknown cat still renders and filters fine)
+//   cat: string — one of the drill categories (both apps list the same 17
+//     built-ins; both add any cat a drill uses to the filter pills, so an
+//     unknown cat still renders and filters fine)
 //   tags?: string[]
 //   dur?: number | string — minutes (the library writes a number, the
 //     team app writes a string; both display fine)
