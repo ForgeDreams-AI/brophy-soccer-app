@@ -518,7 +518,7 @@ const Avatar = ({ photoURL, initials = "", size = 36, bg = COLORS.primary, color
 const Header = ({ title, user, onAvatarClick, onPreview }) => (
   <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between">
     <div className="flex items-center gap-2">
-      <img src="/brand/logo.png" alt="" className="w-9 h-9 object-contain" />
+      <img src="/brand/logo.png" alt="" className="w-9 h-9 object-contain lg:hidden" />
       <div>
         <div className="text-[10px] font-bold tracking-[0.18em] text-slate-400 leading-none">BROPHY</div>
         <h1 className="text-base font-bold text-slate-900 leading-tight">{title}</h1>
@@ -546,7 +546,7 @@ const Header = ({ title, user, onAvatarClick, onPreview }) => (
 // one team (a coach of several teams, or the org admin). Players see only
 // their own team, so they never get a switcher.
 const TeamSwitcher = ({ teams, activeTeamId, onSelect }) => (
-  <div className="flex gap-1.5 px-5 py-2 bg-white border-b border-slate-200 overflow-x-auto">
+  <div className="flex gap-1.5 px-5 py-2 bg-white border-b border-slate-200 overflow-x-auto lg:hidden">
     {teams.map((t) => {
       const active = t.id === activeTeamId;
       return (
@@ -6202,17 +6202,30 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
     }
   };
 
-  // Jump to the newest messages: on opening a conversation and whenever new
-  // messages arrive. Deferred across two frames so it lands after layout (and
-  // late-loading images) settle, so a chat always opens pinned to the bottom.
+  // Jump to the newest messages on opening a conversation. After that, only
+  // follow new messages if the user is already near the bottom — if they
+  // scrolled up to read older messages, stay put and let them read.
+  // Deferred across two frames so it lands after layout (and late-loading
+  // images) settle, so a chat always opens pinned to the bottom.
+  const nearBottomRef = useRef(true);
+  const lastConvRef = useRef(null);
   useEffect(() => {
     if (shared || !activeConv) return;
+    const isNewConv = lastConvRef.current !== activeConv;
+    lastConvRef.current = activeConv;
+    if (!isNewConv && !nearBottomRef.current) return;
     const toBottom = () => { if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight; };
     toBottom();
     const r1 = requestAnimationFrame(() => { toBottom(); requestAnimationFrame(toBottom); });
     const t = setTimeout(toBottom, 120);
     return () => { cancelAnimationFrame(r1); clearTimeout(t); };
   }, [channelMessages, dmMessages, shared, activeConv]);
+  // Track whether the user is near the bottom of the feed, so new messages
+  // only pull the view down when they're already reading the newest ones.
+  const onFeedScroll = (e) => {
+    const el = e.currentTarget;
+    nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  };
 
   // Mark every visible message (that isn't ours and we haven't read) as read.
   useEffect(() => {
@@ -6404,8 +6417,8 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
 
   if (!activeConv) {
     return (
-      <div className="flex flex-col" style={{ height: "calc(100vh - 7rem - 64px)" }}>
-        <div className="px-5 py-3 border-b border-slate-200 bg-white flex items-center justify-between">
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="px-5 py-3 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
           <div><h3 className="font-bold text-slate-900 text-sm">Messages</h3><p className="text-[10px] text-slate-500">{getTeam(activeTeamId).shortName} · {rosterCount} on roster</p></div>
           {isAdmin && (
             <div className="flex items-center gap-2">
@@ -6418,7 +6431,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
             </div>
           )}
         </div>
-        <div className="flex-1 overflow-y-auto" style={{ backgroundColor: COLORS.bg }}>
+        <div className="flex-1 min-h-0 overflow-y-auto" style={{ backgroundColor: COLORS.bg }}>
           <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Channels</div>
           <ul className="divide-y divide-slate-100">
             {channelConvs.map((c) => convRow(c))}
@@ -6447,8 +6460,8 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
   }
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 7rem - 64px)" }}>
-      <div className="px-5 py-3 border-b border-slate-200 bg-white flex items-center justify-between gap-2">
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="px-5 py-3 border-b border-slate-200 bg-white flex items-center justify-between gap-2 shrink-0">
         <button onClick={() => { setActiveChannel(null); setShared(false); }} className="flex items-center gap-2 min-w-0">
           <ChevronLeft className="w-5 h-5 text-slate-400 flex-shrink-0" />
           <div className="min-w-0 text-left"><h3 className="font-bold text-slate-900 text-sm truncate">{activeName}</h3><p className="text-[10px] text-slate-500">{rosterCount} on roster</p></div>
@@ -6466,7 +6479,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
       )}
 
       {shared ? (
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5" style={{ backgroundColor: COLORS.bg }}>
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-5" style={{ backgroundColor: COLORS.bg }}>
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Photos & Files</h4>
             {mediaMsgs.length === 0 ? <p className="text-xs text-slate-400 italic">No files shared yet.</p> : (
@@ -6503,7 +6516,8 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
         </div>
       ) : isDM ? (
         <>
-          <div ref={feedRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3" style={{ backgroundColor: COLORS.bg }}>
+          <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 min-h-0 overflow-y-auto" style={{ backgroundColor: COLORS.bg }}>
+            <div className="min-h-full flex flex-col justify-end space-y-3 px-4 py-4">
             {dmMessages.length === 0 && <p className="text-center text-xs text-slate-400 italic py-6">{isAdmin ? "No messages in this thread yet." : "Message your coach privately. Only you and your team's coach can see this."}</p>}
             {dmStream.map((item) => {
               if (item.kind === "divider") return <DateDivider key={item.id} label={item.label} />;
@@ -6518,8 +6532,9 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
                 </div>
               );
             })}
+            </div>
           </div>
-          <div className="bg-white border-t border-slate-200 p-3 flex items-center gap-2">
+          <div className="bg-white border-t border-slate-200 p-3 flex items-center gap-2 shrink-0">
             <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder={isAdmin ? "Reply…" : "Message your coach…"} className="flex-1 bg-slate-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
             <button onClick={send} disabled={!input.trim()} className="w-9 h-9 rounded-full flex items-center justify-center text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}><Send className="w-4 h-4" /></button>
           </div>
@@ -6527,7 +6542,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
       ) : (
         <>
           {pinnedMsgs.length > 0 && (
-            <div className="bg-orange-50 border-b border-orange-100">
+            <div className="bg-orange-50 border-b border-orange-100 shrink-0">
               <button onClick={() => setShowPinned(!showPinned)} className="w-full px-4 py-2 flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ color: COLORS.accent }}><Pin className="w-3 h-3" /> {pinnedMsgs.length} Pinned</span>
                 {showPinned ? <ChevronUp className="w-3.5 h-3.5 text-orange-400" /> : <ChevronDown className="w-3.5 h-3.5 text-orange-400" />}
@@ -6538,7 +6553,8 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
             </div>
           )}
 
-          <div ref={feedRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3" style={{ backgroundColor: COLORS.bg }}>
+          <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 min-h-0 overflow-y-auto" style={{ backgroundColor: COLORS.bg }}>
+            <div className="min-h-full flex flex-col justify-end space-y-3 px-4 py-4">
             {stream.map((item) => {
               if (item.kind === "divider") return <DateDivider key={item.id} label={item.label} />;
               if (item.kind === "announcement") {
@@ -6621,10 +6637,11 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
                 </div>
               );
             })}
+            </div>
           </div>
 
           {pollOpen && (
-            <div className="bg-white border-t border-slate-200 px-4 py-3 space-y-2">
+            <div className="bg-white border-t border-slate-200 px-4 py-3 space-y-2 shrink-0">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><BarChart3 className="w-3 h-3" /> Create poll</span>
                 <button onClick={() => { setPollOpen(false); setPollDraft({ question: "", options: ["", ""] }); }} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
@@ -6647,7 +6664,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
             </div>
           )}
 
-          <div className="bg-white border-t border-slate-200">
+          <div className="bg-white border-t border-slate-200 shrink-0">
             {replyTo && (
               <div className="px-4 py-2 flex items-center gap-2 border-b border-slate-100" style={{ backgroundColor: COLORS.accentSoft }}>
                 <Reply className="w-3.5 h-3.5 flex-shrink-0" style={{ color: COLORS.primary }} />
@@ -9020,8 +9037,65 @@ export default function TeamHubRolesApp() {
       {/* Fixed-inset app shell: a definite viewport height (top/bottom 0) that
           iOS lays out reliably — a flex column with an internal-scroll <main>
           and an in-flow bottom nav that can't scroll away. Centered without a
-          transform so full-screen `fixed inset-0` modals still cover the page. */}
-      <div className="w-full max-w-md shadow-2xl flex flex-col z-10" style={{ position: "fixed", top: 0, bottom: 0, left: 0, right: 0, margin: "0 auto", maxWidth: "28rem", backgroundColor: COLORS.bg }}>
+          transform so full-screen `fixed inset-0` modals still cover the page.
+          Responsive: phone keeps the 28rem column; iPad (md) widens to 42rem;
+          laptop (lg) goes full-width with a left sidebar nav instead of the
+          bottom tabs. */}
+      <div className="w-full max-w-md md:max-w-2xl lg:max-w-none shadow-2xl flex flex-col lg:flex-row z-10" style={{ position: "fixed", top: 0, bottom: 0, left: 0, right: 0, margin: "0 auto", backgroundColor: COLORS.bg }}>
+        {/* Desktop sidebar — laptop and wider only. Phone and iPad keep the
+            bottom tabs. Carries the brand, the team switcher (multi-team
+            users only) and the nav, so the content column can go wide. */}
+        <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white border-r border-slate-200 z-20">
+          <div className="px-5 pt-6 pb-4 flex items-center gap-3 border-b border-slate-100">
+            <img src="/brand/logo.png" alt="" className="w-11 h-11 object-contain" />
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold tracking-[0.18em] text-slate-400 leading-none">BROPHY</div>
+              <div className="text-lg font-bold text-slate-900 leading-tight">Brophy Soccer</div>
+              <div className="text-[11px] font-semibold truncate" style={{ color: COLORS.primary }}>{getTeam(activeTeamId).name}</div>
+            </div>
+          </div>
+          {canSeeMultipleTeams && (
+            <div className="px-4 pt-4 flex flex-col gap-1.5">
+              {visibleTeams.map((t) => {
+                const active = t.id === activeTeamId;
+                return (
+                  <button key={t.id} onClick={() => setPreferredTeamId(t.id)} className="text-left px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider" style={{ backgroundColor: active ? COLORS.primary : COLORS.bg, color: active ? "#fff" : COLORS.textSecondary }}>
+                    {t.shortName}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <nav className="flex-1 px-3 pt-4 flex flex-col gap-1 overflow-y-auto">
+            {tabs.map((t) => {
+              const Icon = t.icon;
+              const active = activeTab === t.id;
+              const badge = t.id === "messages" ? chatUnread : 0;
+              return (
+                <button key={t.id} onClick={() => { setTrainView(null); setTab(t.id); }} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold text-left" style={{ backgroundColor: active ? COLORS.accentSoft : "transparent", color: active ? COLORS.accent : COLORS.textSecondary }}>
+                  <span className="relative">
+                    <Icon className="w-5 h-5" style={{ color: active ? COLORS.accent : COLORS.textSecondary }} fill={active ? COLORS.accent : "none"} strokeWidth={active ? 2.5 : 2} />
+                    {badge > 0 && (
+                      <span className="absolute -top-1.5 -right-2 text-[9px] font-bold text-white rounded-full px-1 min-w-[15px] h-[15px] flex items-center justify-center leading-none border border-white" style={{ backgroundColor: "#DC2626" }}>{badge > 99 ? "99+" : badge}</span>
+                    )}
+                  </span>
+                  {t.label}
+                </button>
+              );
+            })}
+          </nav>
+          <div className="p-3 border-t border-slate-200">
+            <button onClick={() => setSettingsOpen(true)} className="w-full flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-slate-50 text-left">
+              <Avatar photoURL={effUser.photoURL} initials={effUser.initials} size={36} />
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-slate-900 truncate">{effUser.name}</span>
+                <span className="block text-[11px] text-slate-500 truncate">{effUser.role === "orgAdmin" ? "Org Admin" : effUser.role === "admin" ? "Coach" : "Player"} · {getTeamShortName(activeTeamId)}</span>
+              </span>
+            </button>
+          </div>
+        </aside>
+        {/* Content column — the phone/tablet column and the desktop content area. */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {updateReady && <UpdateBanner onReload={reload} color={COLORS.primary} />}
         <Header title={title} user={effUser} onAvatarClick={() => setSettingsOpen(true)} onPreview={() => { setPreviewAsPlayer(true); setTab("home"); }} />
         {canSeeMultipleTeams && <TeamSwitcher teams={visibleTeams} activeTeamId={activeTeamId} onSelect={setPreferredTeamId} />}
@@ -9033,6 +9107,9 @@ export default function TeamHubRolesApp() {
           </button>
         )}
         <main className="flex-1 min-h-0 overflow-y-auto pb-4">
+          {/* Desktop content cap: the column goes wide on a laptop, but the
+              pages stay readable (and the pitch stays usable) at 72rem. */}
+          <div className="w-full lg:max-w-6xl lg:mx-auto h-full flex flex-col">
           {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} isOrgAdmin={user.role === "orgAdmin"} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} checkin={checkin} setCheckin={setCheckin} wellness={wellness} submitWellness={submitWellness} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} inviteLinks={inviteLinks} addInviteLink={addInviteLink} removeInviteLink={removeInviteLink} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
           {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} practices={practices} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} nutritionTarget={myNutritionGoal} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} />}
           {activeTab === "train" && (
@@ -9057,8 +9134,9 @@ export default function TeamHubRolesApp() {
           )}
           {activeTab === "calendar" && <CalendarPage user={effUser} events={events} practices={practices} teamWorkouts={teamWorkouts} personalEvents={personalEvents} addEvent={addEvent} updateEvent={updateEvent} addPersonalEvent={addPersonalEvent} updatePersonalEvent={updatePersonalEvent} deleteEvent={deleteEvent} deletePersonalEvent={deletePersonalEvent} importEvents={importEvents} groups={groupsList} addGroup={addGroup} updateGroupMembers={updateGroupMembers} deleteGroup={deleteGroup} invites={invites} allUsers={allUsers} chatGroups={chatGroups} />}
           {activeTab === "messages" && <MessagesPage user={effUser} activeTeamId={activeTeamId} isOrgAdmin={user.role === "orgAdmin"} allUsers={allUsers} messages={messages} addMessage={addMessage} togglePinMessage={togglePinMessage} deleteMessage={deleteMessage} markMessagesRead={markMessagesRead} voteOnPoll={voteOnPoll} reactToMessage={reactToMessage} rosterCount={invites.length} chatGroups={chatGroups} addChatGroup={addChatGroup} deleteChatGroup={deleteChatGroup} updateChatGroup={updateChatGroup} onPinChannel={pinChatGroup} groups={groupsList} invites={invites} announcements={announcements} addAnnouncement={addAnnouncement} deleteAnnouncement={deleteAnnouncement} dms={dms} addDM={addDM} markDMsRead={markDMsRead} scheduled={scheduled} addScheduled={addScheduled} deleteScheduled={deleteScheduled} />}
+          </div>
         </main>
-        <nav className="flex-shrink-0 w-full bg-white border-t border-slate-200 z-20" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
+        <nav className="lg:hidden flex-shrink-0 w-full bg-white border-t border-slate-200 z-20" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
           <div className="grid px-1 pt-2" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
             {tabs.map((t) => {
               const Icon = t.icon; const active = activeTab === t.id;
@@ -9077,6 +9155,7 @@ export default function TeamHubRolesApp() {
             })}
           </div>
         </nav>
+        </div>
       </div>
     </div>
   );
