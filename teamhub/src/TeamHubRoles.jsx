@@ -6127,7 +6127,7 @@ const DateDivider = ({ label }) => (
   </div>
 );
 
-const MessagesPage = ({ user, activeTeamId, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, scheduled = [], addScheduled, deleteScheduled }) => {
+const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, markDMsRead, scheduled = [], addScheduled, deleteScheduled }) => {
   const isAdmin = user.role === "admin";
   const [input, setInput] = useState("");
   const [showPinned, setShowPinned] = useState(true);
@@ -6184,14 +6184,26 @@ const MessagesPage = ({ user, activeTeamId, messages, addMessage, togglePinMessa
     return gids.some((id) => myGroupIds.has(id));
   }), [chatGroups, isAdmin, myGroupIds, user]);
   const [announceMode, setAnnounceMode] = useState(false);
-  // Direct messages with the coach. Players get one "Coach" thread; the coach
-  // sees one pill per player who has a thread.
+  // The active team's coach(es), for naming the player's DM thread
+  // ("Coach Kelly" instead of a generic "Coach"). The org admin is not a
+  // DM participant, so only per-team coaches (role 'admin') count here.
+  const teamCoaches = useMemo(() => (allUsers || []).filter((u) => u.role === "admin" && (u.teamIds || []).includes(activeTeamId)), [allUsers, activeTeamId]);
+  const coachDmName = useMemo(() => {
+    if (teamCoaches.length !== 1) return "Coach";
+    const parts = (teamCoaches[0].name || "").trim().split(/\s+/).filter(Boolean);
+    return parts.length ? `Coach ${parts[parts.length - 1]}` : "Coach";
+  }, [teamCoaches]);
+  // Direct messages with the team's coach. Players get one thread with their
+  // own team's coach; a coach sees one pill per player who has a thread on
+  // their team. The org admin gets none — DMs are player ↔ own team's coach
+  // only (decision 2026-11-08).
   const dmThreads = useMemo(() => {
-    if (!isAdmin) return [{ id: "coach-dm", name: "Coach", dm: true }];
+    if (isOrgAdmin) return [];
+    if (!isAdmin) return [{ id: "coach-dm", name: coachDmName, dm: true }];
     const byThread = new Map();
     dms.forEach((d) => { if (!byThread.has(d.threadId)) byThread.set(d.threadId, d); });
     return [...byThread.entries()].map(([tid, d]) => ({ id: `dm:${tid}`, name: (dms.find((x) => x.threadId === tid && !x.isCoach)?.senderName) || d.senderName || "Player", dm: true }));
-  }, [dms, isAdmin]);
+  }, [dms, isAdmin, isOrgAdmin, coachDmName]);
   const channels = [
     { id: "team", name: "Team", channel: true },
     ...visibleChannels.map((c) => ({ id: c.id, name: c.name, pinned: !!c.pinned, channel: true })),
@@ -6275,6 +6287,23 @@ const MessagesPage = ({ user, activeTeamId, messages, addMessage, togglePinMessa
       toMark.forEach((id) => readMarkedRef.current.delete(id));
     });
   }, [channelMessages, shared, activeConv, user.uid, markMessagesRead]);
+
+  // Same for DMs: opening a thread marks its messages read (so the thread's
+  // unread badge clears, like a channel's).
+  const dmReadMarkedRef = useRef(new Set());
+  useEffect(() => {
+    if (shared || !activeConv || !isDM) return;
+    const toMark = dmMessages
+      .filter((d) => d.senderUid !== user.uid)
+      .filter((d) => !d.readBy?.[user.uid])
+      .filter((d) => !dmReadMarkedRef.current.has(d.id))
+      .map((d) => d.id);
+    if (!toMark.length) return;
+    toMark.forEach((id) => dmReadMarkedRef.current.add(id));
+    markDMsRead?.(toMark).catch(() => {
+      toMark.forEach((id) => dmReadMarkedRef.current.delete(id));
+    });
+  }, [dmMessages, shared, activeConv, isDM, user.uid, markDMsRead]);
 
   const isOwn = (m) => m.senderUid === user.uid;
   const readByCount = (m) => Object.keys(m.readBy || {}).filter((uid) => uid !== user.uid).length;
@@ -6387,6 +6416,7 @@ const MessagesPage = ({ user, activeTeamId, messages, addMessage, togglePinMessa
     dms.forEach((d) => {
       const id = isAdmin ? `dm:${d.threadId}` : "coach-dm";
       bump(id, msOf(d.createdAt), d.createdAt, d.text || "", d.senderName);
+      if (d.senderUid !== user.uid && !d.readBy?.[user.uid]) meta[id].unread = (meta[id].unread || 0) + 1;
     });
     return meta;
   }, [messages, dms, isAdmin, user.uid]);
@@ -6398,12 +6428,44 @@ const MessagesPage = ({ user, activeTeamId, messages, addMessage, togglePinMessa
       if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
       return (b.meta.lastTs || 0) - (a.meta.lastTs || 0);
     });
+  // Professional inbox layout: channels first (Team, then custom), then
+  // direct messages — never mixed into one flat list.
+  const channelConvs = convList.filter((c) => c.channel);
+  const dmConvs = convList.filter((c) => c.dm);
+
+  // One conversation row, shared by the Channels and Direct messages
+  // sections (avatar, name, unread badge, last-message preview, time).
+  const convRow = (c) => {
+    const meta = c.meta || {};
+    const preview = meta.lastText
+      ? `${!c.dm && meta.lastSender ? meta.lastSender.split(" ")[0] + ": " : ""}${meta.lastText}`
+      : "No messages yet";
+    return (
+      <li key={c.id} className="flex items-center bg-white hover:bg-slate-50">
+        <button onClick={() => { setActiveChannel(c.id); setShared(false); }} className="flex-1 min-w-0 flex items-center gap-3 px-4 py-3 text-left">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold" style={{ backgroundColor: c.dm ? "#94a3b8" : COLORS.primary }}>{c.dm ? (c.name || "?")[0]?.toUpperCase() : <Hash className="w-4 h-4" />}</div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              {(c.id === "team" || c.pinned) && <Pin className="w-3 h-3 flex-shrink-0" style={{ color: c.id === "team" ? COLORS.accent : "#94a3b8" }} />}
+              <span className="text-sm font-bold text-slate-900 truncate">{c.name}</span>
+              {meta.unread > 0 && <span className="text-[10px] font-bold text-white rounded-full px-1.5 min-w-[18px] text-center flex-shrink-0" style={{ backgroundColor: COLORS.accent }}>{meta.unread}</span>}
+            </div>
+            <div className="text-xs text-slate-500 truncate mt-0.5">{preview}</div>
+          </div>
+          {meta.lastAt && <span className="text-[9px] text-slate-400 flex-shrink-0 self-start">{formatTime(meta.lastAt)}</span>}
+        </button>
+        {isAdmin && c.channel && c.id !== "team" && onPinChannel && (
+          <button onClick={() => onPinChannel(c.id, !c.pinned)} title={c.pinned ? "Unpin" : "Pin to top"} className={`px-3 py-3 flex-shrink-0 ${c.pinned ? "text-orange-500" : "text-slate-300"} hover:text-orange-500`}><Pin className="w-4 h-4" /></button>
+        )}
+      </li>
+    );
+  };
 
   if (!activeConv) {
     return (
       <div className="flex flex-col" style={{ height: "calc(100vh - 7rem - 64px)" }}>
         <div className="px-5 py-3 border-b border-slate-200 bg-white flex items-center justify-between">
-          <div><h3 className="font-bold text-slate-900 text-sm">Messages</h3><p className="text-[10px] text-slate-500">{rosterCount} on roster</p></div>
+          <div><h3 className="font-bold text-slate-900 text-sm">Messages</h3><p className="text-[10px] text-slate-500">{getTeam(activeTeamId).shortName} · {rosterCount} on roster</p></div>
           {isAdmin && (
             <div className="flex items-center gap-2">
               <button onClick={() => setScheduledModal(true)} title="Scheduled reminders & polls" className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full flex items-center gap-1" style={{ backgroundColor: COLORS.bg, color: COLORS.primary }}>
@@ -6416,33 +6478,22 @@ const MessagesPage = ({ user, activeTeamId, messages, addMessage, togglePinMessa
           )}
         </div>
         <div className="flex-1 overflow-y-auto" style={{ backgroundColor: COLORS.bg }}>
+          <div className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Channels</div>
           <ul className="divide-y divide-slate-100">
-            {convList.map((c) => {
-              const meta = c.meta || {};
-              const preview = meta.lastText
-                ? `${!c.dm && meta.lastSender ? meta.lastSender.split(" ")[0] + ": " : ""}${meta.lastText}`
-                : "No messages yet";
-              return (
-                <li key={c.id} className="flex items-center bg-white hover:bg-slate-50">
-                  <button onClick={() => { setActiveChannel(c.id); setShared(false); }} className="flex-1 min-w-0 flex items-center gap-3 px-4 py-3 text-left">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold" style={{ backgroundColor: c.dm ? "#94a3b8" : COLORS.primary }}>{c.dm ? (c.name || "?")[0]?.toUpperCase() : <Hash className="w-4 h-4" />}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        {(c.id === "team" || c.pinned) && <Pin className="w-3 h-3 flex-shrink-0" style={{ color: c.id === "team" ? COLORS.accent : "#94a3b8" }} />}
-                        <span className="text-sm font-bold text-slate-900 truncate">{c.name}</span>
-                        {meta.unread > 0 && <span className="text-[10px] font-bold text-white rounded-full px-1.5 min-w-[18px] text-center flex-shrink-0" style={{ backgroundColor: COLORS.accent }}>{meta.unread}</span>}
-                      </div>
-                      <div className="text-xs text-slate-500 truncate mt-0.5">{preview}</div>
-                    </div>
-                    {meta.lastAt && <span className="text-[9px] text-slate-400 flex-shrink-0 self-start">{formatTime(meta.lastAt)}</span>}
-                  </button>
-                  {isAdmin && c.channel && c.id !== "team" && onPinChannel && (
-                    <button onClick={() => onPinChannel(c.id, !c.pinned)} title={c.pinned ? "Unpin" : "Pin to top"} className={`px-3 py-3 flex-shrink-0 ${c.pinned ? "text-orange-500" : "text-slate-300"} hover:text-orange-500`}><Pin className="w-4 h-4" /></button>
-                  )}
-                </li>
-              );
-            })}
+            {channelConvs.map((c) => convRow(c))}
           </ul>
+          {!isOrgAdmin && (
+            <>
+              <div className="px-4 pt-4 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Direct messages</div>
+              {dmConvs.length === 0 ? (
+                <p className="px-4 py-2 text-xs text-slate-400 italic">No direct messages yet.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {dmConvs.map((c) => convRow(c))}
+                </ul>
+              )}
+            </>
+          )}
         </div>
         {channelModal && (
           <ChannelModal chatGroups={chatGroups} groups={groups} roster={invites} nameByEmail={nameByEmail} onCreate={addChatGroup} onDelete={deleteChatGroup} onUpdate={updateChatGroup} onClose={() => setChannelModal(false)} />
@@ -6512,7 +6563,7 @@ const MessagesPage = ({ user, activeTeamId, messages, addMessage, togglePinMessa
       ) : isDM ? (
         <>
           <div ref={feedRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3" style={{ backgroundColor: COLORS.bg }}>
-            {dmMessages.length === 0 && <p className="text-center text-xs text-slate-400 italic py-6">{isAdmin ? "No messages in this thread yet." : "Message your coach privately. Only you and the coaches can see this."}</p>}
+            {dmMessages.length === 0 && <p className="text-center text-xs text-slate-400 italic py-6">{isAdmin ? "No messages in this thread yet." : "Message your coach privately. Only you and your team's coach can see this."}</p>}
             {dmStream.map((item) => {
               if (item.kind === "divider") return <DateDivider key={item.id} label={item.label} />;
               const d = item.dm;
@@ -6597,10 +6648,10 @@ const MessagesPage = ({ user, activeTeamId, messages, addMessage, togglePinMessa
                         </div>
                       )}
 
-                      <button onClick={() => startReply(m)} aria-label="Reply" title="Reply" className="text-slate-300 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity"><Reply className="w-3.5 h-3.5" /></button>
-                      {(m.text || m.kind === "poll") && <button onClick={() => copyMsg(m)} aria-label="Copy message" title="Copy" className="text-slate-300 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity">{copiedId === m.id ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}</button>}
-                      {!own && isAdmin && <button onClick={() => togglePin(m)} className={`${m.pinned ? "text-orange-500" : "text-slate-300"} hover:text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity`}><Pin className="w-3.5 h-3.5" /></button>}
-                      {isAdmin && <button onClick={() => delMsg(m.id)} aria-label="Delete message" className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></button>}
+                      <button onClick={() => startReply(m)} aria-label="Reply" title="Reply" className="text-slate-300 hover:text-slate-600 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><Reply className="w-3.5 h-3.5" /></button>
+                      {(m.text || m.kind === "poll") && <button onClick={() => copyMsg(m)} aria-label="Copy message" title="Copy" className="text-slate-300 hover:text-slate-600 md:opacity-0 md:group-hover:opacity-100 transition-opacity">{copiedId === m.id ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}</button>}
+                      {!own && isAdmin && <button onClick={() => togglePin(m)} className={`${m.pinned ? "text-orange-500" : "text-slate-300"} hover:text-orange-500 md:opacity-0 md:group-hover:opacity-100 transition-opacity`}><Pin className="w-3.5 h-3.5" /></button>}
+                      {isAdmin && <button onClick={() => delMsg(m.id)} aria-label="Delete message" className="text-slate-300 hover:text-red-500 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></button>}
                     </div>
 
                     <div className="flex items-center gap-2 mt-1 px-1">
@@ -7891,6 +7942,10 @@ export default function TeamHubRolesApp() {
     return [user.primaryTeamId || DEFAULT_TEAM_ID].filter(isValidTeamId);
   }, [user]);
   const isCoach = user?.role === "admin" || user?.role === "orgAdmin";
+  // A per-team coach (role 'admin' only — NOT the org admin). DMs are
+  // between a player and their own team's coach, so the org admin never
+  // subscribes to DM threads (decision 2026-11-08).
+  const isTeamCoach = user?.role === "admin";
   const visibleTeams = useMemo(() => TEAMS.filter((t) => myTeamIds.includes(t.id)), [myTeamIds]);
   const canSeeMultipleTeams = visibleTeams.length > 1;
   // The user's preferred team, persisted per device so a returning user lands
@@ -8726,12 +8781,15 @@ export default function TeamHubRolesApp() {
     })();
   }, [isCoach, eventsRaw, chatGroups, messages, groupsList]);
 
-  // Direct messages with the coach. Players read only their own thread; the
-  // coach reads all. (No orderBy in the query to avoid a composite index.)
+  // Direct messages with the team's coach. Players read only their own
+  // thread; a team coach reads all threads on their team. The org admin
+  // does not subscribe at all — DMs are between a player and their own
+  // team's coach only (decision 2026-11-08). (No orderBy in the query to
+  // avoid a composite index.)
   const dms = useCollection(
-    user ? "dms" : null,
+    user && user.role !== "orgAdmin" ? "dms" : null,
     where("teamId", "==", activeTeamId),
-    ...(isCoach ? [] : [where("threadId", "==", user?.uid || "_")]),
+    ...(isTeamCoach ? [] : [where("threadId", "==", user?.uid || "_")]),
   );
   const addDM = (text, threadId) =>
     addDoc(collection(db, "dms"), {
@@ -8741,8 +8799,20 @@ export default function TeamHubRolesApp() {
       senderName: user.name,
       isCoach: user.role === "admin",
       text: (text || "").trim(),
+      readBy: { [user.uid]: serverTimestamp() },
       createdAt: serverTimestamp(),
     });
+  // Mark DM messages read (readBy only — same pattern as channel messages).
+  const markDMsRead = async (ids) => {
+    if (!ids?.length) return;
+    const batch = writeBatch(db);
+    ids.forEach((id) => {
+      batch.update(doc(db, "dms", id), {
+        [`readBy.${user.uid}`]: serverTimestamp(),
+      });
+    });
+    await batch.commit();
+  };
 
   // Quote of the Day — latest coach-posted quote; posting one fans out a push.
   const quotes = useCollection("quotes", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
@@ -8751,10 +8821,12 @@ export default function TeamHubRolesApp() {
     addDoc(collection(db, "quotes"), { teamId: activeTeamId, text, author: author || "", createdByName: user.name, createdAt: serverTimestamp() });
 
   // Total unread chat messages for this user → number badge on the Chat tab.
-  // Mirrors the inbox: channel messages not sent by me and not yet in readBy.
+  // Mirrors the inbox: channel messages not sent by me and not yet in readBy,
+  // plus DM messages not sent by me and not yet in readBy.
   const chatUnread = useMemo(
-    () => messages.filter((m) => m.senderUid !== user?.uid && !m.readBy?.[user?.uid]).length,
-    [messages, user],
+    () => messages.filter((m) => m.senderUid !== user?.uid && !m.readBy?.[user?.uid]).length
+      + dms.filter((d) => d.senderUid !== user?.uid && !d.readBy?.[user?.uid]).length,
+    [messages, dms, user],
   );
 
   const [checkin, setCheckin] = useState({ energy: 0, soreness: 0, tiredness: 0 });
@@ -8861,7 +8933,7 @@ export default function TeamHubRolesApp() {
             />
           )}
           {activeTab === "calendar" && <CalendarPage user={effUser} events={events} practices={practices} teamWorkouts={teamWorkouts} personalEvents={personalEvents} addEvent={addEvent} updateEvent={updateEvent} addPersonalEvent={addPersonalEvent} updatePersonalEvent={updatePersonalEvent} deleteEvent={deleteEvent} deletePersonalEvent={deletePersonalEvent} importEvents={importEvents} groups={groupsList} addGroup={addGroup} updateGroupMembers={updateGroupMembers} deleteGroup={deleteGroup} invites={invites} allUsers={allUsers} chatGroups={chatGroups} />}
-          {activeTab === "messages" && <MessagesPage user={effUser} activeTeamId={activeTeamId} allUsers={allUsers} messages={messages} addMessage={addMessage} togglePinMessage={togglePinMessage} deleteMessage={deleteMessage} markMessagesRead={markMessagesRead} voteOnPoll={voteOnPoll} reactToMessage={reactToMessage} rosterCount={invites.length} chatGroups={chatGroups} addChatGroup={addChatGroup} deleteChatGroup={deleteChatGroup} updateChatGroup={updateChatGroup} onPinChannel={pinChatGroup} groups={groupsList} invites={invites} announcements={announcements} addAnnouncement={addAnnouncement} deleteAnnouncement={deleteAnnouncement} dms={dms} addDM={addDM} scheduled={scheduled} addScheduled={addScheduled} deleteScheduled={deleteScheduled} />}
+          {activeTab === "messages" && <MessagesPage user={effUser} activeTeamId={activeTeamId} isOrgAdmin={user.role === "orgAdmin"} allUsers={allUsers} messages={messages} addMessage={addMessage} togglePinMessage={togglePinMessage} deleteMessage={deleteMessage} markMessagesRead={markMessagesRead} voteOnPoll={voteOnPoll} reactToMessage={reactToMessage} rosterCount={invites.length} chatGroups={chatGroups} addChatGroup={addChatGroup} deleteChatGroup={deleteChatGroup} updateChatGroup={updateChatGroup} onPinChannel={pinChatGroup} groups={groupsList} invites={invites} announcements={announcements} addAnnouncement={addAnnouncement} deleteAnnouncement={deleteAnnouncement} dms={dms} addDM={addDM} markDMsRead={markDMsRead} scheduled={scheduled} addScheduled={addScheduled} deleteScheduled={deleteScheduled} />}
         </main>
         <nav className="flex-shrink-0 w-full bg-white border-t border-slate-200 z-20" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
           <div className="grid px-1 pt-2" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>

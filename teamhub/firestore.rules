@@ -38,6 +38,11 @@ service cloud.firestore {
     function isMemberOf(teamId) { return signedIn() && (isOrgAdmin() || myTeamIds().hasAny([teamId])); }
     // The caller coaches this team (org admin coaches all three).
     function isCoachOf(teamId) { return signedIn() && (isOrgAdmin() || (myRole() == 'admin' && myTeamIds().hasAny([teamId]))); }
+    // The caller is a per-team coach of this team (role 'admin' on it).
+    // Unlike isCoachOf, this EXCLUDES the org admin: DMs are between a
+    // player and their own team's coach only — a player never DMs the org
+    // admin, and the org admin never reads or replies in a DM thread
+    // (decision 2026-11-08).
     // The caller shares at least one team with the given teamIds list.
     function sharesTeam(teamIds) { return signedIn() && (isOrgAdmin() || myTeamIds().hasAny(teamIds)); }
     // Team-scoped write helpers.
@@ -188,15 +193,22 @@ service cloud.firestore {
       );
     }
 
-    // Direct messages with the coach: a player can read/write only their own
-    // thread (threadId == their uid) on their team; the coach can read/write
-    // any thread on their team.
+    // Direct messages with the team's coach: a player can read/write only
+    // their own thread (threadId == their uid) on their team; a coach of
+    // that team can read/write any thread on their team. The org admin is
+    // NOT a DM participant — players DM their own team's coach only, so
+    // these rules use isTeamCoachOf, not isCoachOf (decision 2026-11-08).
+    // Any team member may mark a message read (only the `readBy` map), like
+    // message readBy; only the team's coach deletes.
     match /dms/{id} {
-      allow read:   if isCoachOf(rTeam()) || (signedIn() && resource.data.threadId == request.auth.uid && isMemberOf(rTeam()));
+      allow read:   if isTeamCoachOf(rTeam()) || (signedIn() && resource.data.threadId == request.auth.uid && isMemberOf(rTeam()));
       allow create: if signedIn() && request.resource.data.senderUid == request.auth.uid
                     && isMemberOf(wTeam())
-                    && (isCoachOf(wTeam()) || request.resource.data.threadId == request.auth.uid);
-      allow update, delete: if coachDelete();
+                    && (isTeamCoachOf(wTeam()) || request.resource.data.threadId == request.auth.uid);
+      allow update: if isTeamCoachOf(rTeam())
+        || (signedIn() && resource.data.threadId == request.auth.uid && isMemberOf(rTeam())
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
+      allow delete: if isTeamCoachOf(rTeam());
     }
 
     // App-wide prompts (e.g. "everyone update your profile"): coach sets, all read.

@@ -131,6 +131,15 @@ async function coachUidsForTeam(teamId) {
   return snap.docs.filter((d) => d.data().role === "admin" || d.data().role === "orgAdmin").map((d) => d.id);
 }
 
+// Per-team coaches ONLY (role admin on that team) — the org admin is NOT
+// included. Used for DMs: a DM goes to the player and their own team's
+// coach, never to the org admin (decision 2026-11-08).
+async function teamCoachUidsForTeam(teamId) {
+  if (!teamId) return [];
+  const snap = await db.collection("users").where("teamIds", "array-contains", teamId).get();
+  return snap.docs.filter((d) => d.data().role === "admin").map((d) => d.id);
+}
+
 // Resolve an assignment/visibleTo audience to FCM tokens. Empty audience =
 // everyone; otherwise the union of listed emails + members of listed groups
 // (group memberUids may hold either uids or emails).
@@ -249,13 +258,14 @@ exports.onMessageCreated = onDocumentCreated("messages/{id}", async (event) => {
 });
 
 // Direct messages: notify only the people in the thread — the player who owns
-// it (threadId) plus the coaches of that team — never the whole team.
+// it (threadId) plus the coaches of that team — never the whole team, and
+// never the org admin (DMs are between a player and their own team's coach).
 exports.onDMCreated = onDocumentCreated("dms/{id}", async (event) => {
   const data = event.data?.data();
   if (!data) return;
   const body = trunc(data.text);
   if (!body) return;
-  const admins = await coachUidsForTeam(data.teamId);
+  const admins = await teamCoachUidsForTeam(data.teamId);
   const recipients = [...new Set([data.threadId, ...admins])].filter((uid) => uid && uid !== data.senderUid);
   const bundle = await tokensForUids(recipients);
   await sendToTokens(bundle, {
@@ -497,6 +507,13 @@ async function processScheduledItems(now) {
     try {
       if (d.type === "poll") {
         const audienceKeys = await channelAudienceKeys(d.channel);
+        // The poll lands in its channel's team — a scheduled poll for a
+        // channel of another team must never post into this one.
+        let pollTeamId = d.teamId || null;
+        if (d.channel && d.channel !== "team") {
+          const chDoc = await db.doc(`chatGroups/${d.channel}`).get();
+          if (chDoc.exists && chDoc.data().teamId) pollTeamId = chDoc.data().teamId;
+        }
         await db.collection("messages").add({
           senderUid: d.createdByUid || "",
           sender: d.createdByName || "Coach",
@@ -504,7 +521,7 @@ async function processScheduledItems(now) {
           text: "",
           pinned: false,
           channel: d.channel || "team",
-          teamId: d.teamId || null,
+          teamId: pollTeamId,
           audienceKeys,
           isCoach: true,
           readBy: {},
