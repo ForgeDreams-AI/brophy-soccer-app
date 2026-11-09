@@ -298,11 +298,19 @@ exports.onEventDelegated = onDocumentWritten("events/{id}", async (event) => {
   });
 });
 
-// Pre-event auto reminders/polls: an event may carry a `reminders` array
-// ([{ id, type, offsetMin, channel?, question? }]) plus `startAt` (absolute
-// start instant). On every event write we reconcile the derived `scheduled`
-// docs — delete the event's un-sent ones and recreate any whose fire time
-// (startAt − offset) is still in the future. runScheduled then fires them.
+// Pre-event auto reminders: an event may carry a `reminders` array
+// ([{ id, offsetMin }]) plus `startAt` (absolute start instant). On every
+// event write we reconcile the derived `scheduled` docs — delete the event's
+// un-sent ones and recreate any whose fire time (startAt − offset) is still
+// in the future. runScheduled then fires them.
+//
+// Every team event ALSO gets two automatic pings, added here server-side
+// (never stored on the event doc): 1 hour before kickoff, and 7:00 AM
+// America/Phoenix on the day of the event. A coach reminder that already
+// fires at (nearly) the same instant is not duplicated. (No RSVP: the old
+// event-attached "Who's making it?" poll was dropped for Brophy, so event
+// reminders are push-only now. Standalone polls — scheduled from chat or
+// posted directly — still use the `scheduled` poll type and are untouched.)
 exports.onEventReminderSync = onDocumentWritten("events/{id}", async (event) => {
   const id = event.params.id;
   const after = event.data?.after?.data();
@@ -312,34 +320,54 @@ exports.onEventReminderSync = onDocumentWritten("events/{id}", async (event) => 
 
   const reminders = after && Array.isArray(after.reminders) ? after.reminders : [];
   const startMs = after?.startAt?.toMillis ? after.startAt.toMillis() : 0;
-  if (after && reminders.length && startMs) {
+  if (after && startMs) {
+    const when = [after.date, after.start && `at ${after.start}`, after.location && `· ${after.location}`].filter(Boolean).join(" ");
+    const base = {
+      eventId: id, teamId: after.teamId || null, auto: true, sent: false,
+      createdByUid: after.runByUid || "", createdByName: after.runByName || "Coach", createdByInitials: "",
+      createdAt: Timestamp.now(),
+      visibleTo: after.visibleTo || { groupIds: [], uids: [] },
+    };
+    // Fire instants (minute-rounded) the coach's own reminders already
+    // cover, so the automatic pings don't double-push.
+    const covered = new Set();
     for (const r of reminders) {
       const offset = Math.max(0, Math.round(Number(r.offsetMin) || 0));
       const sendMs = startMs - offset * 60000;
       if (sendMs <= Date.now()) continue; // fire time already passed
+      covered.add(Math.round(sendMs / 60000));
       const ref = db.collection("scheduled").doc();
-      const common = {
-        eventId: id, teamId: after.teamId || null, reminderId: r.id || ref.id, auto: true, sent: false,
-        sendAt: Timestamp.fromMillis(sendMs),
-        createdByUid: after.runByUid || "", createdByName: after.runByName || "Coach", createdByInitials: "",
-        createdAt: Timestamp.now(),
-      };
-      if (r.type === "poll") {
-        batch.set(ref, {
-          ...common, type: "poll",
-          question: (r.question || "").trim() || `Who's making ${after.title || "it"}?`,
-          options: Array.isArray(r.options) && r.options.length ? r.options : ["In", "Out", "Maybe"],
-          channel: r.channel || "team", channelName: r.channelName || "Team",
-        });
-      } else {
-        const when = [after.date, after.start && `at ${after.start}`, after.location && `· ${after.location}`].filter(Boolean).join(" ");
-        batch.set(ref, {
-          ...common, type: "reminder",
-          title: `⏰ ${after.title || after.type || "Event"} in ${humanLead(offset)}`,
-          body: when || "Tap for details.",
-          visibleTo: after.visibleTo || { groupIds: [], uids: [] },
-        });
-      }
+      batch.set(ref, {
+        ...base, reminderId: r.id || ref.id, sendAt: Timestamp.fromMillis(sendMs),
+        type: "reminder",
+        title: `⏰ ${after.title || after.type || "Event"} in ${humanLead(offset)}`,
+        body: when || "Tap for details.",
+      });
+    }
+    // Automatic: 1 hour before kickoff.
+    const oneHourMs = startMs - 60 * 60000;
+    if (oneHourMs > Date.now() && !covered.has(Math.round(oneHourMs / 60000))) {
+      const ref = db.collection("scheduled").doc();
+      batch.set(ref, {
+        ...base, reminderId: "auto-1h", sendAt: Timestamp.fromMillis(oneHourMs),
+        type: "reminder",
+        title: `⏰ ${after.title || after.type || "Event"} in 1 hour`,
+        body: when || "Tap for details.",
+      });
+    }
+    // Automatic: 7:00 AM America/Phoenix on the day of the event. Skipped
+    // when 7 AM is already past, or when it falls after kickoff (e.g. a 6 AM
+    // session — the morning ping would arrive after the start).
+    const parts = partsInTz(new Date(startMs), "America/Phoenix");
+    const sevenAmMs = zonedTime(+parts.year, +parts.month - 1, +parts.day, 7, 0, "America/Phoenix");
+    if (sevenAmMs > Date.now() && sevenAmMs < startMs && !covered.has(Math.round(sevenAmMs / 60000))) {
+      const ref = db.collection("scheduled").doc();
+      batch.set(ref, {
+        ...base, reminderId: "auto-7am", sendAt: Timestamp.fromMillis(sevenAmMs),
+        type: "reminder",
+        title: `⏰ ${after.title || after.type || "Event"} today`,
+        body: when || "Tap for details.",
+      });
     }
   }
   await batch.commit();

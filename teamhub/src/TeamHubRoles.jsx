@@ -2037,11 +2037,14 @@ const leadText = (min) => {
 };
 const rrid = () => Math.random().toString(36).slice(2, 8);
 
-// Coach-only: attach auto reminders / polls to an event, each firing a custom
+// Coach-only: attach EXTRA auto reminders to an event, each firing a custom
 // amount of time before it starts. Stored on the event; a Cloud Function turns
-// them into scheduled sends.
-const EventRemindersEditor = ({ reminders = [], setReminders, channels = [] }) => {
-  const add = () => setReminders([...reminders, { id: rrid(), type: "reminder", offsetMin: 60, channel: "team", channelName: "Team", question: "" }]);
+// them into scheduled sends. Every team event ALSO gets two automatic pings
+// (1 hour before kickoff + 7:00 AM on the day, America/Phoenix), added
+// server-side — those are not listed here. (No RSVP: the old event-attached
+// "Who's making it?" poll was dropped for Brophy.)
+const EventRemindersEditor = ({ reminders = [], setReminders }) => {
+  const add = () => setReminders([...reminders, { id: rrid(), type: "reminder", offsetMin: 60 }]);
   const upd = (i, patch) => setReminders(reminders.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const del = (i) => setReminders(reminders.filter((_, j) => j !== i));
   const unitOf = (m) => (m % 1440 === 0 ? "day" : m % 60 === 0 ? "hour" : "min");
@@ -2049,7 +2052,7 @@ const EventRemindersEditor = ({ reminders = [], setReminders, channels = [] }) =
   return (
     <div className="bg-slate-50 rounded-lg p-2 space-y-2">
       <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 px-1">
-        Auto reminders <span className="font-medium normal-case tracking-normal text-slate-400">— ping the team before this event</span>
+        Extra reminders <span className="font-medium normal-case tracking-normal text-slate-400">— the team is already pinged 1 hour before and at 7 AM on the day; add more here if you want</span>
       </div>
       {reminders.map((r, i) => {
         const isPreset = LEAD_PRESETS.includes(Number(r.offsetMin));
@@ -2058,10 +2061,7 @@ const EventRemindersEditor = ({ reminders = [], setReminders, channels = [] }) =
         return (
           <div key={r.id} className="bg-white rounded-lg border border-slate-200 p-2 space-y-1.5">
             <div className="flex items-center gap-1.5">
-              <div className="flex rounded-full bg-slate-100 p-0.5">
-                <button onClick={() => upd(i, { type: "reminder" })} className={`text-[10px] font-bold px-2 py-1 rounded-full ${r.type !== "poll" ? "text-white" : "text-slate-500"}`} style={r.type !== "poll" ? { backgroundColor: COLORS.primary } : {}}>🔔 Reminder</button>
-                <button onClick={() => upd(i, { type: "poll" })} className={`text-[10px] font-bold px-2 py-1 rounded-full ${r.type === "poll" ? "text-white" : "text-slate-500"}`} style={r.type === "poll" ? { backgroundColor: COLORS.primary } : {}}>📊 Poll</button>
-              </div>
+              <span className="text-[10px] font-bold px-2 py-1 rounded-full text-white" style={{ backgroundColor: COLORS.primary }}>🔔 Reminder</span>
               <div className="flex-1" />
               <button onClick={() => del(i)} aria-label="Remove reminder" className="text-slate-300 hover:text-red-500"><X className="w-4 h-4" /></button>
             </div>
@@ -2082,14 +2082,6 @@ const EventRemindersEditor = ({ reminders = [], setReminders, channels = [] }) =
                 <span className="text-[11px] text-slate-400">before</span>
               </div>
             )}
-            {r.type === "poll" && (
-              <>
-                <select value={r.channel} onChange={(e) => { const c = channels.find((x) => x.id === e.target.value); upd(i, { channel: e.target.value, channelName: c?.name || "Team" }); }} className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white">
-                  {channels.map((c) => <option key={c.id} value={c.id}>Post to: {c.name}</option>)}
-                </select>
-                <input value={r.question || ""} onChange={(e) => upd(i, { question: e.target.value })} placeholder="Question (optional — defaults to “Who's making it?”)" className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs" />
-              </>
-            )}
           </div>
         );
       })}
@@ -2098,7 +2090,7 @@ const EventRemindersEditor = ({ reminders = [], setReminders, channels = [] }) =
   );
 };
 
-const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent, addPersonalEvent, updatePersonalEvent, deleteEvent, deletePersonalEvent, importEvents, groups = [], addGroup, updateGroupMembers, deleteGroup, invites = [], allUsers = [], practices = [], teamWorkouts = [], chatGroups = [] }) => {
+const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent, addPersonalEvent, updatePersonalEvent, deleteEvent, deletePersonalEvent, importEvents, groups = [], addGroup, updateGroupMembers, deleteGroup, invites = [], allUsers = [], practices = [], teamWorkouts = [] }) => {
   const [detailEvent, setDetailEvent] = useState(null);
   const [adding, setAdding] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null); // { id, isPrivate } | null
@@ -2113,7 +2105,6 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
   const [cursor, setCursor] = useState(new Date());
   const todayStr = fmtLocalDate(new Date());
   const blank = { title: "", date: todayStr, start: "15:00", end: "17:00", location: "", type: "Practice", runByUid: "", practiceId: "", workoutId: "", coachNotes: "", reminders: [] };
-  const reminderChannels = [{ id: "team", name: "Team" }, ...chatGroups.map((c) => ({ id: c.id, name: c.name }))];
   const [form, setForm] = useState(blank);
   const isAdmin = user.role === "admin";
   // Coaches a session can be delegated to, and a uid→name lookup for badges.
@@ -2169,13 +2160,14 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
         data.workoutId = form.workoutId || null;
         data.workoutName = form.workoutId ? (teamWorkouts.find((w) => w.id === form.workoutId)?.name || "") : "";
         data.coachNotes = (form.coachNotes || "").trim() || null;
-        // Auto reminders/polls: store a cleaned list + the absolute start instant
+        // Auto reminders: store a cleaned list + the absolute start instant
         // (local → Timestamp) so a Cloud Function can fire them before kickoff.
+        // The two automatic pings (1 hour before + 7 AM on the day) are added
+        // server-side — the list below is only the coach's extra reminders.
         data.reminders = (form.reminders || []).map((r) => ({
           id: r.id || rrid(),
-          type: r.type === "poll" ? "poll" : "reminder",
+          type: "reminder",
           offsetMin: Math.max(1, Math.round(Number(r.offsetMin) || 0)),
-          ...(r.type === "poll" ? { channel: r.channel || "team", channelName: r.channelName || "Team", question: (r.question || "").trim(), options: ["In", "Out", "Maybe"] } : {}),
         }));
         data.startAt = form.date && form.start ? new Date(`${form.date}T${form.start}:00`) : null;
         if (isAdmin && visibility.mode === "custom" && (visibility.groupIds.length || visibility.uids.length)) {
@@ -2513,7 +2505,7 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
           )}
 
           {isAdmin && addMode === "team" && (
-            <EventRemindersEditor reminders={form.reminders} setReminders={(r) => setForm({ ...form, reminders: r })} channels={reminderChannels} />
+            <EventRemindersEditor reminders={form.reminders} setReminders={(r) => setForm({ ...form, reminders: r })} />
           )}
 
           <div className="flex gap-2">
