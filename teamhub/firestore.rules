@@ -104,18 +104,19 @@ service cloud.firestore {
     match /users/{uid} {
       allow read:   if isOwner(uid) || isOrgAdmin() || sharesTeam(resource.data.get('teamIds', []));
       allow create: if isOwner(uid);
-      // Team assignment (teamIds / primaryTeamId) is org-admin-only: a player
-      // may never change their own teams, and a team coach may never move a
-      // player between teams (JVB -> JVA -> Varsity) or add a second team —
-      // only the org admin (who sees all three teams) does that. A coach may
-      // still edit the other profile fields of a player they share a team
-      // with (photo, name, notification prefs); a player edits only their own
-      // profile fields. There is deliberately NO self-backfill clause for
-      // teamIds: a user doc is created with its teams in useAuth, and the
-      // hook degrades to in-memory values if a write is denied.
+      // Team assignment (teamIds / primaryTeamId) AND role are org-admin-only:
+      // a player may never change their own teams, and a team coach may never
+      // move a player between teams (JVB -> JVA -> Varsity), add a second
+      // team, or promote/demote anyone — only the org admin (who sees all
+      // three teams) does that. A coach may still edit the other profile
+      // fields of a player they share a team with (photo, name, notification
+      // prefs); a player edits only their own profile fields. There is
+      // deliberately NO self-backfill clause for teamIds: a user doc is
+      // created with its teams in useAuth, and the hook degrades to in-memory
+      // values if a write is denied.
       allow update: if isOrgAdmin()
         || (isAdmin() && sharesTeam(resource.data.get('teamIds', []))
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['teamIds', 'primaryTeamId']))
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['teamIds', 'primaryTeamId', 'role']))
         || (isOwner(uid)
             && request.resource.data.diff(resource.data).affectedKeys()
                  .hasOnly(['fcmTokens', 'notificationsEnabledAt', 'name', 'initials', 'photoURL', 'photoPath']));
@@ -328,7 +329,14 @@ service cloud.firestore {
         || isOrgAdmin()
         || isMemberOf(resource.data.get('teamId', '')));
       allow create: if coachCreate();
-      allow update, delete: if coachUpdate() || coachDelete();
+      // Role changes on a roster entry are org-admin-only (decision
+      // 2026-11-08) — the `role` field is what a future first-sign-in
+      // inherits, so a team coach changing it would be a back-door
+      // promotion. A coach may still update other fields (none in use
+      // today) and delete entries; only the org admin touches `role`.
+      allow update: if isOrgAdmin()
+        || (coachUpdate() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+      allow delete: if coachDelete();
     }
 
     // Team invite LINKS (decision 2026-11-08): a coach generates a link for
@@ -337,8 +345,8 @@ service cloud.firestore {
     //     createdAt, expiresAt (timestamp or null = never expires),
     //     maxUses (number or null = unlimited), uses (number) }
     // The doc id IS the code (a random token) — knowing the code is the
-    // capability to redeem it. Full generation + redemption flow lands in a
-    // follow-up fix; the rules below already support it:
+    // capability to redeem it. Generation UI lives in HomePage (roster),
+    // redemption in useAuth.js at first sign-in; the rules below enforce it:
     //  - create: a coach of the team (or org admin) mints a link for their team.
     //  - get: anyone signed in who knows the exact code (redemption lookup).
     //  - list: only coaches of that team / org admin (so players can't

@@ -50,9 +50,9 @@ export const teamDocFields = (team) => ({
 // Firestore `inviteLinks/{code}` doc shape (team invite links, decision
 // 2026-11-08 — a coach generates a link for ONE team; a player signing up
 // via that link lands on that team). The doc id IS the code (random token).
-// Generation + redemption logic lands in a follow-up fix (TODOs in
-// TeamHubRoles.jsx near addInvite and in useAuth.js at the invite gate);
-// the firestore.rules block for inviteLinks already supports the flow.
+// Generation lives in TeamHubRoles.jsx (HomePage roster — addInviteLink)
+// and redemption in useAuth.js at the invite gate; the firestore.rules
+// block for inviteLinks enforces the flow.
 // {
 //   teamId: "jva",             // the team the link invites to
 //   createdByUid: "uid",       // coach who generated it

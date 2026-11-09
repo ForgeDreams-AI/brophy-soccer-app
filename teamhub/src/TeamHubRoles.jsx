@@ -936,8 +936,17 @@ const TrainHub = ({ onPick }) => {
 };
 
 /* ─── HOME ─── */
-const HomePage = ({ user, practices = [], announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement, events, checkin, setCheckin, wellness, submitWellness, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, mealLogActivityToday = [], groups = [], addGroup, updateGroupMembers, deleteGroup, documents = [], addDocument, deleteDocument, signDocument, allUsers = [], requestProfileUpdate, pushNotifications = [], addPushNotification, deletePushNotification, sendPushNotificationNow, activeTeamId, todayQuote, addQuote }) => {
+const HomePage = ({ user, isOrgAdmin = false, practices = [], announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement, events, checkin, setCheckin, wellness, submitWellness, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks = [], addInviteLink, removeInviteLink, mealLogActivityToday = [], groups = [], addGroup, updateGroupMembers, deleteGroup, documents = [], addDocument, deleteDocument, signDocument, allUsers = [], requestProfileUpdate, pushNotifications = [], addPushNotification, deletePushNotification, sendPushNotificationNow, activeTeamId, todayQuote, addQuote }) => {
   const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email, u.name])), [allUsers]);
+  // Teams this coach can invite/link to: the org admin sees all three, a
+  // team coach sees only their own team(s). (user here is the effective
+  // user — orgAdmin is mapped to role "admin" — so the real orgAdmin flag
+  // arrives as its own prop.)
+  const myTeams = useMemo(() => {
+    if (isOrgAdmin) return [...TEAMS];
+    const mine = TEAMS.filter((t) => (user.teamIds || []).includes(t.id));
+    return mine.length ? mine : [getTeam(activeTeamId)];
+  }, [isOrgAdmin, user.teamIds, activeTeamId]);
   const [adding, setAdding] = useState(false);
   const [editingAnnouncementId, setEditingAnnouncementId] = useState(null);
   const [form, setForm] = useState({ title: "", body: "" });
@@ -948,7 +957,15 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
   const [annOpen, setAnnOpen] = useState(false);
   const [pushModalOpen, setPushModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteTeamId, setInviteTeamId] = useState(activeTeamId);
   const [inviteMsg, setInviteMsg] = useState("");
+  // Invite-link generator state (team-specific links, see addInviteLink).
+  const [linkTeamId, setLinkTeamId] = useState(activeTeamId);
+  const [linkExpiry, setLinkExpiry] = useState("");
+  const [linkMaxUses, setLinkMaxUses] = useState("");
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkMsg, setLinkMsg] = useState("");
+  const [lastLink, setLastLink] = useState(null); // { code, url }
   const [pushPerm, setPushPerm] = useState(currentPermission());
   const [pushBusy, setPushBusy] = useState(false);
   const [pushErr, setPushErr] = useState("");
@@ -983,8 +1000,8 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
   const submitInvite = async () => {
     setInviteMsg("");
     try {
-      await addInvite(inviteEmail);
-      setInviteMsg(`Added ${inviteEmail.trim().toLowerCase()}.`);
+      await addInvite(inviteEmail, inviteTeamId);
+      setInviteMsg(`Added ${inviteEmail.trim().toLowerCase()} to ${getTeam(inviteTeamId).shortName}.`);
       setInviteEmail("");
     } catch (e) {
       setInviteMsg(e.message || "Couldn't add — check rules.");
@@ -999,14 +1016,69 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
       return;
     }
     try {
-      await addInvitesBatch(emails);
-      setInviteMsg(`Added ${emails.length} email${emails.length === 1 ? "" : "s"}.`);
+      await addInvitesBatch(emails, inviteTeamId);
+      setInviteMsg(`Added ${emails.length} email${emails.length === 1 ? "" : "s"} to ${getTeam(inviteTeamId).shortName}.`);
       setBulkText("");
       setBulkOpen(false);
     } catch (e) {
       setInviteMsg("Couldn't import — " + (e.message || "check rules."));
     }
   };
+
+  // Generate a team-specific invite link. Expiry is a calendar date (the
+  // link stays live through the end of that day); max uses is optional.
+  const submitInviteLink = async () => {
+    setLinkMsg("");
+    setLinkBusy(true);
+    try {
+      const maxUses = linkMaxUses.trim() ? Math.max(1, parseInt(linkMaxUses, 10) || 0) : null;
+      const expiresAt = linkExpiry ? new Date(`${linkExpiry}T23:59:59`) : null;
+      const code = await addInviteLink(linkTeamId, { expiresAt, maxUses });
+      const url = `${window.location.origin}/?invite=${code}`;
+      setLastLink({ code, url });
+      setLinkExpiry("");
+      setLinkMaxUses("");
+      setLinkMsg(`Link created for ${getTeam(linkTeamId).shortName}.`);
+    } catch (e) {
+      setLinkMsg(e.message || "Couldn't create the link — check rules.");
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
+  const copyLink = async (url) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkMsg("Copied — share it with the player.");
+    } catch {
+      setLinkMsg("Copy didn't work — long-press the link to copy it manually.");
+    }
+  };
+
+  // Invite-link status + expiry label, precomputed per link. Done here (not
+  // in the JSX) because the Timestamp's .toDate() is an impure call the
+  // compiler flags during render — expiry comes from the .seconds field.
+  const sortedLinks = useMemo(() => {
+    const nowMs = new Date().getTime();
+    return [...(inviteLinks || [])]
+      .map((l) => {
+        const uses = l.uses || 0;
+        let expMs = l.expiresAt == null
+          ? null
+          : typeof l.expiresAt.seconds === "number"
+            ? l.expiresAt.seconds * 1000
+            : new Date(l.expiresAt).getTime();
+        if (expMs != null && Number.isNaN(expMs)) expMs = null;
+        const status = (l.maxUses != null && uses >= l.maxUses)
+          ? "Used up"
+          : (expMs != null && expMs <= nowMs) ? "Expired" : "Active";
+        const expiryLabel = expMs == null
+          ? "Never"
+          : new Date(expMs).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        return { ...l, _status: status, _expiryLabel: expiryLabel };
+      })
+      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  }, [inviteLinks]);
 
   const now = new Date();
   const nextEvent = useMemo(() => {
@@ -1244,6 +1316,18 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
             </button>
           )}
           <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 space-y-2">
+            {myTeams.length > 1 && (
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">Invite to team</span>
+                <select
+                  value={inviteTeamId}
+                  onChange={(e) => setInviteTeamId(e.target.value)}
+                  className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+                >
+                  {myTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </label>
+            )}
             {!bulkOpen ? (
               <>
                 <input
@@ -1288,6 +1372,86 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
             </p>
           </div>
 
+          {/* Invite links — share a link instead of adding emails. Anyone who
+              signs up with it joins THAT team (useAuth redeems ?invite=CODE
+              at first sign-in). Optional expiry date + max uses. */}
+          <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 space-y-2">
+            <div className="flex items-center gap-2 px-1">
+              <LinkIcon className="w-3.5 h-3.5 text-slate-400" />
+              <h4 className="text-xs font-bold text-slate-900">Invite links</h4>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-relaxed px-1">
+              Share a link instead of adding emails — anyone who signs up with it joins that team.
+            </p>
+            {myTeams.length > 1 && (
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">Link for team</span>
+                <select
+                  value={linkTeamId}
+                  onChange={(e) => setLinkTeamId(e.target.value)}
+                  className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+                >
+                  {myTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </label>
+            )}
+            <div className="flex gap-2">
+              <label className="flex-1 min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">Expires (optional)</span>
+                <input
+                  type="date"
+                  value={linkExpiry}
+                  onChange={(e) => setLinkExpiry(e.target.value)}
+                  className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+                />
+              </label>
+              <label className="w-24 flex-shrink-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">Max uses</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={linkMaxUses}
+                  onChange={(e) => setLinkMaxUses(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder="∞"
+                  className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+                />
+              </label>
+            </div>
+            <button onClick={submitInviteLink} disabled={linkBusy} className="w-full py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white flex items-center justify-center gap-1.5 disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>
+              <LinkIcon className="w-3.5 h-3.5" /> {linkBusy ? "Creating…" : "Create link"}
+            </button>
+            {lastLink && (
+              <div className="flex gap-2 items-center">
+                <input readOnly value={lastLink.url} onFocus={(e) => e.target.select()} className="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-[11px] font-mono text-slate-700 bg-slate-50 focus:outline-none" />
+                <button onClick={() => copyLink(lastLink.url)} className="py-2 px-3 rounded-full text-[11px] font-bold uppercase tracking-wider text-white flex items-center gap-1 flex-shrink-0" style={{ backgroundColor: COLORS.primary }}>
+                  <Copy className="w-3.5 h-3.5" /> Copy
+                </button>
+              </div>
+            )}
+            {linkMsg && (
+              <p className="text-[10px] font-semibold px-1" style={{ color: linkMsg.startsWith("Link created") || linkMsg.startsWith("Copied") ? COLORS.success : "#dc2626" }}>{linkMsg}</p>
+            )}
+            {sortedLinks.length > 0 && (
+              <ul className="divide-y divide-slate-100">
+                {sortedLinks.map((l) => {
+                  const status = l._status;
+                  return (
+                    <li key={l.id} className="flex items-center gap-2 py-2">
+                      <span className="flex-1 min-w-0 truncate">
+                        <span className="text-xs font-semibold text-slate-800">{getTeam(l.teamId).shortName}</span>
+                        <span className="text-[10px] text-slate-400 ml-1.5">{l.uses || 0}{l.maxUses != null ? `/${l.maxUses}` : ""} uses · expires {l._expiryLabel}</span>
+                      </span>
+                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={status === "Active" ? { backgroundColor: COLORS.success + "1A", color: COLORS.success } : { backgroundColor: "#fee2e2", color: "#dc2626" }}>{status}</span>
+                      <button onClick={() => removeInviteLink(l.id).catch(() => {})} title="Revoke link" aria-label="Revoke link" className="text-slate-300 hover:text-red-500 flex-shrink-0">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
           {(!invites || invites.length === 0) ? (
             <p className="text-sm text-slate-400 italic text-center py-3">No players on the roster yet.</p>
           ) : (
@@ -1311,17 +1475,32 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
                         ? <><span className="text-xs font-semibold text-slate-800">{nameByEmail[inv.email]}</span><span className="text-[10px] text-slate-400 ml-1.5">{inv.email}</span></>
                         : <span className="text-xs font-mono text-slate-700">{inv.email}</span>}
                     </span>
-                    <button
-                      onClick={toggleRole}
-                      disabled={isSelf}
-                      title={isSelf ? "You can't change your own role here." : isCoach ? "Make player" : "Make coach"}
-                      className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
-                      style={isCoach
-                        ? { backgroundColor: COLORS.primary, color: "white" }
-                        : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
-                    >
-                      {isCoach ? "Coach" : "Player"}
-                    </button>
+                    {/* Role is org-admin-only (decision 2026-11-08): a team
+                        coach sees the badge but can't promote/demote anyone.
+                        setInviteRole + the rules enforce it server-side too. */}
+                    {isOrgAdmin ? (
+                      <button
+                        onClick={toggleRole}
+                        disabled={isSelf}
+                        title={isSelf ? "You can't change your own role here." : isCoach ? "Make player" : "Make coach"}
+                        className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                        style={isCoach
+                          ? { backgroundColor: COLORS.primary, color: "white" }
+                          : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
+                      >
+                        {isCoach ? "Coach" : "Player"}
+                      </button>
+                    ) : (
+                      <span
+                        title={isCoach ? "Coach — only the program admin can change roles." : "Player — only the program admin can change roles."}
+                        className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0"
+                        style={isCoach
+                          ? { backgroundColor: COLORS.primary, color: "white" }
+                          : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
+                      >
+                        {isCoach ? "Coach" : "Player"}
+                      </span>
+                    )}
                     <button onClick={() => removeInvite(inv.id)} disabled={isSelf} title={isSelf ? "You can't remove yourself." : `Remove ${inv.email}`} aria-label={`Remove ${inv.email}`} className="text-slate-300 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -8253,45 +8432,87 @@ export default function TeamHubRolesApp() {
 
 
 
-  // Roster (invite gate) — admin manages, useAuth reads on first signup
-  // TODO (invite links, follow-up fix): team-specific invite LINKS live in
-  // the `inviteLinks` collection (shape documented in src/data/teams.js, rules
-  // in firestore.rules). A coach generates a link for ONE team and shares it;
-  // the link-generation UI + redemption in useAuth land here — this
-  // email-list invite flow stays until the link flow ships.
+  // Roster (invite gate) — admin manages, useAuth reads on first signup.
+  // Two ways in, both team-specific:
+  //  - Email invites (below): the coach adds an email to invitedEmails for
+  //    one team; useAuth reads it at first sign-in.
+  //  - Invite LINKS (decision 2026-11-08): a coach generates a link for ONE
+  //    team and shares it; a player signing up via that link lands on that
+  //    team (useAuth redeems ?invite=CODE at first sign-in). The doc id IS
+  //    the code (a random token = the capability); shape documented in
+  //    src/data/teams.js, rules in firestore.rules.
   const invites = useCollection("invitedEmails", where("teamId", "==", activeTeamId), orderBy("email"));
-  const addInvite = (email) => {
+  const addInvite = (email, teamId) => {
     const e = email.trim().toLowerCase();
     if (!e.includes("@")) return Promise.reject(new Error("Invalid email."));
     // The invite carries the team so a new player lands on the right team
-    // (useAuth reads it at first sign-in). Defaults to the team the coach is
-    // currently viewing; the invite UI gets a team picker in a later fix.
+    // (useAuth reads it at first sign-in). The coach picks the team in the
+    // roster UI; default to the team currently being viewed.
+    const tid = isValidTeamId(teamId) ? teamId : activeTeamId;
     return setDoc(doc(db, "invitedEmails", e), {
       email: e,
       role: "player",
-      teamId: activeTeamId,
+      teamId: tid,
       addedBy: user.name,
       addedAt: serverTimestamp(),
     });
   };
   const removeInvite = (email) => deleteDoc(doc(db, "invitedEmails", email));
-  const addInvitesBatch = async (emails) => {
+  const addInvitesBatch = async (emails, teamId) => {
+    const tid = isValidTeamId(teamId) ? teamId : activeTeamId;
     const batch = writeBatch(db);
     emails.forEach((e) => {
       batch.set(doc(db, "invitedEmails", e), {
         email: e,
         role: "player",
-        teamId: activeTeamId,
+        teamId: tid,
         addedBy: user.name,
         addedAt: serverTimestamp(),
       });
     });
     await batch.commit();
   };
+  // Random invite-link code (16 chars, no look-alikes: no 0/O/1/l).
+  const makeInviteCode = () => {
+    const chars = "abcdefghjkmnpqrstuvwxyz23456789";
+    const rand = new Uint32Array(16);
+    if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(rand);
+    else for (let i = 0; i < rand.length; i++) rand[i] = Math.floor(Math.random() * 4294967296);
+    return Array.from(rand, (n) => chars[n % chars.length]).join("");
+  };
+  // Mint a team-specific invite link. expiresAt is a Date (or null = never);
+  // maxUses is a number (or null = unlimited).
+  const addInviteLink = async (teamId, { expiresAt = null, maxUses = null } = {}) => {
+    if (!isValidTeamId(teamId)) throw new Error("Pick a team for the link.");
+    const code = makeInviteCode();
+    await setDoc(doc(db, "inviteLinks", code), {
+      teamId,
+      createdByUid: user.uid,
+      createdByName: user.name,
+      code,
+      createdAt: serverTimestamp(),
+      expiresAt: expiresAt || null,
+      maxUses: maxUses || null,
+      uses: 0,
+    });
+    return code;
+  };
+  const removeInviteLink = (code) => deleteDoc(doc(db, "inviteLinks", code));
+  // Invite links for the team being viewed. Single-field query (no composite
+  // index needed); sorted client-side in the roster UI. Players can't list
+  // them (rules) — the hook swallows that permission error.
+  const inviteLinks = useCollection("inviteLinks", where("teamId", "==", activeTeamId));
   // Toggle a roster entry between player and admin. Updates the invite doc
   // (controls role for future first-sign-ins) AND any existing users doc with
   // that email (changes role for already-signed-up players immediately).
+  // ORG-ADMIN-ONLY (decision 2026-11-08): a team coach can invite and manage
+  // their roster, but only the program admin promotes/demotes anyone. The
+  // rules enforce this server-side too (users + invitedEmails); this guard
+  // gives a clear error instead of a silent rules denial.
   const setInviteRole = async (email, nextRole) => {
+    if (user.role !== "orgAdmin") {
+      throw new Error("Only the program admin can change roles.");
+    }
     if (email === user.email && nextRole !== "admin") {
       throw new Error("You can't demote yourself.");
     }
@@ -8648,7 +8869,7 @@ export default function TeamHubRolesApp() {
           </button>
         )}
         <main className="flex-1 min-h-0 overflow-y-auto pb-4">
-          {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} checkin={checkin} setCheckin={setCheckin} wellness={wellness} submitWellness={submitWellness} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
+          {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} isOrgAdmin={user.role === "orgAdmin"} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} checkin={checkin} setCheckin={setCheckin} wellness={wellness} submitWellness={submitWellness} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} inviteLinks={inviteLinks} addInviteLink={addInviteLink} removeInviteLink={removeInviteLink} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
           {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} practices={practices} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} nutritionTarget={myNutritionTarget} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} />}
           {activeTab === "train" && (
             trainView ? (
