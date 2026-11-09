@@ -9,12 +9,12 @@ import { getStorage } from "firebase/storage";
 import { getMessaging } from "firebase/messaging";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCInEIJ0wl589Zy8kiJeuH1l9y3uR2ItOY",
-  authDomain: "phoenix-mens-soccer.firebaseapp.com",
-  projectId: "phoenix-mens-soccer",
-  storageBucket: "phoenix-mens-soccer.firebasestorage.app",
-  messagingSenderId: "127145444694",
-  appId: "1:127145444694:web:6439ca19555d9478eb82f7",
+  apiKey: "AIzaSyCsKiTGtjJmh9tCHCPQ82oUFLXnUcpUy6Q",
+  authDomain: "brophy-soccer-app.firebaseapp.com",
+  projectId: "brophy-soccer-app",
+  storageBucket: "brophy-soccer-app.firebasestorage.app",
+  messagingSenderId: "134702834848",
+  appId: "1:134702834848:web:dc2c53a34cc542633995c5",
 };
 
 const app = initializeApp(firebaseConfig);
