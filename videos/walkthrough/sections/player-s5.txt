@@ -1,0 +1,1 @@
+Chat keeps everything inside your own team. There is the Team channel for the whole squad, a direct message with your own team's coach, group chats, and polls. You only ever see your own team, and nobody from another team can see your messages.

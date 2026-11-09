@@ -1,0 +1,15 @@
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/stills/title-player.png'
+duration 2.000
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/stills/player-today-1.png'
+duration 6.664
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/stills/player-today-1.png'
+duration 34.560
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/stills/player-train-1.png'
+duration 27.792
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/stills/player-schedule-1.png'
+duration 16.488
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/stills/player-chat-1.png'
+duration 16.320
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/stills/player-today-1.png'
+duration 16.968
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/stills/player-today-1.png'

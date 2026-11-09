@@ -1,0 +1,1 @@
+That is the whole app. The bottom tabs are always there: Today, Train, Schedule, and Chat. And if you open it on a laptop, those same options live in the sidebar on the left. See you at practice.
