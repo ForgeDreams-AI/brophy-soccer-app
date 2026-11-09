@@ -69,7 +69,7 @@ import { TEAMS, TEAM_IDS, DEFAULT_TEAM_ID, isValidTeamId, teamDocFields, getTeam
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { BUILD_ID } from "./lib/appVersion";
 import { UpdateBanner } from "./components/UpdateUI";
-import TacticsBoard, { BoardSvg } from "./components/TacticsBoard";
+import TacticsBoard, { BoardSvg, BoardPlayer } from "./components/TacticsBoard";
 import DrillPrintSheet from "./components/DrillPrintSheet";
 import { normalizeDrillDoc } from "./lib/drillDoc";
 import { isLockedOutRole } from "./lib/teamRoles";
@@ -2659,9 +2659,11 @@ const ArrowLegendChips = () => (
 // block → How to run it → Look for. Empty sections are hidden.
 export const DrillModal = ({ item, onClose }) => {
   const [printOpen, setPrintOpen] = useState(false);
+  const [playOpen, setPlayOpen] = useState(false);
   const embedUrl = item.videoUrl ? toEmbedUrl(item.videoUrl) : null;
   const Icon = DRILL_CAT_ICON[item.cat] || Target;
   const title = item.title || item.name;
+  const hasAnimation = Boolean(item.diagramData?.animation?.steps?.length);
   const setup = item.setup || {};
   const gridLabel = setup.lengthYd && setup.widthYd ? `${setup.lengthYd} × ${setup.widthYd} yd` : setup.grid;
   const equipList = Array.isArray(setup.equipment) ? setup.equipment.join(", ") : (setup.equipment || item.equipment);
@@ -2697,6 +2699,16 @@ export const DrillModal = ({ item, onClose }) => {
             <h3 className="text-lg font-bold text-slate-900 mt-2 leading-tight">{title}</h3>
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
+            {hasAnimation && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setPlayOpen(true); }}
+                className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full text-white min-h-11"
+                style={{ backgroundColor: COLORS.primary }}
+                title="Play the saved animation"
+              >
+                <Play className="w-3.5 h-3.5 fill-white" /> Play animation
+              </button>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); setPrintOpen(true); }}
               className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full bg-white border border-slate-200 text-slate-700 min-h-11"
@@ -2764,6 +2776,7 @@ export const DrillModal = ({ item, onClose }) => {
       </div>
     </div>
     {printOpen && <DrillPrintSheet drill={item} onClose={() => setPrintOpen(false)} />}
+    {playOpen && <BoardPlayer state={item.diagramData} title={title} onClose={() => setPlayOpen(false)} />}
     </>
   );
 };
@@ -3074,6 +3087,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
                           {d.players && <span className="inline-flex items-center gap-0.5"><Users className="w-3 h-3" />{d.players}</span>}
                           {d.setup?.grid && <span className="inline-flex items-center gap-0.5"><SquareDashed className="w-3 h-3" />{d.setup.grid}</span>}
                           {d.setup?.teams && <span className="inline-flex items-center gap-0.5"><Swords className="w-3 h-3" />{d.setup.teams}</span>}
+                          {d.diagramData?.animation?.steps?.length ? <span className="inline-flex items-center gap-0.5 text-sky-600"><Play className="w-3 h-3 fill-sky-600" />Animated</span> : null}
                         </div>
                       )}
                       {d.tags?.length > 0 && (
