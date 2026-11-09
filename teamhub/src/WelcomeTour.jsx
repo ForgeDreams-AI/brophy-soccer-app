@@ -14,7 +14,7 @@ const COACH_STEPS = [
   { icon: "🏠", title: "Home", body: "Post announcements the whole team sees instantly, and get a snapshot of what's coming up." },
   { icon: "⚽", title: "Practice", body: "Build and share practice plans and your drill library so everyone knows the session." },
   { icon: "📅", title: "Schedule", body: "Create games, practices, and events — and choose exactly who sees each one (everyone, a group, or specific players)." },
-  { icon: "💪", title: "Train", body: "Your hub for workouts, nutrition targets, and the video library. Create and assign training content here." },
+  { icon: "💪", title: "Train", body: "Your hub for workouts, nutrition, and the video library. Create and assign training content here." },
   { icon: "💬", title: "Chat", body: "Team channels plus private messages. You can make a channel visible to just one group, and pin important posts." },
   { icon: "🧑‍🤝‍🧑", title: "Roster & documents", body: "Invite players by email, manage the roster, share documents for e-signing, and see each player's daily wellness check-in." },
   { icon: "🔔", title: "Notifications", body: "Turn these on (in Settings) so players get a ping for every new announcement, event, and message." },
@@ -24,7 +24,7 @@ const COACH_STEPS = [
 const PLAYER_STEPS = [
   { icon: "👋", title: "Welcome to the team app!", body: "Here's a quick 30-second tour. You can replay it anytime from Settings." },
   { icon: "🏠", title: "Today", body: "Your home base — announcements from your coach and what's happening today." },
-  { icon: "💪", title: "Train", body: "Your workouts, nutrition targets, and video library. Log your meals and water right here." },
+  { icon: "💪", title: "Train", body: "Your workouts, nutrition, and video library. Log your meals and water right here." },
   { icon: "📅", title: "Schedule", body: "All your games, practices, and events. Tap any one for the details." },
   { icon: "💬", title: "Chat", body: "Team channels plus a private line straight to your coach." },
   { icon: "📄", title: "Documents & profile", body: "Sign any team documents your coach shares, and keep your profile up to date." },
