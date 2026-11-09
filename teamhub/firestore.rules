@@ -167,39 +167,6 @@ service cloud.firestore {
         || (isMemberOf(rTeam()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signatures']));
     }
 
-    // Daily attendance: one doc per team per day (id = `${teamId}_${date}`).
-    // Members read their team's doc; the coach marks anyone present/absent,
-    // and a player may self check-in — but ONLY their own status (keyed by
-    // their email) and nothing else on the shared day doc. A self check-in
-    // must not move the doc to another team.
-    match /attendance/{id} {
-      allow read: if isMemberOf(rTeam());
-      allow delete: if coachDelete();
-      allow update: if coachUpdate()
-        || (isMemberOf(rTeam()) && request.auth.token.email != null
-            && request.resource.data.get('teamId', '') == resource.data.get('teamId', '')
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teamId', 'date', 'statuses', 'updatedAt'])
-            && request.resource.data.statuses.diff(resource.data.get('statuses', {})).affectedKeys().hasOnly([request.auth.token.email])
-            && request.resource.data.statuses[request.auth.token.email] in ['present', 'absent', '']);
-      // Creating today's doc — either the coach starting it, or a player
-      // self-checking-in before the coach has created it.
-      allow create: if (isCoachOf(wTeam()) && isTeamId(wTeam()))
-        || (isMemberOf(wTeam()) && request.auth.token.email != null
-            && request.resource.data.diff({}).affectedKeys().hasOnly(['teamId', 'date', 'statuses', 'updatedAt'])
-            && request.resource.data.statuses.keys().hasOnly([request.auth.token.email])
-            && request.resource.data.statuses[request.auth.token.email] in ['present', 'absent', '']);
-    }
-
-    // Absence reasons: a player explains their own absence for a given date.
-    // A player may create/update only their own (the doc's uid must be theirs)
-    // on a team they're on; the coach reads everyone's on their team.
-    // Doc id is `${date}__${uid}`.
-    match /attendanceReasons/{id} {
-      allow read:          if isCoachOf(rTeam()) || (signedIn() && resource.data.uid == request.auth.uid);
-      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid && isMemberOf(wTeam());
-      allow delete:        if coachDelete();
-    }
-
     // Group chats (channels): coach of the team creates/deletes + sets
     // visibility. A hidden channel is only readable by its audience (enforced
     // server-side via audienceKeys) on that team; its messages are gated the
@@ -245,6 +212,17 @@ service cloud.firestore {
     // (admin SDK, bypasses rules) fires them at their sendAt time.
     match /scheduled/{id} {
       allow read:   if isCoachOf(rTeam());
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
+    }
+
+    // Custom push notifications: the coach's own messages (send now, schedule,
+    // or recurring), team-scoped. A Cloud Function (admin SDK, bypasses rules)
+    // fires them at their sendAt time and records sends. Players can read only
+    // the notifications addressed to them (same audienceKeys pattern as
+    // announcements); the coach of the team manages the queue.
+    match /pushNotifications/{id} {
+      allow read:   if isCoachOf(rTeam()) || (isMemberOf(rTeam()) && inAudience());
       allow create: if coachCreate();
       allow update, delete: if coachUpdate() || coachDelete();
     }
@@ -307,6 +285,16 @@ service cloud.firestore {
       allow read:  if isCoachOf(rTeam()) || isOwner(resource.data.uid);
       allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid && isMemberOf(wTeam());
       allow delete: if coachDelete();
+    }
+
+    // Wellness nudge markers: one doc per player per day (id =
+    // `${uid}_${date}`), written only by the Cloud Function (admin SDK,
+    // bypasses rules) so a player is never nudged twice in one day, even
+    // across teams. Clients never write these; the coach may read their
+    // team's markers.
+    match /wellnessNudges/{id} {
+      allow read:  if isCoachOf(rTeam());
+      allow create, update, delete: if false;
     }
 
     // Food log: completely private to each player

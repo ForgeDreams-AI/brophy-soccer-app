@@ -20,11 +20,12 @@ import {
 } from "firebase/auth";
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc,
-  orderBy, where, query, getDocs, limit,
+  orderBy, where, query, getDocs,
   serverTimestamp, writeBatch, arrayUnion, deleteField,
 } from "firebase/firestore";
 import { auth, db, storage } from "./firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { useAuth } from "./hooks/useAuth";
 import { useCollection, useAudienceCollection } from "./hooks/useCollection";
 
@@ -83,8 +84,8 @@ import QuoteOfDay from "./components/QuoteOfDay";
    SECTION MAP (grep the marker to jump):
      AUTH + TIME HELPERS ....... login/error + date utilities
      THEME / COLORS ............ COLORS, DEFAULT_NUTRITION_CATEGORIES, seeds
-     HOME ...................... coach dashboard + player "Today" + attendance,
-                                 documents/e-sign, assignments
+     HOME ...................... coach dashboard + player "Today" + wellness,
+                                 push notifications, documents/e-sign, assignments
      CALENDAR .................. events
      VIDEOS .................... categorized video library
      NUTRITION ................. recipes (meal category → food-type sub), food
@@ -324,11 +325,11 @@ const seedMessages = [
   { id: "m5", sender: "Coach Cameron", initials: "CC", text: "Proud of this group.", time: "1:02 PM", isCoach: true, attachment: { type: "image", name: "team_huddle.jpg" } },
 ];
 const seedWellness = [
-  { name: "Maya Patel", initials: "MP", feeling: 4, soreness: 2, tiredness: 2, time: "8:10 AM" },
-  { name: "Alex Chen", initials: "AC", feeling: 2, soreness: 4, tiredness: 4, time: "7:52 AM" },
-  { name: "Devin Wallace", initials: "DW", feeling: 5, soreness: 1, tiredness: 2, time: "9:01 AM" },
-  { name: "Sam Okafor", initials: "SO", feeling: 3, soreness: 3, tiredness: 3, time: "8:34 AM" },
-  { name: "Riley Brooks", initials: "RB", feeling: 4, soreness: 2, tiredness: 3, time: "8:20 AM" },
+  { name: "Maya Patel", initials: "MP", energy: 4, soreness: 4, tiredness: 4, time: "8:10 AM" },
+  { name: "Alex Chen", initials: "AC", energy: 2, soreness: 2, tiredness: 2, time: "7:52 AM" },
+  { name: "Devin Wallace", initials: "DW", energy: 5, soreness: 5, tiredness: 4, time: "9:01 AM" },
+  { name: "Sam Okafor", initials: "SO", energy: 3, soreness: 3, tiredness: 3, time: "8:34 AM" },
+  { name: "Riley Brooks", initials: "RB", energy: 4, soreness: 4, tiredness: 3, time: "8:20 AM" },
 ];
 const seedMeals = [
   { id: "b1", name: "Overnight Oats & Berries", cat: "Breakfast", cal: 380, p: 18, c: 58, f: 9, prep: "5 min" },
@@ -561,6 +562,42 @@ const ReadOnlyHint = ({ label }) => (
   <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1"><Lock className="w-3 h-3" /> {label}</span>
 );
 
+/* ─── Wellness readiness verdict ───
+   The three wellness numbers share ONE direction: 1 = worst, 5 = ready to go
+   (Energy 1 = wiped out, Soreness 1 = very sore, Tiredness 1 = exhausted).
+   The verdict is decisive on purpose: average the three; avg >= 4 = Ready,
+   avg >= 2.5 = Modified (take it easy), below that = Rest. Any single 1
+   forces Rest no matter the average — a 1 anywhere means something is wrong.
+   The verdict is stored on the wellness doc at submit time (so the coach
+   list and the server can read it without recomputing) and recomputed here
+   for display, so older docs without a stored verdict still render. */
+const VERDICTS = {
+  Ready: { label: "Ready", color: "#00b27a", bg: "#e6f7ef", hint: "Good to go — full training." },
+  Modified: { label: "Modified", color: "#d97706", bg: "#fef3c7", hint: "Take it easy — lighten the load." },
+  Rest: { label: "Rest", color: "#dc2626", bg: "#fee2e2", hint: "Rest today — something is off." },
+};
+const readinessFor = (w = {}) => {
+  const vals = [w.energy, w.soreness, w.tiredness].map((n) => Number(n) || 0);
+  if (vals.some((n) => n === 1)) return "Rest";
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  if (avg >= 4) return "Ready";
+  if (avg >= 2.5) return "Modified";
+  return "Rest";
+};
+// Verdict rank for sorting: Rest and Modified float to the top of the coach list.
+const VERDICT_RANK = { Rest: 0, Modified: 1, Ready: 2 };
+// Normalize a wellness doc to the new schema (older docs stored `feeling`
+// for energy and no verdict). Cheap backward-compat for reads.
+const normalizeWellness = (w = {}) => {
+  const energy = w.energy ?? w.feeling ?? 0;
+  const soreness = w.soreness ?? 0;
+  const tiredness = w.tiredness ?? 0;
+  const norm = { ...w, energy, soreness, tiredness };
+  norm.verdict = w.verdict || readinessFor(norm);
+  norm.avg = (energy + soreness + tiredness) / 3;
+  return norm;
+};
+
 const Scale = ({ value, onChange, lowLabel, highLabel }) => (
   <div>
     <div className="flex gap-1.5">
@@ -573,162 +610,6 @@ const Scale = ({ value, onChange, lowLabel, highLabel }) => (
     <div className="flex justify-between mt-1"><span className="text-[9px] text-slate-400 font-medium">{lowLabel}</span><span className="text-[9px] text-slate-400 font-medium">{highLabel}</span></div>
   </div>
 );
-
-/* ─── HOME: daily attendance (coach) ─── */
-const AttendanceSection = ({ roster, statuses, setStatus, nameByEmail = {}, reasonsToday = {}, onOpenArchive }) => {
-  const players = roster.filter((r) => r.role !== "admin");
-  const present = players.filter((p) => statuses[p.email] === "present").length;
-  const ini = (s) => (s || "?").replace(/@.*/, "").slice(0, 2).toUpperCase();
-  const nm = (p) => nameByEmail[p.email] || p.name || p.email;
-  const [open, setOpen] = useState(false);
-  return (
-    <section>
-      <div className="flex items-center justify-between mb-3">
-        <button onClick={() => setOpen(!open)} className="flex items-center gap-2 min-w-0">
-          <h3 className="text-base font-bold text-slate-900 truncate">Today's Attendance <span className="text-[11px] font-semibold text-slate-400">· {present}/{players.length} in</span></h3>
-          {open ? <ChevronUp className="w-4 h-4 text-slate-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />}
-        </button>
-        {onOpenArchive && (
-          <button onClick={onOpenArchive} className="text-[11px] font-bold uppercase tracking-wider flex-shrink-0" style={{ color: COLORS.primary }}>Past dates</button>
-        )}
-      </div>
-      {!open ? null : players.length === 0 ? (
-        <p className="text-sm text-slate-400 italic">No players on the roster yet.</p>
-      ) : (
-        <ul className="space-y-2">
-          {players.map((p) => {
-            const st = statuses[p.email] || "";
-            return (
-              <li key={p.email} className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ backgroundColor: st === "present" ? COLORS.success : st === "absent" ? "#dc2626" : "#94a3b8" }}>{ini(nm(p))}</div>
-                  <div className="flex-1 min-w-0"><div className="text-sm font-semibold text-slate-900 truncate">{nm(p)}</div></div>
-                  <div className="flex gap-1.5 flex-shrink-0">
-                    <button onClick={() => setStatus(p.email, st === "present" ? "" : "present")} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider" style={st === "present" ? { backgroundColor: COLORS.success, color: "white" } : { backgroundColor: COLORS.bg, color: COLORS.textSecondary }}>In</button>
-                    <button onClick={() => setStatus(p.email, st === "absent" ? "" : "absent")} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider" style={st === "absent" ? { backgroundColor: "#dc2626", color: "white" } : { backgroundColor: COLORS.bg, color: COLORS.textSecondary }}>Out</button>
-                  </div>
-                </div>
-                {st === "absent" && (
-                  <div className="mt-2 pl-12 text-[11px]">
-                    {reasonsToday[p.email]
-                      ? <span className="text-slate-600"><span className="font-semibold">Reason:</span> {reasonsToday[p.email]}</span>
-                      : <span className="text-amber-600 font-semibold">Awaiting reason…</span>}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
-  );
-};
-
-// Pretty "Mon, Jun 15" from a YYYY-MM-DD string.
-const fmtDateLong = (ymd) => {
-  const d = new Date(ymd + "T00:00:00");
-  return isNaN(d.getTime()) ? ymd : d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-};
-
-/* ─── Forced absence-reason prompt (player). Blocks until each unexplained
-   absence has a reason; stacks oldest-first. ─── */
-const AbsenceReasonGate = ({ dates, onSubmit }) => {
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  if (!dates || dates.length === 0) return null;
-  const date = dates[0];
-  const submit = async () => {
-    if (!reason.trim() || busy) return;
-    setBusy(true);
-    try { await onSubmit(date, reason); setReason(""); }
-    catch { toast("Couldn't save — check your connection and try again."); }
-    finally { setBusy(false); }
-  };
-  return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Explain your absence"
-      style={{ backgroundColor: "rgba(20,39,92,0.88)" }}>
-      <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl overflow-hidden">
-        <div className="px-6 pt-6 pb-4 text-center" style={{ backgroundColor: "#dc2626" }}>
-          <div className="text-4xl mb-1" aria-hidden="true">📋</div>
-          <h2 className="text-white text-lg font-black">Explain your absence</h2>
-          {dates.length > 1 && <p className="text-white/80 text-[11px] font-semibold mt-1">{dates.length} absences to explain</p>}
-        </div>
-        <div className="px-6 py-5">
-          <p className="text-sm text-slate-600 text-center mb-3">
-            You were marked <span className="font-bold text-red-600">absent</span> on <span className="font-bold text-slate-900">{fmtDateLong(date)}</span>. Please tell your coach why.
-          </p>
-          <textarea autoFocus value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
-            placeholder="e.g. I was sick / had a family commitment…"
-            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200 resize-none" />
-          <button onClick={submit} disabled={busy || !reason.trim()}
-            className="w-full mt-3 py-2.5 rounded-full text-sm font-bold text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>
-            {busy ? "Saving…" : "Submit reason"}
-          </button>
-          <p className="text-[11px] text-slate-400 text-center mt-2">This is required before you can continue.</p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/* ─── Coach attendance archive: browse past dates + see who was out and why. ─── */
-const AttendanceArchive = ({ history = [], reasons = [], nameByEmail = {}, onClose }) => {
-  const [openDate, setOpenDate] = useState(null);
-  const reasonFor = useMemo(() => {
-    const m = {};
-    reasons.forEach((r) => { if (r.date && r.email) m[`${r.date}|${r.email}`] = r.reason; });
-    return m;
-  }, [reasons]);
-  const nm = (email) => nameByEmail[email] || email;
-  const rows = history.filter((d) => d.statuses && Object.keys(d.statuses).length);
-  return (
-    <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Attendance archive">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[85vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 className="text-base font-bold text-slate-900">Attendance archive</h3>
-          <button onClick={onClose} className="text-slate-400"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="overflow-y-auto p-4 space-y-2">
-          {rows.length === 0 ? (
-            <p className="text-sm text-slate-400 italic text-center py-8">No attendance recorded yet.</p>
-          ) : rows.map((d) => {
-            const entries = Object.entries(d.statuses);
-            const presentN = entries.filter(([, s]) => s === "present").length;
-            const absent = entries.filter(([, s]) => s === "absent").map(([email]) => email);
-            const isOpen = openDate === d.date;
-            return (
-              <div key={d.date} className="bg-slate-50 rounded-2xl overflow-hidden">
-                <button onClick={() => setOpenDate(isOpen ? null : d.date)} className="w-full flex items-center justify-between px-4 py-3">
-                  <span className="text-sm font-semibold text-slate-900">{fmtDateLong(d.date)}</span>
-                  <span className="flex items-center gap-2 text-[11px] font-bold">
-                    <span style={{ color: COLORS.success }}>{presentN} in</span>
-                    <span className="text-red-600">{absent.length} out</span>
-                    {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                  </span>
-                </button>
-                {isOpen && (
-                  <div className="px-4 pb-3 space-y-2">
-                    {absent.length === 0 ? (
-                      <p className="text-[12px] text-slate-500 italic">Everyone was present. ✅</p>
-                    ) : absent.map((email) => (
-                      <div key={email} className="bg-white rounded-xl p-2.5 border border-slate-100">
-                        <div className="text-[12px] font-semibold text-slate-900">{nm(email)}</div>
-                        {reasonFor[`${d.date}|${email}`]
-                          ? <div className="text-[11px] text-slate-600 mt-0.5">{reasonFor[`${d.date}|${email}`]}</div>
-                          : <div className="text-[11px] text-amber-600 font-semibold mt-0.5">Awaiting reason…</div>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 /* ─── HOME: team documents + e-sign (coach uploads, everyone signs) ─── */
 // File types a coach can attach as a team document. Both MIME types and
@@ -1002,13 +883,16 @@ const ChecklistRow = ({ done, icon: Icon, label, sub, onClick, accent }) => (
 
 // The player's home — one hero (today's session) + a short daily checklist with
 // completion ticks, a one-line coach note, and documents to sign. Designed to
-// answer "what do I do today?" in one screen.
-const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCheckin, submitWellness, checkedInToday, loggedToday, waterCups = 0, setWaterCups, documents = [], signDocument, onOpenTrain, onOpenSchedule, assignments = [], teamWorkouts = [], onToggleAssignment, nutritionTarget, nutritionTotals = { cal: 0, protein: 0 }, profilePrompt, onOpenProfile, attendanceStatus = "", onCheckIn }) => {
+// answer "what do I do today?" in one screen. The wellness check-in is the
+// main daily action here (attendance / practice check-in were removed):
+// three quick 1–5 taps (Energy / Soreness / Tiredness, high = ready) and the
+// player gets a decisive readiness verdict back.
+const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCheckin, submitWellness, wellnessLoggedToday, myWellness = null, loggedToday, waterCups = 0, setWaterCups, documents = [], signDocument, onOpenTrain, onOpenSchedule, assignments = [], teamWorkouts = [], onToggleAssignment, nutritionTarget, nutritionTotals = { cal: 0, protein: 0 }, profilePrompt, onOpenProfile }) => {
   const promptTs = profilePrompt?.requestedAt;
   const [profileDismissed, setProfileDismissed] = useState(() => { try { return localStorage.getItem("profilePromptSeen") === promptTs; } catch { return false; } });
   const showProfilePrompt = promptTs && !profileDismissed;
   const dismissProfile = () => { try { localStorage.setItem("profilePromptSeen", promptTs); } catch { /* ignore */ } setProfileDismissed(true); };
-  const [checkinOpen, setCheckinOpen] = useState(false);
+  const [wellnessOpen, setWellnessOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [openA, setOpenA] = useState(null);
   const todayStr = fmtLocalDate(new Date());
@@ -1019,10 +903,13 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
   const WATER_GOAL = 8;
   const setMetric = (k, v) => { setCheckin({ ...checkin, [k]: v }); setSaved(false); };
   const submit = async () => {
-    if (!checkin.feeling || !checkin.soreness || !checkin.tiredness) return;
-    try { await submitWellness(checkin); setSaved(true); setTimeout(() => setCheckinOpen(false), 800); }
+    if (!checkin.energy || !checkin.soreness || !checkin.tiredness) return;
+    try { await submitWellness(checkin); setSaved(true); setTimeout(() => setWellnessOpen(false), 800); }
     catch (e) { toast("Couldn't submit — " + (e.message || "")); }
   };
+  // The player's own verdict for today (from their submitted doc, if any).
+  const myVerdict = myWellness ? (myWellness.verdict || readinessFor(myWellness)) : null;
+  const myVerdictStyle = myVerdict ? VERDICTS[myVerdict] : null;
   const firstName = (user.name || "").split(" ")[0];
 
   return (
@@ -1063,26 +950,6 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
         )}
       </div>
 
-      {/* SELF CHECK-IN — mark yourself present for today (coach sees it live) */}
-      {hero && onCheckIn && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm border flex items-center gap-3" style={{ borderColor: attendanceStatus === "present" ? COLORS.success : "#e2e8f0" }}>
-          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: attendanceStatus === "present" ? COLORS.success : COLORS.accentSoft }}>
-            {attendanceStatus === "present" ? <Check className="w-5 h-5 text-white" /> : <User className="w-5 h-5" style={{ color: COLORS.accent }} />}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold text-slate-900">{attendanceStatus === "present" ? "You're checked in" : "Check in for today"}</div>
-            <div className="text-[11px] text-slate-500">{attendanceStatus === "present" ? "Your coach can see you're here." : "Let your coach know you're here."}</div>
-          </div>
-          <button
-            onClick={() => Promise.resolve(onCheckIn(attendanceStatus === "present" ? "" : "present")).catch((e) => toast("Couldn't update — " + (e.message || "")))}
-            className="px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider flex-shrink-0"
-            style={attendanceStatus === "present" ? { backgroundColor: COLORS.bg, color: COLORS.textSecondary } : { backgroundColor: COLORS.primary, color: "white" }}
-          >
-            {attendanceStatus === "present" ? "Undo" : "Check in"}
-          </button>
-        </div>
-      )}
-
       {/* ASSIGNED TODAY — coach assignments, expand to see + mark done */}
       {assignments.length > 0 && (
         <div>
@@ -1119,22 +986,45 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
         </div>
       )}
 
+      {/* WELLNESS CHECK-IN — the main daily action. Three quick 1–5 taps
+          (high = ready to go) and a decisive verdict back: Ready / Modified /
+          Rest. The coach sees it live on their wellness list. */}
+      <div className="rounded-2xl p-4 shadow-sm border" style={{ backgroundColor: wellnessLoggedToday && myVerdictStyle ? myVerdictStyle.bg : "white", borderColor: wellnessLoggedToday && myVerdictStyle ? myVerdictStyle.color : "#e2e8f0" }}>
+        <button onClick={() => setWellnessOpen((o) => !o)} className="w-full flex items-center gap-3 text-left">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: wellnessLoggedToday && myVerdictStyle ? myVerdictStyle.color : COLORS.accentSoft }}>
+            {wellnessLoggedToday ? <Check className="w-5 h-5 text-white" /> : <Activity className="w-5 h-5" style={{ color: COLORS.accent }} />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-bold text-slate-900">Wellness check-in</div>
+            {wellnessLoggedToday && myVerdict ? (
+              <div className="text-[11px] text-slate-600">
+                <span className="font-bold" style={{ color: myVerdictStyle.color }}>{myVerdict}</span> — {myVerdictStyle.hint} · E{myWellness.energy} S{myWellness.soreness} T{myWellness.tiredness}
+              </div>
+            ) : (
+              <div className="text-[11px] text-slate-500">How are you feeling today? Takes 30 seconds.</div>
+            )}
+          </div>
+          {wellnessLoggedToday ? (
+            <span className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white border border-slate-200 text-slate-600 flex-shrink-0" onClick={(e) => { e.stopPropagation(); setCheckin({ energy: myWellness?.energy || 0, soreness: myWellness?.soreness || 0, tiredness: myWellness?.tiredness || 0 }); setSaved(false); setWellnessOpen(true); }}>Update</span>
+          ) : (
+            wellnessOpen ? <ChevronUp className="w-4 h-4 text-slate-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          )}
+        </button>
+        {(!wellnessLoggedToday || wellnessOpen) && (
+          <div className="mt-3 space-y-3">
+            {saved && <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color: COLORS.success }}><Check className="w-3 h-3" /> Sent</span>}
+            <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Energy</div><Scale value={checkin.energy} onChange={(v) => setMetric("energy", v)} lowLabel="Wiped out" highLabel="Full tank" /></div>
+            <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Soreness</div><Scale value={checkin.soreness} onChange={(v) => setMetric("soreness", v)} lowLabel="Very sore" highLabel="Feeling great" /></div>
+            <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Tiredness</div><Scale value={checkin.tiredness} onChange={(v) => setMetric("tiredness", v)} lowLabel="Exhausted" highLabel="Fresh" /></div>
+            <button onClick={submit} disabled={!checkin.energy || !checkin.soreness || !checkin.tiredness} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>Log wellness</button>
+          </div>
+        )}
+      </div>
+
       {/* CHECKLIST — daily habits with completion ticks */}
       <div>
         <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Your day</h3>
         <div className="space-y-2">
-          <div>
-            <ChecklistRow done={checkedInToday} icon={Activity} label={checkedInToday ? "Checked in" : "Daily check-in"} sub={checkedInToday ? "Coach can see your readiness" : "Takes 30 seconds"} onClick={() => setCheckinOpen((o) => !o)} />
-            {checkinOpen && !checkedInToday && (
-              <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mt-2 space-y-3">
-                {saved && <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color: COLORS.success }}><Check className="w-3 h-3" /> Sent</span>}
-                <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Overall energy</div><Scale value={checkin.feeling} onChange={(v) => setMetric("feeling", v)} lowLabel="Rough" highLabel="Great" /></div>
-                <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Soreness</div><Scale value={checkin.soreness} onChange={(v) => setMetric("soreness", v)} lowLabel="None" highLabel="Very sore" /></div>
-                <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Tiredness</div><Scale value={checkin.tiredness} onChange={(v) => setMetric("tiredness", v)} lowLabel="Fresh" highLabel="Exhausted" /></div>
-                <button onClick={submit} disabled={!checkin.feeling || !checkin.soreness || !checkin.tiredness} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>Submit check-in</button>
-              </div>
-            )}
-          </div>
           {nutritionTarget && (nutritionTarget.protein > 0 || nutritionTarget.cal > 0) ? (
             <ChecklistRow
               done={nutritionTarget.protein > 0 ? nutritionTotals.protein >= nutritionTarget.protein : nutritionTotals.cal >= nutritionTarget.cal}
@@ -1189,15 +1079,8 @@ const TrainHub = ({ onPick }) => {
 };
 
 /* ─── HOME ─── */
-const HomePage = ({ user, practices = [], announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement, events, checkin, setCheckin, wellness, submitWellness, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, mealLogActivityToday = [], groups = [], addGroup, updateGroupMembers, deleteGroup, documents = [], addDocument, deleteDocument, signDocument, attendance = {}, setAttendanceStatus, attendanceHistory = [], attendanceReasons = [], assignments = [], teamWorkouts = [], addAssignment, deleteAssignment, allUsers = [], requestProfileUpdate }) => {
+const HomePage = ({ user, practices = [], announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement, events, checkin, setCheckin, wellness, submitWellness, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, mealLogActivityToday = [], groups = [], addGroup, updateGroupMembers, deleteGroup, documents = [], addDocument, deleteDocument, signDocument, assignments = [], teamWorkouts = [], addAssignment, deleteAssignment, allUsers = [], requestProfileUpdate, pushNotifications = [], addPushNotification, deletePushNotification, sendPushNotificationNow }) => {
   const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email, u.name])), [allUsers]);
-  const [archiveOpen, setArchiveOpen] = useState(false);
-  const reasonsToday = useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const m = {};
-    (attendanceReasons || []).forEach((r) => { if (r.date === todayStr && r.email) m[r.email] = r.reason; });
-    return m;
-  }, [attendanceReasons]);
   const [adding, setAdding] = useState(false);
   const [editingAnnouncementId, setEditingAnnouncementId] = useState(null);
   const [form, setForm] = useState({ title: "", body: "" });
@@ -1206,6 +1089,7 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
   const [showPlayers, setShowPlayers] = useState(false);
   const [showRoster, setShowRoster] = useState(false);
   const [annOpen, setAnnOpen] = useState(false);
+  const [pushModalOpen, setPushModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteMsg, setInviteMsg] = useState("");
   const [pushPerm, setPushPerm] = useState(currentPermission());
@@ -1305,7 +1189,7 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
 
   const setMetric = (k, v) => { setCheckin({ ...checkin, [k]: v }); setSaved(false); };
   const submitCheckin = async () => {
-    if (!checkin.feeling || !checkin.soreness || !checkin.tiredness) return;
+    if (!checkin.energy || !checkin.soreness || !checkin.tiredness) return;
     try {
       await submitWellness(checkin);
       setSaved(true);
@@ -1318,7 +1202,7 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
   const bars = (value, color) => (
     <div className="flex gap-1">{[1, 2, 3, 4, 5].map((n) => <div key={n} className="flex-1 h-1.5 rounded-full" style={{ backgroundColor: n <= value ? color : COLORS.border }} />)}</div>
   );
-  const METRICS = [["feeling", "Energy", COLORS.success], ["soreness", "Soreness", COLORS.accent], ["tiredness", "Tiredness", "#8b5cf6"]];
+  const METRICS = [["energy", "Energy", COLORS.success], ["soreness", "Soreness", COLORS.accent], ["tiredness", "Tiredness", "#8b5cf6"]];
 
   const greeting = (
     <div>
@@ -1353,15 +1237,15 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
         {saved && <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color: COLORS.success }}><Check className="w-3 h-3" /> Sent</span>}
       </div>
       <div className="space-y-3">
-        <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Overall energy</div><Scale value={checkin.feeling} onChange={(v) => setMetric("feeling", v)} lowLabel="Rough" highLabel="Great" /></div>
-        <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Soreness</div><Scale value={checkin.soreness} onChange={(v) => setMetric("soreness", v)} lowLabel="None" highLabel="Very sore" /></div>
-        <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Tiredness</div><Scale value={checkin.tiredness} onChange={(v) => setMetric("tiredness", v)} lowLabel="Fresh" highLabel="Exhausted" /></div>
+        <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Energy</div><Scale value={checkin.energy} onChange={(v) => setMetric("energy", v)} lowLabel="Wiped out" highLabel="Full tank" /></div>
+        <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Soreness</div><Scale value={checkin.soreness} onChange={(v) => setMetric("soreness", v)} lowLabel="Very sore" highLabel="Feeling great" /></div>
+        <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Tiredness</div><Scale value={checkin.tiredness} onChange={(v) => setMetric("tiredness", v)} lowLabel="Exhausted" highLabel="Fresh" /></div>
       </div>
-      <button onClick={submitCheckin} disabled={!checkin.feeling || !checkin.soreness || !checkin.tiredness}
+      <button onClick={submitCheckin} disabled={!checkin.energy || !checkin.soreness || !checkin.tiredness}
         className="w-full mt-3 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>
-        Submit Check-in
+        Log wellness
       </button>
-      <p className="text-[10px] text-slate-400 mt-2 text-center">Your coach sees the team's daily readiness.</p>
+      <p className="text-[10px] text-slate-400 mt-2 text-center">1 = worst, 5 = ready to go. Your coach sees the team's daily readiness.</p>
     </section>
   );
 
@@ -1401,6 +1285,15 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
     </section>
   );
 
+  // Team wellness, sorted so the players who need attention float to the
+  // top: Rest first, then Modified, then Ready (ties by lowest average).
+  const wellnessSorted = useMemo(
+    () => [...wellness].sort((a, b) => (VERDICT_RANK[a.verdict] - VERDICT_RANK[b.verdict]) || ((a.avg || 0) - (b.avg || 0))),
+    [wellness],
+  );
+  const restCount = wellness.filter((w) => w.verdict === "Rest").length;
+  const modifiedCount = wellness.filter((w) => w.verdict === "Modified").length;
+
   const playersSection = (
     <section>
       <h3 className="text-base font-bold text-slate-900 mb-3">Players</h3>
@@ -1411,7 +1304,7 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
       >
         <div className="flex items-center justify-between mb-3">
           <h4 className="font-bold text-sm text-slate-900">Team Readiness</h4>
-          <span className="text-[10px] text-slate-400 font-medium">{wellness.length} checked in today</span>
+          <span className="text-[10px] text-slate-400 font-medium">{wellness.length} checked in today{restCount > 0 ? ` · ${restCount} rest` : ""}{modifiedCount > 0 ? ` · ${modifiedCount} modified` : ""}</span>
         </div>
         <div className="grid grid-cols-3 gap-3">
           {METRICS.map(([k, lbl, color]) => (
@@ -1432,16 +1325,16 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
       {showPlayers && (
       <ul className="space-y-2">
         {wellness.length === 0 && <p className="text-sm text-slate-400 italic">No check-ins yet today.</p>}
-        {wellness.map((w) => {
-          const flag = w.soreness >= 4 || w.tiredness >= 4;
+        {wellnessSorted.map((w) => {
+          const vStyle = VERDICTS[w.verdict] || VERDICTS.Modified;
           const open = openPlayer === w.name;
           return (
             <li key={w.name} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
               <button onClick={() => setOpenPlayer(open ? null : w.name)} className="w-full p-3 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ backgroundColor: flag ? COLORS.accent : "#94a3b8" }}>{w.initials}</div>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ backgroundColor: vStyle.color }}>{w.initials}</div>
                 <div className="flex-1 text-left min-w-0">
-                  <div className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">{w.name}{flag && <span className="text-[8px] font-bold uppercase tracking-wider text-white px-1.5 py-0.5 rounded" style={{ backgroundColor: COLORS.primary }}>Monitor</span>}</div>
-                  <div className="text-[10px] text-slate-500">Energy {w.feeling} · Soreness {w.soreness} · Tired {w.tiredness} · {w.time}</div>
+                  <div className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">{w.name}<span className="text-[8px] font-bold uppercase tracking-wider text-white px-1.5 py-0.5 rounded" style={{ backgroundColor: vStyle.color }}>{w.verdict}</span></div>
+                  <div className="text-[10px] text-slate-500">Energy {w.energy} · Soreness {w.soreness} · Tired {w.tiredness} · {w.time}</div>
                 </div>
                 {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
               </button>
@@ -1696,21 +1589,39 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
     );
   })();
 
-  const attendanceSection = <AttendanceSection roster={invites} statuses={attendance} setStatus={setAttendanceStatus} nameByEmail={nameByEmail} reasonsToday={reasonsToday} onOpenArchive={() => setArchiveOpen(true)} />;
-  const attendanceArchive = archiveOpen ? <AttendanceArchive history={attendanceHistory} reasons={attendanceReasons} nameByEmail={nameByEmail} onClose={() => setArchiveOpen(false)} /> : null;
   const assignmentsSection = <AssignmentsSection assignments={assignments} teamWorkouts={teamWorkouts} groups={groups} roster={invites} addAssignment={addAssignment} deleteAssignment={deleteAssignment} />;
   const documentsSection = <DocumentsSection user={user} documents={documents} isAdmin={isAdmin} rosterCount={(invites || []).filter((i) => i.role !== "admin").length} onUpload={addDocument} onDelete={deleteDocument} onSign={signDocument} defaultCollapsed />;
+
+  // Custom push notifications — the coach's way to reach the team directly
+  // (send now, schedule, or set a recurring reminder). The full composer
+  // lives in PushNotificationModal; this is just the entry point.
+  const queuedPushCount = (pushNotifications || []).filter((n) => n.status === "scheduled").length;
+  const pushSection = (
+    <section>
+      <button
+        onClick={() => setPushModalOpen(true)}
+        className="w-full bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center gap-3 text-left"
+      >
+        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft }}>
+          <Bell className="w-5 h-5" style={{ color: COLORS.accent }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-bold text-slate-900">Send notification</div>
+          <div className="text-[11px] text-slate-500">{queuedPushCount > 0 ? `${queuedPushCount} scheduled · tap to compose or manage` : "Push a message to the team, a group, or specific players"}</div>
+        </div>
+        <ChevronRight className="w-5 h-5 text-slate-300 flex-shrink-0" />
+      </button>
+    </section>
+  );
 
   // Compact at-a-glance dashboard so the coach gets the key numbers without
   // scrolling; the full management sections sit collapsed below.
   const playersTotal = invites.filter((i) => i.role !== "admin").length;
-  const presentCount = invites.filter((i) => i.role !== "admin" && attendance[i.email] === "present").length;
   const assignUpcoming = assignments.filter((a) => a.date >= fmtLocalDate(new Date())).length;
   const dashStats = [
-    ["Readiness", wellness.length ? avg("feeling").toFixed(1) : "—", "/5"],
-    ["Checked in", wellness.length, `/${playersTotal}`],
-    ["Present", presentCount, `/${playersTotal}`],
-    ["Logged", mealLogActivityToday.length, `/${playersTotal}`],
+    ["Readiness", wellness.length ? avg("energy").toFixed(1) : "—", "/5"],
+    ["Logged", wellness.length, `/${playersTotal}`],
+    ["Meals", mealLogActivityToday.length, `/${playersTotal}`],
     ["Assigned", assignUpcoming, "due"],
     ["Roster", invites.length, ""],
   ];
@@ -1774,8 +1685,20 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
       {notificationsSection}
       {nextUpSection}
       {isAdmin
-        ? (<>{youRunningSection}{coachDashboard}{assignmentsSection}{attendanceSection}{announcementsSection}{nutritionComplianceSection}{playersSection}{documentsSection}{rosterSection}{attendanceArchive}</>)
+        ? (<>{youRunningSection}{coachDashboard}{assignmentsSection}{announcementsSection}{pushSection}{nutritionComplianceSection}{playersSection}{documentsSection}{rosterSection}</>)
         : (<>{checkinSection}{announcementsSection}{documentsSection}</>)}
+      {pushModalOpen && (
+        <PushNotificationModal
+          pushNotifications={pushNotifications}
+          onAdd={addPushNotification}
+          onDelete={deletePushNotification}
+          onSendNow={sendPushNotificationNow}
+          groups={groups}
+          roster={invites}
+          nameByEmail={nameByEmail}
+          onClose={() => setPushModalOpen(false)}
+        />
+      )}
     </div>
   );
 };
@@ -5768,6 +5691,185 @@ const ScheduledModal = ({ scheduled = [], onAdd, onDelete, chatGroups = [], grou
   );
 };
 
+// Custom push notifications — the coach composes a title + message, picks an
+// audience (whole team, groups, or specific players — same picker pattern as
+// the scheduled reminders), then either Sends now (out immediately via the
+// `sendPushNotification` callable) or Schedules it (stored in
+// `pushNotifications` for the `runScheduled` runner, with an optional
+// daily / weekly / custom repeat). Recurrence is stored as
+// {type: "none"|"daily"|"weekly", time: "HH:MM", days: [weekday numbers]} —
+// a "Custom" day pick is stored as type "weekly" with its days, since the
+// runner only needs the weekday set + time.
+const PushNotificationModal = ({ pushNotifications = [], onAdd, onDelete, onSendNow, groups = [], roster = [], nameByEmail = {}, onClose }) => {
+  const [busy, setBusy] = useState(false);
+  const [sendMode, setSendMode] = useState("now"); // now | schedule
+  const [when, setWhen] = useState("");
+  const [repeat, setRepeat] = useState("none"); // none | daily | weekly | custom
+  const [customDays, setCustomDays] = useState([]); // weekday numbers for custom
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [audMode, setAudMode] = useState("everyone"); // everyone | custom
+  const [groupIds, setGroupIds] = useState([]);
+  const [emails, setEmails] = useState([]);
+
+  const nameOf = (email) => nameByEmail[(email || "").toLowerCase()] || "";
+  const players = (roster || []).filter((r) => r.role !== "admin");
+  const toggle = (arr, setArr, v) => setArr(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+  const reset = () => { setSendMode("now"); setWhen(""); setRepeat("none"); setCustomDays([]); setTitle(""); setBody(""); setAudMode("everyone"); setGroupIds([]); setEmails([]); };
+
+  const submit = async () => {
+    if (!title.trim() && !body.trim()) { toast("Add a title or message."); return; }
+    const visibleTo = audMode === "custom" ? { groupIds, emails } : { groupIds: [], emails: [] };
+    const audienceKeys = audienceKeysFor(visibleTo, groups);
+    setBusy(true);
+    try {
+      if (sendMode === "now") {
+        await onSendNow({ title: title.trim(), body: body.trim(), audienceKeys, visibleTo });
+        reset();
+        toast("Notification sent.");
+      } else {
+        let at = when ? new Date(when) : null;
+        if (!at || isNaN(at.getTime())) { toast("Pick a date & time."); return; }
+        // Resolve recurrence into a weekday set + first send time.
+        let repeatDays = [];
+        if (repeat === "daily") repeatDays = [0, 1, 2, 3, 4, 5, 6];
+        else if (repeat === "weekly") repeatDays = [at.getDay()];
+        else if (repeat === "custom") {
+          if (!customDays.length) { toast("Pick at least one day to repeat on."); return; }
+          repeatDays = [...customDays].sort();
+          // If the picked start isn't on a chosen day (or is past), snap to the next match.
+          if (!repeatDays.includes(at.getDay()) || at.getTime() <= Date.now()) {
+            const nxt = nextLocalOccurrence(repeatDays, at.getHours(), at.getMinutes());
+            if (!nxt) { toast("Couldn't find a matching day."); return; }
+            at = nxt;
+          }
+        }
+        if (at.getTime() <= Date.now()) { toast("Pick a date & time in the future."); return; }
+        const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; } })();
+        const recurrence = repeat === "none"
+          ? { type: "none", time: "", days: [] }
+          : { type: repeat === "custom" ? "weekly" : repeat, time: `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`, days: repeatDays };
+        await onAdd({ title: title.trim(), body: body.trim(), audienceKeys, visibleTo, sendAt: at, recurrence, tz });
+        reset();
+        toast("Scheduled.");
+      }
+    } catch (e) { toast("Couldn't send — " + (e.message || "check rules.")); }
+    finally { setBusy(false); }
+  };
+
+  // Queued (scheduled) first, then sent — newest first within each group.
+  const list = [...pushNotifications].sort((a, b) => {
+    const sa = a.status === "sent" ? 1 : 0, sb = b.status === "sent" ? 1 : 0;
+    return (sa - sb) || (tsMillis(b.sendAt || b.createdAt) - tsMillis(a.sendAt || a.createdAt));
+  });
+  const recurrenceLabel = (n) => {
+    const r = n.recurrence || {};
+    if (!r.type || r.type === "none") return "";
+    if (r.type === "daily") return "Daily";
+    const days = (r.days || []).map((d) => DOW_ABBR[d]).join(" ");
+    return r.days && r.days.length > 1 ? days : `Weekly · ${DOW_ABBR[(r.days || [])[0]] || ""}`;
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-slate-100 px-5 py-3 flex items-center justify-between z-10">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-1.5"><Bell className="w-4 h-4" style={{ color: COLORS.primary }} /> Send notification</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="flex gap-2">
+            <button onClick={() => setSendMode("now")} className={`flex-1 py-2 rounded-full text-xs font-bold ${sendMode === "now" ? "text-white" : "bg-slate-100 text-slate-600"}`} style={sendMode === "now" ? { backgroundColor: COLORS.primary } : {}}>Send now</button>
+            <button onClick={() => setSendMode("schedule")} className={`flex-1 py-2 rounded-full text-xs font-bold ${sendMode === "schedule" ? "text-white" : "bg-slate-100 text-slate-600"}`} style={sendMode === "schedule" ? { backgroundColor: COLORS.primary } : {}}>Schedule</button>
+          </div>
+
+          <div className="space-y-2">
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (e.g. Practice moved to 5pm)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message" rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Send to</p>
+              <div className="flex gap-2">
+                <button onClick={() => setAudMode("everyone")} className={`flex-1 py-1.5 rounded-full text-[11px] font-bold ${audMode === "everyone" ? "text-white" : "bg-slate-100 text-slate-600"}`} style={audMode === "everyone" ? { backgroundColor: COLORS.primary } : {}}>Everyone</button>
+                <button onClick={() => setAudMode("custom")} className={`flex-1 py-1.5 rounded-full text-[11px] font-bold ${audMode === "custom" ? "text-white" : "bg-slate-100 text-slate-600"}`} style={audMode === "custom" ? { backgroundColor: COLORS.primary } : {}}>Specific people</button>
+              </div>
+            </div>
+            {audMode === "custom" && (
+              <div className="space-y-2">
+                {groups.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {groups.map((g) => { const on = groupIds.includes(g.id); return <button key={g.id} onClick={() => toggle(groupIds, setGroupIds, g.id)} className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${on ? "text-white" : "bg-white text-slate-600 border-slate-200"}`} style={on ? { backgroundColor: COLORS.primary, borderColor: COLORS.primary } : {}}>{g.name}</button>; })}
+                  </div>
+                )}
+                {players.length > 0 && (
+                  <div className="max-h-36 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+                    {players.map((p) => { const on = emails.includes(p.email); const nm = nameOf(p.email); return (
+                      <button key={p.email} onClick={() => toggle(emails, setEmails, p.email)} className="w-full flex items-center justify-between gap-2 px-3 py-2 hover:bg-slate-50 text-left">
+                        <span className="text-xs text-slate-700 truncate">{nm || p.email}</span>
+                        {on ? <Check className="w-4 h-4 flex-shrink-0" style={{ color: COLORS.success }} /> : <span className="w-4 h-4 rounded border border-slate-300 flex-shrink-0" />}
+                      </button>
+                    ); })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {sendMode === "schedule" && (
+            <>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">{repeat === "none" ? "When" : "Starts"}</p>
+                <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Repeat</p>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[["none", "Once"], ["daily", "Daily"], ["weekly", "Weekly"], ["custom", "Custom"]].map(([val, lbl]) => (
+                    <button key={val} onClick={() => setRepeat(val)} className={`py-1.5 rounded-full text-[11px] font-bold ${repeat === val ? "text-white" : "bg-slate-100 text-slate-600"}`} style={repeat === val ? { backgroundColor: COLORS.primary } : {}}>{lbl}</button>
+                  ))}
+                </div>
+                {repeat === "custom" && (
+                  <div className="flex justify-between gap-1 mt-2">
+                    {DOW_LETTERS.map((ltr, d) => { const on = customDays.includes(d); return (
+                      <button key={d} onClick={() => setCustomDays((arr) => arr.includes(d) ? arr.filter((x) => x !== d) : [...arr, d])} className={`flex-1 h-8 rounded-lg text-[11px] font-bold ${on ? "text-white" : "bg-slate-100 text-slate-500"}`} style={on ? { backgroundColor: COLORS.primary } : {}} aria-label={DOW_ABBR[d]}>{ltr}</button>
+                    ); })}
+                  </div>
+                )}
+                {repeat === "weekly" && when && <p className="text-[10px] text-slate-400 mt-1">Repeats every {DOW_ABBR[new Date(when).getDay()]}.</p>}
+              </div>
+            </>
+          )}
+
+          <button onClick={submit} disabled={busy} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{busy ? "Sending…" : sendMode === "now" ? "Send now" : "Schedule it"}</button>
+
+          {list.length > 0 && (
+            <div className="pt-2 border-t border-slate-100">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Notifications</p>
+              <ul className="space-y-1.5">
+                {list.map((n) => {
+                  const rep = recurrenceLabel(n);
+                  const sent = n.status === "sent";
+                  return (
+                    <li key={n.id} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-slate-800 truncate">🔔 {n.title || n.body || "Notification"}</div>
+                        <div className="text-[10px] text-slate-500 truncate">{n.body && n.title ? n.body : ""}{sent ? "Sent" : ""}{!sent && n.sendAt ? new Date(tsMillis(n.sendAt)).toLocaleString([], { weekday: rep ? "short" : undefined, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : ""}</div>
+                      </div>
+                      {rep
+                        ? <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-0.5" style={{ backgroundColor: COLORS.primary, color: "white" }}><Repeat className="w-2.5 h-2.5" />{rep}</span>
+                        : sent ? <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: COLORS.success }} /> : <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.primary }}>Scheduled</span>}
+                      <button onClick={() => onDelete(n.id)} aria-label="Delete" className="text-slate-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Coach-only roster breakdown: who's seen a message / who voted for each poll
 // option (and who hasn't). `groups` = [{ label, names: [] }].
 const ViewersModal = ({ title, groups = [], onClose }) => (
@@ -7893,23 +7995,29 @@ export default function TeamHubRolesApp() {
     return { added: fresh.length, skipped: all.length - fresh.length };
   };
 
-  // Wellness — guide §4 + §8 (one doc per player per day, ID = `${uid}_${date}`)
+  // Wellness — guide §4 + §8 (one doc per player per day, ID = `${uid}_${date}`).
+  // The three numbers share ONE direction: 1 = worst, 5 = ready to go
+  // (Energy 1 = wiped out, Soreness 1 = very sore, Tiredness 1 = exhausted).
+  // A readiness verdict (Ready / Modified / Rest) is stored on the doc at
+  // submit time and normalized on read, so older docs still render.
   const today = new Date().toISOString().slice(0, 10);
   const wellnessRaw = useCollection("wellnessCheckins", where("teamId", "==", activeTeamId), where("date", "==", today));
   const wellness = useMemo(
-    () => wellnessRaw.map((w) => ({ ...w, time: formatAgo(w.updatedAt) })),
+    () => wellnessRaw.map((w) => normalizeWellness({ ...w, time: formatAgo(w.updatedAt) })),
     [wellnessRaw],
   );
-  const submitWellness = ({ feeling, soreness, tiredness }) =>
-    setDoc(doc(db, "wellnessCheckins", `${user.uid}_${today}`), {
+  const submitWellness = ({ energy, soreness, tiredness }) => {
+    const verdict = readinessFor({ energy, soreness, tiredness });
+    return setDoc(doc(db, "wellnessCheckins", `${user.uid}_${today}`), {
       teamId: activeTeamId,
       uid: user.uid,
       name: user.name,
       initials: user.initials,
-      feeling, soreness, tiredness,
+      energy, soreness, tiredness, verdict,
       date: today,
       updatedAt: serverTimestamp(),
     });
+  };
 
   // Food log — private subcollection per player (guide §4 + §5)
   const logsPath = user ? `logs/${user.uid}/entries` : null;
@@ -7993,12 +8101,18 @@ export default function TeamHubRolesApp() {
 
   // Player "Today" completion signals — scoped to the current user so the
   // queries satisfy the per-owner read rules.
-  const myWellnessToday = useCollection(
+  const myWellnessDocs = useCollection(
     user ? "wellnessCheckins" : null,
     where("uid", "==", user?.uid || "_"),
     where("date", "==", today),
   );
-  const checkedInToday = myWellnessToday.length > 0;
+  // The player's own wellness doc for today (normalized to the new schema).
+  // The per-user query finds it even if it was logged under another team,
+  // since the doc id is `${uid}_${date}` (one wellness doc per player per day).
+  const myWellnessToday = myWellnessDocs[0]
+    ? normalizeWellness(myWellnessDocs[0])
+    : (wellness.find((w) => w.uid === user?.uid) || null);
+  const wellnessLoggedToday = !!myWellnessToday;
   const loggedToday = useMemo(
     () => logged.some((l) => formatDayKey(l.createdAt) === formatDayKey(new Date())),
     [logged],
@@ -8022,53 +8136,6 @@ export default function TeamHubRolesApp() {
   const deleteDocument = (id) => deleteDoc(doc(db, "documents", id));
   const signDocument = (id, name) =>
     updateDoc(doc(db, "documents", id), { signatures: arrayUnion({ uid: user.uid, name, ts: new Date().toISOString() }) });
-
-  // Daily attendance — one doc per day (id = date); admin marks present/absent.
-  const attendanceDocs = useCollection(user ? "attendance" : null, where("teamId", "==", activeTeamId), where("date", "==", today));
-  const attendanceToday = attendanceDocs[0]?.statuses || {};
-  // One attendance doc per team per day (id = `${teamId}_${date}`) so the
-  // three teams never share a statuses map.
-  const attendanceDocId = `${activeTeamId}_${today}`;
-  const setAttendanceStatus = (email, status) =>
-    setDoc(doc(db, "attendance", attendanceDocId), { teamId: activeTeamId, date: today, statuses: { [email]: status }, updatedAt: serverTimestamp() }, { merge: true });
-  // Player self check-in — writes only their own status into today's doc
-  // (allowed by the attendance rule for the signed-in user's own email).
-  const myAttendanceStatus = user ? (attendanceToday[user.email] || "") : "";
-  const selfCheckIn = (status) =>
-    setDoc(doc(db, "attendance", attendanceDocId), { teamId: activeTeamId, date: today, statuses: { [user.email]: status }, updatedAt: serverTimestamp() }, { merge: true });
-
-  // Recent attendance history (coach archive + lets a player find their own past
-  // absences). One small doc per day; cap the window so it stays cheap.
-  const attendanceHistory = useCollection(user ? "attendance" : null, where("teamId", "==", activeTeamId), orderBy("date", "desc"), limit(60));
-  // Absence reasons: the coach reads everyone's (recent); a player reads only
-  // their own (to know which absences they've already explained).
-  const allAbsenceReasons = useCollection(
-    user && isCoach ? "attendanceReasons" : null,
-    where("teamId", "==", activeTeamId),
-    orderBy("date", "desc"), limit(300),
-  );
-  const myAbsenceReasons = useCollection(
-    user && !isCoach ? "attendanceReasons" : null,
-    where("uid", "==", user?.uid || "__none__"),
-  );
-  const submitAbsenceReason = (date, reason) =>
-    setDoc(doc(db, "attendanceReasons", `${date}__${user.uid}`), {
-      teamId: activeTeamId,
-      date, uid: user.uid, email: (user.email || "").toLowerCase(),
-      name: user.name || "", reason: (reason || "").trim(), createdAt: serverTimestamp(),
-    }, { merge: true });
-
-  // Dates this (real) player was marked absent but hasn't explained yet —
-  // oldest first, so the forced prompt clears them in order. Empty for coaches.
-  const unexplainedAbsences = useMemo(() => {
-    if (!user || user.role === "admin") return [];
-    const email = (user.email || "").toLowerCase();
-    const answered = new Set(myAbsenceReasons.map((r) => r.date));
-    return attendanceHistory
-      .filter((d) => d.statuses && d.statuses[email] === "absent" && !answered.has(d.date))
-      .map((d) => d.date)
-      .sort();
-  }, [user, myAbsenceReasons, attendanceHistory]);
 
   // Assignments — coach gives a task (optionally a team workout) a due date +
   // audience; players see it on Today and mark it done; coach sees completion.
@@ -8331,6 +8398,26 @@ export default function TeamHubRolesApp() {
   const deleteScheduled = (id) => deleteDoc(doc(db, "scheduled", id));
   const pinChatGroup = (id, pinned) => updateDoc(doc(db, "chatGroups", id), { pinned: !!pinned });
 
+  // Custom push notifications — coach sends one now (via the callable Cloud
+  // Function, out immediately) or schedules it (stored in `pushNotifications`
+  // for the `runScheduled` runner, which also handles the daily wellness
+  // auto-nudge). Team-scoped, same audience pattern as announcements.
+  const pushNotifications = useCollection(isCoach ? "pushNotifications" : null, where("teamId", "==", activeTeamId), orderBy("sendAt", "desc"));
+  const addPushNotification = (data) =>
+    addDoc(collection(db, "pushNotifications"), {
+      ...data,
+      teamId: activeTeamId,
+      status: "scheduled",
+      createdByUid: user.uid,
+      createdByName: user.name,
+      createdAt: serverTimestamp(),
+    });
+  const deletePushNotification = (id) => deleteDoc(doc(db, "pushNotifications", id));
+  const sendPushNotificationNow = async ({ title, body, audienceKeys, visibleTo }) => {
+    const sendPush = httpsCallable(getFunctions(), "sendPushNotification");
+    await sendPush({ teamId: activeTeamId, title, body, audienceKeys, visibleTo });
+  };
+
   // One-time, idempotent backfill: stamp `audienceKeys` onto any event/channel/
   // message created before server-side visibility existed. Without it the
   // players' array-contains-any query would skip field-less legacy docs and
@@ -8400,7 +8487,7 @@ export default function TeamHubRolesApp() {
     [messages, user],
   );
 
-  const [checkin, setCheckin] = useState({ feeling: 0, soreness: 0, tiredness: 0 });
+  const [checkin, setCheckin] = useState({ energy: 0, soreness: 0, tiredness: 0 });
 
   if (loading) {
     return (
@@ -8478,7 +8565,6 @@ export default function TeamHubRolesApp() {
         {settingsOpen && <SettingsModal user={user} onClose={() => setSettingsOpen(false)} onSignOut={() => signOut(auth)} onReplayTour={() => { setSettingsOpen(false); setShowTour(true); }} onWhatsNew={() => { setSettingsOpen(false); setWhatsNewOpen(true); }} />}
         {whatsNewOpen && <WhatsNewModal onClose={() => setWhatsNewOpen(false)} accent={COLORS.accent} soft={COLORS.accentSoft} />}
         <WelcomeTour open={showTour} role={effUser.role} onClose={closeTour} />
-        <AbsenceReasonGate dates={unexplainedAbsences} onSubmit={submitAbsenceReason} />
         {previewAsPlayer && realIsAdmin && (
           <button onClick={() => setPreviewAsPlayer(false)} className="w-full flex items-center justify-center gap-2 py-2 text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: COLORS.primary }}>
             <Eye className="w-3.5 h-3.5" /> Viewing as a player — tap to exit
@@ -8486,8 +8572,8 @@ export default function TeamHubRolesApp() {
         )}
         <main className="flex-1 min-h-0 overflow-y-auto pb-4">
           {activeTab === "home" && <QuoteOfDay quote={todayQuote} isAdmin={effUser.role === "admin"} addQuote={addQuote} colors={COLORS} />}
-          {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} checkin={checkin} setCheckin={setCheckin} wellness={wellness} submitWellness={submitWellness} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} attendance={attendanceToday} setAttendanceStatus={setAttendanceStatus} attendanceHistory={attendanceHistory} attendanceReasons={allAbsenceReasons} assignments={assignments} teamWorkouts={teamWorkouts} addAssignment={addAssignment} deleteAssignment={deleteAssignment} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} />}
-          {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} checkedInToday={checkedInToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} assignments={myTodaysAssignments} teamWorkouts={teamWorkouts} onToggleAssignment={setAssignmentDone} nutritionTarget={myNutritionTarget} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} attendanceStatus={myAttendanceStatus} onCheckIn={selfCheckIn} />}
+          {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} checkin={checkin} setCheckin={setCheckin} wellness={wellness} submitWellness={submitWellness} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} assignments={assignments} teamWorkouts={teamWorkouts} addAssignment={addAssignment} deleteAssignment={deleteAssignment} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} />}
+          {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} assignments={myTodaysAssignments} teamWorkouts={teamWorkouts} onToggleAssignment={setAssignmentDone} nutritionTarget={myNutritionTarget} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} />}
           {activeTab === "train" && (
             trainView ? (
               <div>

@@ -3,6 +3,7 @@
 
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
@@ -344,6 +345,52 @@ exports.onEventReminderSync = onDocumentWritten("events/{id}", async (event) => 
   await batch.commit();
 });
 
+// ── custom push notifications ─────────────────────────────────────────────
+// A coach (or the org admin) sends a custom push now, from the app's "Send
+// notification" tool. The push goes out immediately, team-scoped, to the
+// notification's audience (resolved from `audienceKeys`, the same array the
+// security rules enforce on reads). The send is recorded in
+// `pushNotifications` with status "sent" so the coach sees it in the
+// composer's history. Scheduled / recurring notifications are NOT sent here —
+// they're stored by the client and picked up by runScheduled below.
+exports.sendPushNotification = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to send a notification.");
+  const { teamId, title, body, audienceKeys, visibleTo } = request.data || {};
+  if (!teamId || typeof teamId !== "string") throw new HttpsError("invalid-argument", "A team is required.");
+  const cleanTitle = String(title || "").trim();
+  const cleanBody = String(body || "").trim();
+  if (!cleanTitle && !cleanBody) throw new HttpsError("invalid-argument", "Add a title or message.");
+  // Only a coach of that team (or the org admin, who coaches all three) may
+  // push to it — never a player, and never to another team.
+  const caller = await db.doc(`users/${request.auth.uid}`).get();
+  const c = caller.exists ? caller.data() : {};
+  const isOrgAdmin = c.role === "orgAdmin";
+  const isTeamCoach = c.role === "admin" && Array.isArray(c.teamIds) && c.teamIds.includes(teamId);
+  if (!isOrgAdmin && !isTeamCoach) throw new HttpsError("permission-denied", "Only a coach of this team can send notifications.");
+  const bundle = await tokensForAudienceKeys(audienceKeys, { teamId });
+  await sendToTokens(bundle, {
+    title: cleanTitle || "Team notification",
+    body: trunc(cleanBody || "Tap to open the app."),
+    link: "/?tab=home",
+    tag: `push-${Date.now()}`,
+  });
+  const ref = await db.collection("pushNotifications").add({
+    teamId,
+    title: cleanTitle,
+    body: cleanBody,
+    audienceKeys: Array.isArray(audienceKeys) ? audienceKeys : ["*"],
+    visibleTo: visibleTo || { groupIds: [], emails: [] },
+    sendAt: Timestamp.now(),
+    recurrence: { type: "none", time: "", days: [] },
+    status: "sent",
+    sentAt: Timestamp.now(),
+    createdByUid: request.auth.uid,
+    createdByName: c.name || "Coach",
+    createdAt: Timestamp.now(),
+  });
+  return { id: ref.id, sent: true };
+});
+
 // ── scheduled reminders + polls ─────────────────────────────────────────────
 // Coaches create docs in `scheduled` with a future `sendAt`. This cron sweeps
 // every 5 minutes and fires anything now due: a "reminder" fans out as a push
@@ -399,8 +446,19 @@ function nextRecurring(nowMs, repeatDays, h, mi, tz) {
   return null;
 }
 
+// Default hour (local, America/Phoenix) after which a player who hasn't
+// logged wellness today gets one push reminder. Matches the per-team
+// `wellnessNudgeHour` in src/data/teams.js.
+const WELLNESS_NUDGE_HOUR = 8;
+
 exports.runScheduled = onSchedule("every 5 minutes", async () => {
   const now = Timestamp.now();
+  await processScheduledItems(now);
+  await processPushNotifications(now);
+  await processWellnessNudges();
+});
+
+async function processScheduledItems(now) {
   // Range-only query (single-field index, auto-created); filter `sent` in JS so
   // no composite index is required.
   const snap = await db.collection("scheduled").where("sendAt", "<=", now).get();
@@ -456,7 +514,98 @@ exports.runScheduled = onSchedule("every 5 minutes", async () => {
       console.error("scheduled item failed:", doc.id, e);
     }
   }
-});
+}
+
+// Custom push notifications (see sendPushNotification above): sweep the
+// `pushNotifications` queue for anything due. A one-off is marked sent; a
+// recurring one advances to its next occurrence (same timezone-aware
+// recurrence as scheduled items) instead of finishing.
+async function processPushNotifications(now) {
+  // Range-only query; filter `status` in JS so no composite index is needed
+  // (same pattern as processScheduledItems above).
+  const snap = await db.collection("pushNotifications").where("sendAt", "<=", now).get();
+  const due = snap.docs.filter((d) => d.data().status === "scheduled");
+  if (!due.length) { console.log("No push notifications due."); return; }
+  for (const doc of due) {
+    const d = doc.data();
+    try {
+      const bundle = await tokensForAudienceKeys(d.audienceKeys, { teamId: d.teamId });
+      await sendToTokens(bundle, {
+        title: d.title || "Team notification",
+        body: trunc(d.body || "Tap to open the app."),
+        link: "/?tab=home",
+        tag: `push-${doc.id}`,
+      });
+      const r = d.recurrence || {};
+      const days = Array.isArray(r.days) ? r.days : [];
+      if (r.type && r.type !== "none" && days.length) {
+        const tz = d.tz || "America/Phoenix";
+        const [hh, mm] = String(r.time || "08:00").split(":").map((n) => parseInt(n, 10) || 0);
+        const next = nextRecurring(Date.now(), days, hh, mm, tz);
+        if (next) await doc.ref.update({ sendAt: Timestamp.fromMillis(next), lastSentAt: Timestamp.now() });
+        else await doc.ref.update({ status: "sent", sentAt: Timestamp.now() });
+      } else {
+        await doc.ref.update({ status: "sent", sentAt: Timestamp.now() });
+      }
+    } catch (e) {
+      console.error("push notification failed:", doc.id, e);
+    }
+  }
+}
+
+// Daily wellness auto-nudge: once the local clock passes the nudge hour
+// (default 8:00 AM America/Phoenix), every player who has NOT logged wellness
+// today gets one push reminder ("Log your wellness for today"). A marker doc
+// in `wellnessNudges` (id `${uid}_${date}`, one per player per day)
+// guarantees nobody is nudged twice in one day, even if the function runs
+// many times or the player is on more than one team. Coaches/admins are not
+// nudged — only players. The "logged today" check is team-agnostic (a player
+// has one wellness doc per day, id `${uid}_${date}`), so logging under any
+// team counts.
+async function processWellnessNudges() {
+  const tz = "America/Phoenix";
+  const local = partsInTz(new Date(), tz);
+  if (+local.hour < WELLNESS_NUDGE_HOUR) return; // too early — wait for the cutoff
+  // The client's wellness doc date is the UTC date (toISOString), so match it.
+  const today = new Date().toISOString().slice(0, 10);
+  const loggedSnap = await db.collection("wellnessCheckins").where("date", "==", today).get();
+  const loggedUids = new Set(loggedSnap.docs.map((d) => d.data().uid));
+  // Teams = the distinct teamIds across player docs (no hard-coded team list).
+  const usersSnap = await db.collection("users").get();
+  const byTeam = new Map(); // teamId -> [player user docs]
+  usersSnap.forEach((d) => {
+    const u = d.data();
+    if (u.role === "admin" || u.role === "orgAdmin") return; // players only
+    (Array.isArray(u.teamIds) ? u.teamIds : []).forEach((t) => {
+      const arr = byTeam.get(t) || [];
+      arr.push({ uid: d.id, ...u });
+      byTeam.set(t, arr);
+    });
+  });
+  for (const [teamId, players] of byTeam) {
+    for (const p of players) {
+      if (loggedUids.has(p.uid)) continue; // already logged today (any team)
+      const markerId = `${p.uid}_${today}`;
+      try {
+        const marker = await db.doc(`wellnessNudges/${markerId}`).get();
+        if (marker.exists) continue; // already nudged today
+        const bundle = await tokensForUids([p.uid]);
+        await sendToTokens(bundle, {
+          title: "📋 Log your wellness for today",
+          body: "Quick check-in — energy, soreness, tiredness. Takes 30 seconds.",
+          link: "/?tab=home",
+          tag: `wellness-nudge-${markerId}`,
+        });
+        await db.doc(`wellnessNudges/${markerId}`).set({
+          teamId, uid: p.uid, date: today,
+          nudgedAt: Timestamp.now(),
+        });
+      } catch (e) {
+        console.error("wellness nudge failed:", teamId, p.uid, e);
+      }
+    }
+  }
+}
 
 // ── tester feedback → email (via Gmail) ─────────────────────────────────────
 // Sends from the same Google account that owns this Firebase project, so the

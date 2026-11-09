@@ -31,6 +31,12 @@ export const isValidTeamId = (id) => TEAM_IDS.includes(id);
 //   level: "JV B",             // program level
 //   coachUids: ["uid", ...],   // coaches of this team (informational; the
 //                              // user doc's teamIds + role enforce access)
+//   wellnessNudgeHour: 8,      // local hour (America/Phoenix) after which a
+//                              // player who hasn't logged wellness today gets
+//                              // one push reminder (see functions/index.js
+//                              // processWellnessNudges — the function default
+//                              // matches this; the doc field is the per-team
+//                              // setting for a later admin UI)
 //   createdAt: <server timestamp>,
 // }
 export const teamDocFields = (team) => ({
@@ -38,6 +44,7 @@ export const teamDocFields = (team) => ({
   shortName: team.shortName,
   level: team.level,
   coachUids: [],
+  wellnessNudgeHour: 8,
 });
 
 // Firestore `inviteLinks/{code}` doc shape (team invite links, decision
