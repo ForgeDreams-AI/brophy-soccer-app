@@ -6,9 +6,9 @@ import {
   Link as LinkIcon, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Wind, Activity, Dumbbell, Snowflake, StretchHorizontal, FileText,
   Image as ImageIcon, Mail, ArrowRight, Layers, Reply, BarChart3, ScanLine, Camera,
-  Bell, BellOff, Pencil, Copy, Download,
+  Bell, BellOff, Pencil, Copy, Download, Megaphone,
   Users, Tag, Target, Footprints, Repeat, Flag, Zap, ImagePlus, Goal, Hash, Eye,
-  ClipboardList, ExternalLink, Star, Shuffle, CornerDownRight, Crosshair, Swords, LayoutGrid, Lightbulb, SquareDashed,
+  ClipboardList, ExternalLink, Star, Shuffle, CornerDownRight, Crosshair, Swords, LayoutGrid, SquareDashed,
 } from "lucide-react";
 import {
   sendSignInLinkToEmail,
@@ -65,7 +65,7 @@ import {
 import { recipeSeedDocs } from "./data/recipeSeed";
 import { liftSeedDocs } from "./data/liftSeed";
 import { workoutSeedDocs, AREA_ORDER } from "./data/workoutSeed";
-import { TEAMS, TEAM_IDS, DEFAULT_TEAM_ID, isValidTeamId, teamDocFields, getTeam } from "./data/teams";
+import { TEAMS, TEAM_IDS, DEFAULT_TEAM_ID, isValidTeamId, teamDocFields, getTeam, getTeamShortName } from "./data/teams";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { APP_VERSION } from "./data/whatsNew";
 import { UpdateBanner, WhatsNewModal } from "./components/UpdateUI";
@@ -500,7 +500,7 @@ const LoginScreen = ({ externalError, clearExternalError }) => {
         <div className="mt-6 bg-white/10 rounded-xl p-3">
           <p className="text-white/70 text-[11px] leading-relaxed">
             <span className="font-bold text-white/90">Players:</span> ask your coach to add your email to the team roster first, then sign in.<br />
-            <span className="font-bold text-white/90">Coach:</span> add roster emails from the Home page after signing in.
+            <span className="font-bold text-white/90">Coach:</span> add roster emails from Coach Tools after signing in.
           </p>
         </div>
       </div>
@@ -650,16 +650,20 @@ const docTypeLabel = (d) => {
   return "FILE";
 };
 
-const DocumentsSection = ({ user, documents, isAdmin, rosterCount = 0, onUpload, onDelete, onSign, defaultCollapsed = false }) => {
+// Folder labels for the Coach Tools documents view (grouped by file type).
+const DOC_FOLDER_LABELS = {
+  PDF: "PDFs", DOC: "Word docs", PPT: "Slides", XLS: "Spreadsheets",
+  IMG: "Images", TXT: "Text files", CSV: "Data files", KEY: "Keynotes", FILE: "Other files",
+};
+const DOC_FOLDER_ORDER = ["PDF", "DOC", "PPT", "XLS", "IMG", "TXT", "CSV", "KEY", "FILE"];
+
+// Upload card shared by the Home documents section and the Coach Tools
+// Documents page (same upload flow either way).
+const DocumentUploadCard = ({ onUpload }) => {
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
-  const [openId, setOpenId] = useState(null);
-  const [signId, setSignId] = useState(null);
-  const [signName, setSignName] = useState(user.name || "");
   const [pendingFile, setPendingFile] = useState(null);
-  const [open, setOpen] = useState(!defaultCollapsed);
   const fileRef = useRef(null);
-
   const doUpload = async () => {
     if (!pendingFile) return;
     setBusy(true);
@@ -667,83 +671,123 @@ const DocumentsSection = ({ user, documents, isAdmin, rosterCount = 0, onUpload,
     catch (e) { toast("Couldn't upload — " + (e.message || "check Storage rules.")); }
     finally { setBusy(false); }
   };
-  const hasSigned = (d) => (d.signatures || []).some((s) => s.uid === user.uid);
-  const submitSign = async (d) => {
+  return (
+    <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 space-y-2 mb-3">
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Document title (e.g. Code of Conduct)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+      <input ref={fileRef} type="file" accept={DOC_ACCEPT} className="hidden" onChange={(e) => setPendingFile(e.target.files?.[0] || null)} />
+      <div className="flex gap-2">
+        <button onClick={() => fileRef.current?.click()} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600 truncate px-2">{pendingFile ? pendingFile.name : "Choose file (PDF, Word, PowerPoint, Excel, image…)"}</button>
+        <button onClick={doUpload} disabled={!pendingFile || busy} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{busy ? "Uploading…" : "Upload"}</button>
+      </div>
+    </div>
+  );
+};
+
+// One document row — icon + title + signed status, with the coach's
+// who-signed view + delete, and the player's sign flow. Carries its own
+// expanded state so it works flat (Home) and grouped (Coach Tools folders).
+const DocumentRow = ({ user, d, isAdmin, rosterCount = 0, onDelete, onSign }) => {
+  const [whoOpen, setWhoOpen] = useState(false);
+  const [signOpen, setSignOpen] = useState(false);
+  const [signName, setSignName] = useState(user.name || "");
+  const sigs = d.signatures || [];
+  const mine = sigs.some((s) => s.uid === user.uid);
+  const submitSign = async () => {
     if (!signName.trim()) return;
-    try { await onSign(d.id, signName.trim()); setSignId(null); }
+    try { await onSign(d.id, signName.trim()); setSignOpen(false); }
     catch (e) { toast("Couldn't sign — " + (e.message || "")); }
   };
-
   return (
-    <section>
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between mb-3">
-        <h3 className="text-base font-bold text-slate-900">Team Documents <span className="text-[11px] font-semibold text-slate-400">· {documents.length}</span></h3>
-        {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-      </button>
-      {!open ? null : (<>
-      {isAdmin && (
-        <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 space-y-2 mb-3">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Document title (e.g. Code of Conduct)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <input ref={fileRef} type="file" accept={DOC_ACCEPT} className="hidden" onChange={(e) => setPendingFile(e.target.files?.[0] || null)} />
+    <li className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="p-3 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl flex flex-col items-center justify-center flex-shrink-0 gap-0.5" style={{ backgroundColor: COLORS.accentSoft }}><FileText className="w-3.5 h-3.5" style={{ color: COLORS.accent }} /><span className="text-[7px] font-black leading-none tracking-tight" style={{ color: COLORS.accent }}>{docTypeLabel(d)}</span></div>
+        <a href={d.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-slate-900 truncate">{d.title}</div>
+          <div className="text-[10px] text-slate-500">{isAdmin ? `${sigs.length}${rosterCount ? `/${rosterCount}` : ""} signed` : (mine ? "You've signed" : "Tap to read")}</div>
+        </a>
+        {isAdmin ? (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={() => setWhoOpen(!whoOpen)} className="text-[11px] font-semibold" style={{ color: COLORS.primary }}>{whoOpen ? "Hide" : "Who"}</button>
+            <button onClick={async () => { if (confirm(`Delete "${d.title}"?`)) { try { await onDelete(d.id); } catch (e) { toast("Couldn't delete — " + (e.message || "")); } } }} className="text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+          </div>
+        ) : (
+          mine
+            ? <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 flex-shrink-0" style={{ color: COLORS.success }}><Check className="w-3.5 h-3.5" /> Signed</span>
+            : <button onClick={() => { setSignOpen(true); setSignName(user.name || ""); }} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider text-white flex-shrink-0" style={{ backgroundColor: COLORS.primary }}>Sign</button>
+        )}
+      </div>
+      {isAdmin && whoOpen && (
+        <div className="px-3 pb-3 border-t border-slate-100 pt-2">
+          {sigs.length === 0 ? <p className="text-[11px] text-slate-400 italic">No signatures yet.</p> : (
+            <ul className="space-y-1">{sigs.map((s, i) => (<li key={i} className="text-[11px] text-slate-600 flex items-center gap-1.5"><Check className="w-3 h-3" style={{ color: COLORS.success }} /> {s.name} <span className="text-slate-400">· {new Date(s.ts).toLocaleDateString()}</span></li>))}</ul>
+          )}
+        </div>
+      )}
+      {!isAdmin && signOpen && !mine && (
+        <div className="px-3 pb-3 border-t border-slate-100 pt-2 space-y-2">
+          <p className="text-[11px] text-slate-500">Type your full name to sign. This records your agreement with a timestamp.</p>
+          <input value={signName} onChange={(e) => setSignName(e.target.value)} placeholder="Your full name" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <div className="flex gap-2">
-            <button onClick={() => fileRef.current?.click()} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600 truncate px-2">{pendingFile ? pendingFile.name : "Choose file (PDF, Word, PowerPoint, Excel, image…)"}</button>
-            <button onClick={doUpload} disabled={!pendingFile || busy} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{busy ? "Uploading…" : "Upload"}</button>
+            <button onClick={() => setSignOpen(false)} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button>
+            <button onClick={submitSign} disabled={!signName.trim()} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>Agree &amp; Sign</button>
           </div>
         </div>
       )}
+    </li>
+  );
+};
+
+const DocumentsSection = ({ user, documents, isAdmin, rosterCount = 0, onUpload, onDelete, onSign, defaultCollapsed = false, groupByType = false, hideHeader = false }) => {
+  const [open, setOpen] = useState(!defaultCollapsed || hideHeader);
+  const [closedFolders, setClosedFolders] = useState({});
+  // Folder grouping (Coach Tools view): by file type, in a fixed order.
+  const grouped = useMemo(() => {
+    const map = {};
+    (documents || []).forEach((d) => {
+      const k = docTypeLabel(d);
+      (map[k] = map[k] || []).push(d);
+    });
+    return map;
+  }, [documents]);
+  const folders = DOC_FOLDER_ORDER.filter((k) => grouped[k]?.length);
+
+  return (
+    <section>
+      {!hideHeader && (
+        <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between mb-3">
+          <h3 className="text-base font-bold text-slate-900">Team Documents <span className="text-[11px] font-semibold text-slate-400">· {documents.length}</span></h3>
+          {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </button>
+      )}
+      {!open ? null : (<>
+      {isAdmin && <DocumentUploadCard onUpload={onUpload} />}
       {documents.length === 0 ? (
         <p className="text-sm text-slate-400 italic">{isAdmin ? "No documents yet — upload one for the team to sign." : "No documents to sign right now."}</p>
+      ) : groupByType ? (
+        <div className="space-y-3">
+          {folders.map((k) => (
+            <div key={k}>
+              <button onClick={() => setClosedFolders((p) => ({ ...p, [k]: !p[k] }))} className="w-full flex items-center justify-between py-1 mb-1">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">{DOC_FOLDER_LABELS[k] || k} <span className="text-slate-400">· {grouped[k].length}</span></h4>
+                {closedFolders[k] ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+              </button>
+              {!closedFolders[k] && (
+                <ul className="space-y-2">
+                  {grouped[k].map((d) => <DocumentRow key={d.id} user={user} d={d} isAdmin={isAdmin} rosterCount={rosterCount} onDelete={onDelete} onSign={onSign} />)}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
       ) : (
         <ul className="space-y-2">
-          {documents.map((d) => {
-            const sigs = d.signatures || [];
-            const mine = hasSigned(d);
-            return (
-              <li key={d.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-3 flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl flex flex-col items-center justify-center flex-shrink-0 gap-0.5" style={{ backgroundColor: COLORS.accentSoft }}><FileText className="w-3.5 h-3.5" style={{ color: COLORS.accent }} /><span className="text-[7px] font-black leading-none tracking-tight" style={{ color: COLORS.accent }}>{docTypeLabel(d)}</span></div>
-                  <a href={d.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-slate-900 truncate">{d.title}</div>
-                    <div className="text-[10px] text-slate-500">{isAdmin ? `${sigs.length}${rosterCount ? `/${rosterCount}` : ""} signed` : (mine ? "You've signed" : "Tap to read")}</div>
-                  </a>
-                  {isAdmin ? (
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button onClick={() => setOpenId(openId === d.id ? null : d.id)} className="text-[11px] font-semibold" style={{ color: COLORS.primary }}>{openId === d.id ? "Hide" : "Who"}</button>
-                      <button onClick={async () => { if (confirm(`Delete "${d.title}"?`)) { try { await onDelete(d.id); } catch (e) { toast("Couldn't delete — " + (e.message || "")); } } }} className="text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  ) : (
-                    mine
-                      ? <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 flex-shrink-0" style={{ color: COLORS.success }}><Check className="w-3.5 h-3.5" /> Signed</span>
-                      : <button onClick={() => { setSignId(d.id); setSignName(user.name || ""); }} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider text-white flex-shrink-0" style={{ backgroundColor: COLORS.primary }}>Sign</button>
-                  )}
-                </div>
-                {isAdmin && openId === d.id && (
-                  <div className="px-3 pb-3 border-t border-slate-100 pt-2">
-                    {sigs.length === 0 ? <p className="text-[11px] text-slate-400 italic">No signatures yet.</p> : (
-                      <ul className="space-y-1">{sigs.map((s, i) => (<li key={i} className="text-[11px] text-slate-600 flex items-center gap-1.5"><Check className="w-3 h-3" style={{ color: COLORS.success }} /> {s.name} <span className="text-slate-400">· {new Date(s.ts).toLocaleDateString()}</span></li>))}</ul>
-                    )}
-                  </div>
-                )}
-                {!isAdmin && signId === d.id && !mine && (
-                  <div className="px-3 pb-3 border-t border-slate-100 pt-2 space-y-2">
-                    <p className="text-[11px] text-slate-500">Type your full name to sign. This records your agreement with a timestamp.</p>
-                    <input value={signName} onChange={(e) => setSignName(e.target.value)} placeholder="Your full name" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-                    <div className="flex gap-2">
-                      <button onClick={() => setSignId(null)} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button>
-                      <button onClick={() => submitSign(d)} disabled={!signName.trim()} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>Agree &amp; Sign</button>
-                    </div>
-                  </div>
-                )}
-              </li>
-            );
-          })}
+          {documents.map((d) => <DocumentRow key={d.id} user={user} d={d} isAdmin={isAdmin} rosterCount={rosterCount} onDelete={onDelete} onSign={onSign} />)}
         </ul>
       )}
       </>)}
     </section>
   );
 };
-
 /* Assignments were removed in the Home redo (Option A) — coaches no longer assign tasks; the assignments collection is unused. */
 
 
@@ -938,36 +982,13 @@ const TrainHub = ({ onPick }) => {
 };
 
 /* ─── HOME ─── */
-const HomePage = ({ user, isOrgAdmin = false, practices = [], announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement, events, checkin, setCheckin, wellness, submitWellness, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks = [], addInviteLink, removeInviteLink, mealLogActivityToday = [], groups = [], addGroup, updateGroupMembers, deleteGroup, documents = [], addDocument, deleteDocument, signDocument, allUsers = [], requestProfileUpdate, pushNotifications = [], addPushNotification, deletePushNotification, sendPushNotificationNow, activeTeamId, todayQuote, addQuote }) => {
+const HomePage = ({ user, practices = [], announcements, events, checkin, setCheckin, wellness, submitWellness, invites, mealLogActivityToday = [], groups = [], addGroup, updateGroupMembers, deleteGroup, documents = [], addDocument, deleteDocument, signDocument, allUsers = [], pushNotifications = [], addPushNotification, deletePushNotification, sendPushNotificationNow, activeTeamId, todayQuote, addQuote }) => {
   const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email, u.name])), [allUsers]);
-  // Teams this coach can invite/link to: the org admin sees all three, a
-  // team coach sees only their own team(s). (user here is the effective
-  // user — orgAdmin is mapped to role "admin" — so the real orgAdmin flag
-  // arrives as its own prop.)
-  const myTeams = useMemo(() => {
-    if (isOrgAdmin) return [...TEAMS];
-    const mine = TEAMS.filter((t) => (user.teamIds || []).includes(t.id));
-    return mine.length ? mine : [getTeam(activeTeamId)];
-  }, [isOrgAdmin, user.teamIds, activeTeamId]);
-  const [adding, setAdding] = useState(false);
-  const [editingAnnouncementId, setEditingAnnouncementId] = useState(null);
-  const [form, setForm] = useState({ title: "", body: "" });
   const [saved, setSaved] = useState(false);
   const [openPlayer, setOpenPlayer] = useState(null);
   const [showPlayers, setShowPlayers] = useState(false);
-  const [showRoster, setShowRoster] = useState(false);
   const [annOpen, setAnnOpen] = useState(false);
   const [pushModalOpen, setPushModalOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteTeamId, setInviteTeamId] = useState(activeTeamId);
-  const [inviteMsg, setInviteMsg] = useState("");
-  // Invite-link generator state (team-specific links, see addInviteLink).
-  const [linkTeamId, setLinkTeamId] = useState(activeTeamId);
-  const [linkExpiry, setLinkExpiry] = useState("");
-  const [linkMaxUses, setLinkMaxUses] = useState("");
-  const [linkBusy, setLinkBusy] = useState(false);
-  const [linkMsg, setLinkMsg] = useState("");
-  const [lastLink, setLastLink] = useState(null); // { code, url }
   const [pushPerm, setPushPerm] = useState(currentPermission());
   const [pushBusy, setPushBusy] = useState(false);
   const [pushErr, setPushErr] = useState("");
@@ -983,104 +1004,11 @@ const HomePage = ({ user, isOrgAdmin = false, practices = [], announcements, add
       setPushBusy(false);
     }
   };
-  const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkText, setBulkText] = useState("");
   const [showGroups, setShowGroups] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [openGroupId, setOpenGroupId] = useState(null);
   const isAdmin = user.role === "admin";
 
-  const parseEmails = (text) => [
-    ...new Set(
-      text
-        .split(/[\s,;]+/)
-        .map((s) => s.trim().toLowerCase())
-        .filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)),
-    ),
-  ];
-
-  const submitInvite = async () => {
-    setInviteMsg("");
-    try {
-      await addInvite(inviteEmail, inviteTeamId);
-      setInviteMsg(`Added ${inviteEmail.trim().toLowerCase()} to ${getTeam(inviteTeamId).shortName}.`);
-      setInviteEmail("");
-    } catch (e) {
-      setInviteMsg(e.message || "Couldn't add — check rules.");
-    }
-  };
-
-  const submitBulk = async () => {
-    setInviteMsg("");
-    const emails = parseEmails(bulkText);
-    if (!emails.length) {
-      setInviteMsg("No valid emails found — paste one per line or comma-separated.");
-      return;
-    }
-    try {
-      await addInvitesBatch(emails, inviteTeamId);
-      setInviteMsg(`Added ${emails.length} email${emails.length === 1 ? "" : "s"} to ${getTeam(inviteTeamId).shortName}.`);
-      setBulkText("");
-      setBulkOpen(false);
-    } catch (e) {
-      setInviteMsg("Couldn't import — " + (e.message || "check rules."));
-    }
-  };
-
-  // Generate a team-specific invite link. Expiry is a calendar date (the
-  // link stays live through the end of that day); max uses is optional.
-  const submitInviteLink = async () => {
-    setLinkMsg("");
-    setLinkBusy(true);
-    try {
-      const maxUses = linkMaxUses.trim() ? Math.max(1, parseInt(linkMaxUses, 10) || 0) : null;
-      const expiresAt = linkExpiry ? new Date(`${linkExpiry}T23:59:59`) : null;
-      const code = await addInviteLink(linkTeamId, { expiresAt, maxUses });
-      const url = `${window.location.origin}/?invite=${code}`;
-      setLastLink({ code, url });
-      setLinkExpiry("");
-      setLinkMaxUses("");
-      setLinkMsg(`Link created for ${getTeam(linkTeamId).shortName}.`);
-    } catch (e) {
-      setLinkMsg(e.message || "Couldn't create the link — check rules.");
-    } finally {
-      setLinkBusy(false);
-    }
-  };
-
-  const copyLink = async (url) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setLinkMsg("Copied — share it with the player.");
-    } catch {
-      setLinkMsg("Copy didn't work — long-press the link to copy it manually.");
-    }
-  };
-
-  // Invite-link status + expiry label, precomputed per link. Done here (not
-  // in the JSX) because the Timestamp's .toDate() is an impure call the
-  // compiler flags during render — expiry comes from the .seconds field.
-  const sortedLinks = useMemo(() => {
-    const nowMs = new Date().getTime();
-    return [...(inviteLinks || [])]
-      .map((l) => {
-        const uses = l.uses || 0;
-        let expMs = l.expiresAt == null
-          ? null
-          : typeof l.expiresAt.seconds === "number"
-            ? l.expiresAt.seconds * 1000
-            : new Date(l.expiresAt).getTime();
-        if (expMs != null && Number.isNaN(expMs)) expMs = null;
-        const status = (l.maxUses != null && uses >= l.maxUses)
-          ? "Used up"
-          : (expMs != null && expMs <= nowMs) ? "Expired" : "Active";
-        const expiryLabel = expMs == null
-          ? "Never"
-          : new Date(expMs).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-        return { ...l, _status: status, _expiryLabel: expiryLabel };
-      })
-      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-  }, [inviteLinks]);
 
   const now = new Date();
   const nextEvent = useMemo(() => {
@@ -1089,33 +1017,6 @@ const HomePage = ({ user, isOrgAdmin = false, practices = [], announcements, add
       .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))[0];
   }, [events]);
 
-  const add = async () => {
-    if (!form.title.trim()) return;
-    try {
-      if (editingAnnouncementId) {
-        await updateAnnouncement(editingAnnouncementId, { title: form.title, body: form.body });
-      } else {
-        await addAnnouncement(form.title, form.body);
-      }
-      setForm({ title: "", body: "" });
-      setEditingAnnouncementId(null);
-      setAdding(false);
-    } catch (e) {
-      toast("Couldn't save — " + (e.message || "check your Firestore rules."));
-    }
-  };
-  const startEdit = (a) => {
-    setEditingAnnouncementId(a.id);
-    setForm({ title: a.title || "", body: a.body || "" });
-    setAdding(true);
-  };
-  const cancelEdit = () => {
-    setEditingAnnouncementId(null);
-    setForm({ title: "", body: "" });
-    setAdding(false);
-  };
-  const togglePin = (id, pinned) => togglePinAnnouncement(id, pinned).catch(() => {});
-  const del = (id) => deleteAnnouncement(id).catch(() => {});
   const sorted = [...announcements].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
   const setMetric = (k, v) => { setCheckin({ ...checkin, [k]: v }); setSaved(false); };
@@ -1200,6 +1101,8 @@ const HomePage = ({ user, isOrgAdmin = false, practices = [], announcements, add
     </section>
   );
 
+  // News for the team — read-only here. Coaches post, edit, pin and
+  // delete from Coach Tools → Announcements (§9 Option B).
   const announcementsSection = (
     <section>
       <div className="flex items-center justify-between mb-3">
@@ -1207,18 +1110,8 @@ const HomePage = ({ user, isOrgAdmin = false, practices = [], announcements, add
           <h3 className="text-base font-bold text-slate-900">Announcements <span className="text-[11px] font-semibold text-slate-400">· {announcements.length}</span></h3>
           {annOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
         </button>
-        {isAdmin ? (
-          <button onClick={() => { setAdding(!adding); setAnnOpen(true); }} className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full text-white flex items-center gap-1" style={{ backgroundColor: COLORS.primary }}><Plus className="w-3 h-3" /> Post</button>
-        ) : <ReadOnlyHint label="Posted by your coach" />}
       </div>
       {annOpen && (<>
-      {isAdmin && adding && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-3 space-y-2">
-          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Announcement title" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="Details…" rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <div className="flex gap-2"><button onClick={cancelEdit} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button><button onClick={add} className="flex-1 py-2 rounded-full text-xs font-bold text-white" style={{ backgroundColor: COLORS.primary }}>{editingAnnouncementId ? "Save Changes" : "Post to Team"}</button></div>
-        </div>
-      )}
       <ul className="space-y-2.5">
         {sorted.map((a) => (
           <li key={a.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
@@ -1227,17 +1120,15 @@ const HomePage = ({ user, isOrgAdmin = false, practices = [], announcements, add
                 <div className="flex items-center gap-2 mb-1">{a.pinned && <Pin className="w-3 h-3 flex-shrink-0" style={{ color: COLORS.accent }} />}<h4 className="font-semibold text-slate-900 text-sm">{a.title}</h4></div>
                 <p className="text-xs text-slate-500 leading-snug">{a.body}</p><span className="text-[10px] text-slate-400 font-medium">{formatAgo(a.createdAt)}</span>
               </div>
-              {isAdmin && <div className="flex flex-col gap-1.5"><button onClick={() => togglePin(a.id, a.pinned)} title="Pin" className="text-slate-300 hover:text-orange-500"><Pin className="w-4 h-4" /></button><button onClick={() => startEdit(a)} title="Edit" className="text-slate-300 hover:text-slate-600"><Pencil className="w-4 h-4" /></button><button onClick={() => del(a.id)} title="Delete" className="text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button></div>}
             </div>
           </li>
         ))}
       </ul>
+      {isAdmin && <p className="text-[10px] text-slate-400 px-1 pt-2">Post or edit announcements from Coach Tools → Announcements.</p>}
       </>)}
     </section>
   );
 
-  // Team wellness, sorted so the players who need attention float to the
-  // top: Rest first, then Modified, then Ready (ties by lowest average).
   const wellnessSorted = useMemo(
     () => [...wellness].sort((a, b) => (VERDICT_RANK[a.verdict] - VERDICT_RANK[b.verdict]) || ((a.avg || 0) - (b.avg || 0))),
     [wellness],
@@ -1300,218 +1191,6 @@ const HomePage = ({ user, isOrgAdmin = false, practices = [], announcements, add
           );
         })}
       </ul>
-      )}
-    </section>
-  );
-
-  const rosterSection = (
-    <section>
-      <button onClick={() => setShowRoster(!showRoster)} className="w-full flex items-center justify-between mb-3">
-        <h3 className="text-base font-bold text-slate-900">Roster · {invites?.length || 0}</h3>
-        {showRoster ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-      </button>
-      {showRoster && (
-        <div className="space-y-2">
-          {requestProfileUpdate && (
-            <button onClick={async () => { try { await requestProfileUpdate(); toast("Sent — everyone will be asked to add their name."); } catch (e) { toast("Couldn't send — " + (e.message || "")); } }} className="w-full py-2 rounded-full text-[11px] font-bold uppercase tracking-wider border border-slate-200 bg-white text-slate-700 flex items-center justify-center gap-1.5">
-              <Bell className="w-3.5 h-3.5" /> Ask everyone to update their info
-            </button>
-          )}
-          <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 space-y-2">
-            {myTeams.length > 1 && (
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">Invite to team</span>
-                <select
-                  value={inviteTeamId}
-                  onChange={(e) => setInviteTeamId(e.target.value)}
-                  className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
-                >
-                  {myTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </label>
-            )}
-            {!bulkOpen ? (
-              <>
-                <input
-                  value={inviteEmail}
-                  onChange={(e) => { setInviteEmail(e.target.value); setInviteMsg(""); }}
-                  onKeyDown={(e) => e.key === "Enter" && submitInvite()}
-                  type="email"
-                  placeholder="player@example.com"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200"
-                />
-                <div className="flex gap-2">
-                  <button onClick={submitInvite} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white flex items-center justify-center gap-1.5" style={{ backgroundColor: COLORS.primary }}>
-                    <Plus className="w-3.5 h-3.5" /> Add
-                  </button>
-                  <button onClick={() => { setBulkOpen(true); setInviteMsg(""); }} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider border border-slate-200 text-slate-700 bg-white">
-                    Paste many
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <textarea
-                  value={bulkText}
-                  onChange={(e) => { setBulkText(e.target.value); setInviteMsg(""); }}
-                  rows={6}
-                  placeholder={"Paste emails — one per line, or comma-separated.\n\nalex@example.com\nmaya@example.com\ndevin@example.com"}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-slate-200"
-                />
-                <div className="flex gap-2">
-                  <button onClick={() => { setBulkOpen(false); setBulkText(""); setInviteMsg(""); }} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button>
-                  <button onClick={submitBulk} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white" style={{ backgroundColor: COLORS.primary }}>
-                    Add all
-                  </button>
-                </div>
-              </>
-            )}
-            {inviteMsg && (
-              <p className="text-[10px] font-semibold px-1" style={{ color: inviteMsg.startsWith("Added") ? COLORS.success : "#dc2626" }}>{inviteMsg}</p>
-            )}
-            <p className="text-[10px] text-slate-400 leading-relaxed px-1">
-              Players need their email on the roster before they can sign in. Then share the app URL — they pick "Email me a sign-in link" or "Continue with Google" and they're in.
-            </p>
-          </div>
-
-          {/* Invite links — share a link instead of adding emails. Anyone who
-              signs up with it joins THAT team (useAuth redeems ?invite=CODE
-              at first sign-in). Optional expiry date + max uses. */}
-          <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 space-y-2">
-            <div className="flex items-center gap-2 px-1">
-              <LinkIcon className="w-3.5 h-3.5 text-slate-400" />
-              <h4 className="text-xs font-bold text-slate-900">Invite links</h4>
-            </div>
-            <p className="text-[10px] text-slate-400 leading-relaxed px-1">
-              Share a link instead of adding emails — anyone who signs up with it joins that team.
-            </p>
-            {myTeams.length > 1 && (
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">Link for team</span>
-                <select
-                  value={linkTeamId}
-                  onChange={(e) => setLinkTeamId(e.target.value)}
-                  className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
-                >
-                  {myTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </label>
-            )}
-            <div className="flex gap-2">
-              <label className="flex-1 min-w-0">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">Expires (optional)</span>
-                <input
-                  type="date"
-                  value={linkExpiry}
-                  onChange={(e) => setLinkExpiry(e.target.value)}
-                  className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
-                />
-              </label>
-              <label className="w-24 flex-shrink-0">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">Max uses</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={linkMaxUses}
-                  onChange={(e) => setLinkMaxUses(e.target.value.replace(/[^0-9]/g, ""))}
-                  placeholder="∞"
-                  className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
-                />
-              </label>
-            </div>
-            <button onClick={submitInviteLink} disabled={linkBusy} className="w-full py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white flex items-center justify-center gap-1.5 disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>
-              <LinkIcon className="w-3.5 h-3.5" /> {linkBusy ? "Creating…" : "Create link"}
-            </button>
-            {lastLink && (
-              <div className="flex gap-2 items-center">
-                <input readOnly value={lastLink.url} onFocus={(e) => e.target.select()} className="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-[11px] font-mono text-slate-700 bg-slate-50 focus:outline-none" />
-                <button onClick={() => copyLink(lastLink.url)} className="py-2 px-3 rounded-full text-[11px] font-bold uppercase tracking-wider text-white flex items-center gap-1 flex-shrink-0" style={{ backgroundColor: COLORS.primary }}>
-                  <Copy className="w-3.5 h-3.5" /> Copy
-                </button>
-              </div>
-            )}
-            {linkMsg && (
-              <p className="text-[10px] font-semibold px-1" style={{ color: linkMsg.startsWith("Link created") || linkMsg.startsWith("Copied") ? COLORS.success : "#dc2626" }}>{linkMsg}</p>
-            )}
-            {sortedLinks.length > 0 && (
-              <ul className="divide-y divide-slate-100">
-                {sortedLinks.map((l) => {
-                  const status = l._status;
-                  return (
-                    <li key={l.id} className="flex items-center gap-2 py-2">
-                      <span className="flex-1 min-w-0 truncate">
-                        <span className="text-xs font-semibold text-slate-800">{getTeam(l.teamId).shortName}</span>
-                        <span className="text-[10px] text-slate-400 ml-1.5">{l.uses || 0}{l.maxUses != null ? `/${l.maxUses}` : ""} uses · expires {l._expiryLabel}</span>
-                      </span>
-                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={status === "Active" ? { backgroundColor: COLORS.success + "1A", color: COLORS.success } : { backgroundColor: "#fee2e2", color: "#dc2626" }}>{status}</span>
-                      <button onClick={() => removeInviteLink(l.id).catch(() => {})} title="Revoke link" aria-label="Revoke link" className="text-slate-300 hover:text-red-500 flex-shrink-0">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-
-          {(!invites || invites.length === 0) ? (
-            <p className="text-sm text-slate-400 italic text-center py-3">No players on the roster yet.</p>
-          ) : (
-            <ul className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-              {invites.map((inv, i) => {
-                const isCoach = inv.role === "admin";
-                const isSelf = inv.email === user.email;
-                const toggleRole = async () => {
-                  const next = isCoach ? "player" : "admin";
-                  try {
-                    await setInviteRole(inv.email, next);
-                    setInviteMsg(`${inv.email} is now ${next === "admin" ? "a coach" : "a player"}.`);
-                  } catch (e) {
-                    setInviteMsg(e.message || "Couldn't change role.");
-                  }
-                };
-                return (
-                  <li key={inv.id} className={`flex items-center gap-2 px-3 py-2.5 ${i < invites.length - 1 ? "border-b border-slate-100" : ""}`}>
-                    <span className="truncate flex-1">
-                      {nameByEmail[inv.email]
-                        ? <><span className="text-xs font-semibold text-slate-800">{nameByEmail[inv.email]}</span><span className="text-[10px] text-slate-400 ml-1.5">{inv.email}</span></>
-                        : <span className="text-xs font-mono text-slate-700">{inv.email}</span>}
-                    </span>
-                    {/* Role is org-admin-only (decision 2026-11-08): a team
-                        coach sees the badge but can't promote/demote anyone.
-                        setInviteRole + the rules enforce it server-side too. */}
-                    {isOrgAdmin ? (
-                      <button
-                        onClick={toggleRole}
-                        disabled={isSelf}
-                        title={isSelf ? "You can't change your own role here." : isCoach ? "Make player" : "Make coach"}
-                        className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
-                        style={isCoach
-                          ? { backgroundColor: COLORS.primary, color: "white" }
-                          : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
-                      >
-                        {isCoach ? "Coach" : "Player"}
-                      </button>
-                    ) : (
-                      <span
-                        title={isCoach ? "Coach — only the program admin can change roles." : "Player — only the program admin can change roles."}
-                        className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0"
-                        style={isCoach
-                          ? { backgroundColor: COLORS.primary, color: "white" }
-                          : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
-                      >
-                        {isCoach ? "Coach" : "Player"}
-                      </span>
-                    )}
-                    <button onClick={() => removeInvite(inv.id)} disabled={isSelf} title={isSelf ? "You can't remove yourself." : `Remove ${inv.email}`} aria-label={`Remove ${inv.email}`} className="text-slate-300 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
       )}
     </section>
   );
@@ -1740,7 +1419,7 @@ const HomePage = ({ user, isOrgAdmin = false, practices = [], announcements, add
       {notificationsSection}
       {todaySection}
       {isAdmin
-        ? (<>{youRunningSection}{coachDashboard}{playersSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{pushSection}{rosterSection}{documentsSection}{groupsSection}{nutritionComplianceSection}{checkinSection}</>)
+        ? (<>{youRunningSection}{coachDashboard}{playersSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{pushSection}{groupsSection}{nutritionComplianceSection}{checkinSection}</>)
         : (<>{checkinSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{documentsSection}</>)}
       {pushModalOpen && (
         <PushNotificationModal
@@ -2995,7 +2674,7 @@ const DrillModal = ({ item, onClose }) => {
           )}
           {coachNotes && (
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Coaching points</h4>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Coach notes</h4>
               <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{coachNotes}</p>
             </div>
           )}
@@ -3017,68 +2696,11 @@ const DrillModal = ({ item, onClose }) => {
   );
 };
 
-// Shared modal for coaching talking-points (kind: "point"). Used by both
-// CoachingPointsPage and DrillsPage. Shows principle, match scenario, cues.
-const PointModal = ({ item, onClose }) => {
-  const title = item.title || item.name;
-  const infoStr = typeof item.info === "string" ? item.info : "";
-  const source = infoStr.startsWith("Source: ") ? infoStr.slice(8) : "";
-  const cues = (item.cues || []).map((c) => String(c).trim()).filter(Boolean);
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-3xl w-full max-w-md max-h-[88vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="h-1.5 w-full rounded-t-3xl" style={{ backgroundColor: COLORS.accent }} />
-        <div className="p-5 flex items-start justify-between border-b border-slate-100">
-          <div className="flex-1 pr-2">
-            <div className="flex flex-wrap gap-1.5 items-center">
-              <Lightbulb className="w-3.5 h-3.5" style={{ color: COLORS.accent }} />
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>{item.cat}</span>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 mt-2 leading-tight">{title}</h3>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
-        </div>
-        <div className="p-5 space-y-4">
-          {item.howTo && (
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">The point</h4>
-              <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{item.howTo}</p>
-            </div>
-          )}
-          {item.scenario && (
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Match scenario</h4>
-              <div className="rounded-xl px-4 py-3 border border-slate-100" style={{ backgroundColor: "rgba(0,46,93,0.06)" }}>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: COLORS.primary }}>{item.scenario}</p>
-              </div>
-            </div>
-          )}
-          {cues.length > 0 && (
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Coaching cues</h4>
-              <ul className="space-y-1.5">
-                {cues.map((c, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-slate-700 leading-relaxed">
-                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS.accent }} />
-                    <span>{c}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {source && <p className="text-[10px] text-slate-400">Source: {source}</p>}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCreating = false }) => {
   const isAdmin = user.role === "admin";
   const blank = { name: "", title: "", kind: "drill", cat: DRILL_CATS[0], tags: "", dur: "", players: "", equipment: "", setupLengthYd: "", setupWidthYd: "", setupCones: "", setupBalls: "", setupGoals: "", setupMannequins: "", setupTeams: "", howTo: "", objectives: "", desc: "", info: "", videoUrl: "", photos: [], diagram: "", diagramData: null, scenario: "", cues: "" };
   const [cat, setCat] = useState(DRILL_CATS[0]);
   const [tag, setTag] = useState("All");
-  const [kind, setKind] = useState("drill"); // "all" | "drill" | "point" — drills show by default
   const [adding, setAdding] = useState(startCreating);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(blank);
@@ -3108,19 +2730,19 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
     }
   };
 
-  // Categories = the defaults plus anything a coach has already typed, scoped to the kind filter.
+  // Categories = the defaults plus anything a coach has already typed (old coaching-point items are hidden).
   const cats = useMemo(() => {
     const set = new Set(DRILL_CATS);
-    drills.filter((d) => kind === "all" || (d.kind || "drill") === kind).forEach((d) => d.cat && set.add(d.cat));
+    drills.filter((d) => (d.kind || "drill") !== "point").forEach((d) => d.cat && set.add(d.cat));
     return [...set];
-  }, [drills, kind]);
+  }, [drills]);
   // Tag pills are scoped to the active category.
   const tags = useMemo(() => {
     const set = new Set();
     drills.filter((d) => d.cat === cat).forEach((d) => (d.tags || []).forEach((t) => set.add(t)));
     return ["All", ...[...set].sort()];
   }, [drills, cat]);
-  const filtered = drills.filter((d) => (kind === "all" || (d.kind || "drill") === kind) && d.cat === cat && (tag === "All" || (d.tags || []).includes(tag)));
+  const filtered = drills.filter((d) => (d.kind || "drill") !== "point" && d.cat === cat && (tag === "All" || (d.tags || []).includes(tag)));
 
   const uploadImage = async (file) => {
     const blob = await downscaleToBlob(file);
@@ -3165,7 +2787,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
     return {
       name: form.name.trim(),
       title: form.title.trim(),
-      kind: form.kind || "drill",
+      kind: "drill",
       cat: (form.cat || "").trim() || DRILL_CATS[0],
       tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
       dur: form.dur.trim(), players: form.players.trim(), equipment: form.equipment.trim(),
@@ -3217,25 +2839,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
 
       {isAdmin && adding && (
         <div className="px-5"><div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2">
-          {/* Kind selector — Drill / Coaching point */}
-          <div className="flex gap-2">
-            {[["drill", "Drill"], ["point", "Coaching point"]].map(([v, label]) => (
-              <button key={v} type="button" onClick={() => setForm({ ...form, kind: v })} className={`flex-1 py-2 rounded-full text-xs font-bold ${form.kind === v ? "text-white" : "bg-slate-100 text-slate-600"}`} style={form.kind === v ? { backgroundColor: COLORS.primary } : {}}>{label}</button>
-            ))}
-          </div>
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={form.kind === "point" ? "Point name" : "Drill name"} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          {form.kind === "point" ? (
-            <>
-              <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Display title (shown on the card — defaults to point name)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-              <select value={form.cat} onChange={(e) => setForm({ ...form, cat: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
-                {cats.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <textarea value={form.howTo} onChange={(e) => setForm({ ...form, howTo: e.target.value })} rows={4} placeholder="Principle — the point to land" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-              <textarea value={form.scenario} onChange={(e) => setForm({ ...form, scenario: e.target.value })} rows={3} placeholder="Match scenario — when this happens live" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-              <textarea value={form.cues} onChange={(e) => setForm({ ...form, cues: e.target.value })} rows={3} placeholder="Coaching cues — one per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-            </>
-          ) : (
-          <>
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Drill name" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Display title (shown on the card — defaults to drill name)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <div className="grid grid-cols-2 gap-2">
             {newCat ? (
@@ -3292,13 +2896,9 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
           <textarea value={form.howTo} onChange={(e) => setForm({ ...form, howTo: e.target.value })} rows={3} placeholder="How to run it — instructions" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <textarea value={form.objectives} onChange={(e) => setForm({ ...form, objectives: e.target.value })} rows={2} placeholder="Look for — one goal per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <textarea value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} rows={2} placeholder="Description" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={form.info} onChange={(e) => setForm({ ...form, info: e.target.value })} rows={2} placeholder="Coaching points / how to run it" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <textarea value={form.info} onChange={(e) => setForm({ ...form, info: e.target.value })} rows={2} placeholder="How to run it" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <input value={form.videoUrl} onChange={(e) => setForm({ ...form, videoUrl: e.target.value })} placeholder="Video URL (optional)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-          </>
-          )}
 
-          {form.kind !== "point" && (
-          <>
           {/* Photo carousel uploads */}
           {form.photos.length > 0 && (
             <div className="flex gap-2 overflow-x-auto py-1">
@@ -3337,24 +2937,14 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
           )}
           {uploading && <p className="text-[10px] font-semibold text-slate-400 px-1">Uploading…</p>}
           {boardOpen && <TacticsBoard initial={form.diagramData} onSave={saveBoard} onClose={() => setBoardOpen(false)} />}
-          </>
-          )}
 
           <div className="flex gap-2 pt-1">
             <button onClick={cancel} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button>
-            <button onClick={save} disabled={uploading || !form.name.trim()} className="flex-1 py-2 rounded-full text-xs font-bold text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{editingId ? "Save changes" : (form.kind === "point" ? "Add point" : "Add drill")}</button>
+            <button onClick={save} disabled={uploading || !form.name.trim()} className="flex-1 py-2 rounded-full text-xs font-bold text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{editingId ? "Save changes" : "Add drill"}</button>
           </div>
         </div></div>
       )}
 
-      {/* Kind chips: All / Drills / Coaching points — drills show by default */}
-      <div className="overflow-x-auto px-5">
-        <div className="flex gap-1.5 w-max">
-          {[["all", "All"], ["drill", "Drills"], ["point", "Coaching points"]].map(([v, label]) => (
-            <button key={v} onClick={() => { setKind(v); setTag("All"); }} className={`px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap flex items-center gap-1 ${kind === v ? "" : "bg-white text-slate-600 border border-slate-200"}`} style={kind === v ? { backgroundColor: COLORS.accent, color: COLORS.primary } : {}}>{v === "point" && <Lightbulb className="w-2.5 h-2.5" />}{label}</button>
-          ))}
-        </div>
-      </div>
 
       {/* Category pills */}
       <div className="overflow-x-auto px-5">
@@ -3422,126 +3012,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
         )}
       </div>
 
-      {modal && (modal.kind === "point"
-        ? <PointModal item={modal} onClose={() => setModal(null)} />
-        : <DrillModal item={modal} onClose={() => setModal(null)} />
-      )}
-    </div>
-  );
-};
-
-// Coaching talking-points page — mirrors DrillsPage but for kind: "point" items.
-const CoachingPointsPage = ({ user, drills, addDrill, updateDrill, deleteDrill }) => {
-  const isAdmin = user.role === "admin";
-  const blank = { name: "", title: "", cat: DRILL_CATS[0], howTo: "", scenario: "", cues: "" };
-  const [cat, setCat] = useState(DRILL_CATS[0]);
-  const [adding, setAdding] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState(blank);
-  const [modal, setModal] = useState(null);
-
-  const points = drills.filter((d) => d.kind === "point");
-  // Only show buckets that have at least one point.
-  const cats = useMemo(() => {
-    const set = new Set();
-    points.forEach((d) => d.cat && set.add(d.cat));
-    return DRILL_CATS.filter((c) => set.has(c)).concat([...set].filter((c) => !DRILL_CATS.includes(c)));
-  }, [points]);
-  const filtered = points.filter((d) => d.cat === cat);
-  useEffect(() => { if (cats.length && !cats.includes(cat)) setCat(cats[0]); }, [cats]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const startEdit = (d) => {
-    setEditingId(d.id);
-    setForm({ name: d.name || "", title: d.title || "", cat: d.cat || DRILL_CATS[0], howTo: d.howTo || "", scenario: d.scenario || "", cues: (d.cues || []).join("\n") });
-    setAdding(true);
-  };
-  const cancel = () => { setEditingId(null); setForm(blank); setAdding(false); };
-  const save = async () => {
-    if (!form.name.trim()) return;
-    const data = {
-      name: form.name.trim(),
-      title: form.title.trim(),
-      kind: "point",
-      cat: (form.cat || "").trim() || DRILL_CATS[0],
-      howTo: form.howTo.trim(),
-      scenario: form.scenario.trim(),
-      cues: form.cues.split("\n").map((t) => t.trim()).filter(Boolean),
-    };
-    try {
-      if (editingId) await updateDrill(editingId, data);
-      else await addDrill(data);
-      setCat(data.cat);
-      cancel();
-    } catch (e) { toast("Couldn't save point — " + (e.message || "check Firestore rules.")); }
-  };
-  const del = (id) => deleteDrill(id).catch(() => {});
-
-  return (
-    <div className="pt-1 pb-4 space-y-5">
-      <div className="px-5 flex items-center justify-between gap-2">
-        <h3 className="text-base font-bold text-slate-900">Coaching Points</h3>
-        {isAdmin
-          ? <button onClick={() => (adding ? cancel() : setAdding(true))} className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full text-white flex items-center gap-1" style={{ backgroundColor: COLORS.primary }}><Plus className="w-3 h-3" /> New point</button>
-          : <ReadOnlyHint label="Coach builds the points" />}
-      </div>
-
-      {isAdmin && adding && (
-        <div className="px-5"><div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2">
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Point name" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Display title (shown on the card — defaults to point name)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <select value={form.cat} onChange={(e) => setForm({ ...form, cat: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
-            {DRILL_CATS.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <textarea value={form.howTo} onChange={(e) => setForm({ ...form, howTo: e.target.value })} rows={4} placeholder="Principle — the point to land" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={form.scenario} onChange={(e) => setForm({ ...form, scenario: e.target.value })} rows={3} placeholder="Match scenario — when this happens live" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={form.cues} onChange={(e) => setForm({ ...form, cues: e.target.value })} rows={3} placeholder="Coaching cues — one per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <div className="flex gap-2 pt-1">
-            <button onClick={cancel} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button>
-            <button onClick={save} disabled={!form.name.trim()} className="flex-1 py-2 rounded-full text-xs font-bold text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{editingId ? "Save changes" : "Add point"}</button>
-          </div>
-        </div></div>
-      )}
-
-      {/* Topic pills — only buckets that have at least one point */}
-      <div className="overflow-x-auto px-5">
-        <div className="flex gap-2 w-max">
-          {cats.map((c) => (
-            <button key={c} onClick={() => setCat(c)} className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap ${cat === c ? "text-white" : "bg-white text-slate-600 border border-slate-200"}`} style={cat === c ? { backgroundColor: COLORS.primary } : {}}>{c}</button>
-          ))}
-        </div>
-      </div>
-
-      <div className="px-5">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">{cat}</h3>
-        {filtered.length === 0 ? (
-          <p className="text-sm text-slate-400 italic">{isAdmin ? "No points here yet — add one." : "Nothing here yet."}</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {filtered.map((d) => (
-              <div key={d.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden flex flex-col border-l-4" style={{ borderLeftColor: COLORS.accent }}>
-                <button onClick={() => setModal(d)} className="text-left w-full flex-1 flex flex-col">
-                  <div className="p-3 pt-2.5 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <Lightbulb className="w-3 h-3 flex-shrink-0" style={{ color: COLORS.accent }} />
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">{d.cat}</span>
-                    </div>
-                    <h4 className="font-bold text-sm text-slate-900 leading-tight mt-1 pr-4">{d.title || d.name}</h4>
-                    {d.howTo && <p className="text-xs text-slate-600 leading-snug mt-1.5 line-clamp-3">{d.howTo}</p>}
-                  </div>
-                </button>
-                {isAdmin && (
-                  <div className="absolute top-2.5 right-2.5 flex gap-1.5">
-                    <button onClick={(e) => { e.stopPropagation(); startEdit(d); }} title="Edit" className="text-slate-300 hover:text-slate-600 bg-white/80 rounded-full p-0.5"><Pencil className="w-3.5 h-3.5" /></button>
-                    <button onClick={(e) => { e.stopPropagation(); del(d.id); }} title="Delete" className="text-slate-300 hover:text-red-500 bg-white/80 rounded-full p-0.5"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {modal && <PointModal item={modal} onClose={() => setModal(null)} />}
+      {modal && <DrillModal item={modal} onClose={() => setModal(null)} />}
     </div>
   );
 };
@@ -4317,7 +3788,7 @@ const roundRect = (ctx, x, y, w, h, r) => {
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 };
-const renderLineupBlob = async (title, formation, slots, logoUrl) => {
+const renderLineupBlob = async (title, formation, slots, logoUrl, teamShortName = "") => {
   const [imgs, logoImg] = await Promise.all([
     Promise.all(slots.map((s) => loadCorsImage(s.photoURL))),
     loadCorsImage(logoUrl),
@@ -4357,8 +3828,11 @@ const renderLineupBlob = async (title, formation, slots, logoUrl) => {
   ctx.strokeRect(px(0), py(0), px(1) - px(0), py(1) - py(0));
   ctx.beginPath(); ctx.moveTo(px(0), (pTop + CARD_H) / 2); ctx.lineTo(px(1), (pTop + CARD_H) / 2); ctx.stroke();
   ctx.beginPath(); ctx.arc(CARD_W / 2, (pTop + CARD_H) / 2, 70, 0, Math.PI * 2); ctx.stroke();
-  // watermark — team logo centered on the pitch at 60% opacity, behind the
-  // player tokens so faces stay legible.
+  // watermark — the coach's uploaded logo centered on the pitch at 60%
+  // opacity, behind the player tokens so faces stay legible. With no
+  // uploaded logo, the ACTIVE team's name is the watermark instead of the
+  // old Phoenix Bears mark (the full rebrand is §11; the name comes from
+  // the teams config).
   if (useLogo && logoImg && logoImg.width) {
     ctx.save();
     ctx.globalAlpha = 0.6;
@@ -4366,6 +3840,14 @@ const renderLineupBlob = async (title, formation, slots, logoUrl) => {
     const scale = lw / logoImg.width;
     const lh = logoImg.height * scale;
     ctx.drawImage(logoImg, (CARD_W - lw) / 2, pTop + (pH - lh) / 2, lw, lh);
+    ctx.restore();
+  } else if (teamShortName) {
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 100px system-ui, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(teamShortName, CARD_W / 2, pTop + pH / 2);
     ctx.restore();
   }
   // tokens
@@ -4408,13 +3890,13 @@ const renderLineupBlob = async (title, formation, slots, logoUrl) => {
 };
 
 // Bottom-sheet channel picker → renders the card and posts it.
-const SendLineupSheet = ({ title, formation, slots, logoUrl, chatGroups = [], postLineupImage, onClose }) => {
+const SendLineupSheet = ({ title, formation, slots, logoUrl, teamShortName = "", chatGroups = [], postLineupImage, onClose }) => {
   const [busy, setBusy] = useState("");
   const channels = [{ id: "team", name: "Team" }, ...chatGroups.map((c) => ({ id: c.id, name: c.name }))];
   const send = async (ch) => {
     setBusy(ch.id);
     try {
-      const blob = await renderLineupBlob(title, formation, slots, logoUrl);
+      const blob = await renderLineupBlob(title, formation, slots, logoUrl, teamShortName);
       if (!blob) throw new Error("couldn't render the card");
       await postLineupImage(blob, ch.id, title);
       toast(`Sent to ${ch.name}.`);
@@ -4486,7 +3968,7 @@ const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onUploadPhoto, o
   );
 };
 
-const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup, allUsers = [], invites = [], chatGroups = [], postLineupImage, setPlayerPhoto, lineupLogo = "", setLineupLogo }) => {
+const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup, allUsers = [], invites = [], chatGroups = [], postLineupImage, setPlayerPhoto, lineupLogo = "", setLineupLogo, teamShortName = "" }) => {
   const [draft, setDraft] = useState(null); // null = list view; object = editor
   const [activeSlot, setActiveSlot] = useState(null); // slot id being assigned
   const [sending, setSending] = useState(null); // lineup being sent to chat
@@ -4495,9 +3977,9 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
   const fieldRef = useRef(null);
   const dragRef = useRef({ id: null, moved: false, sx: 0, sy: 0 });
 
-  // The watermark shown on every line-up — the coach's uploaded logo, or the
-  // built-in brand mark until they set one.
-  const logoUrl = lineupLogo || "/brand/logo.png";
+  // The watermark shown on every line-up — the coach's uploaded logo, or
+  // the active team's name until they set one (no Phoenix Bears fallback).
+  const logoUrl = lineupLogo || "";
   const uploadLogo = async (file) => {
     if (!file) return;
     setLogoBusy(true);
@@ -4593,21 +4075,24 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
           <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center"><Plus className="w-5 h-5" /></div>
           <div className="text-left"><div className="font-bold">New line-up</div><div className="text-xs text-white/70">Build a starting XI on the field</div></div>
         </button>
-        {/* Watermark logo — centered on every line-up at 60% */}
+        {/* Watermark — the coach's uploaded logo, or the active team's name
+            until they set one. Centered on every line-up at 60%. */}
         <div className="rounded-2xl bg-white border border-slate-100 shadow-sm p-3 flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
-            <img src={logoUrl} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+            {logoUrl
+              ? <img src={logoUrl} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+              : <span className="text-[11px] font-black px-1 text-center leading-tight" style={{ color: COLORS.primary }}>{teamShortName || "Team"}</span>}
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-sm font-bold text-slate-900">Line-up watermark</div>
-            <div className="text-[11px] text-slate-500 leading-snug">{lineupLogo ? "Your logo, centered on every line-up." : "Using the team logo. Upload your own."}</div>
+            <div className="text-[11px] text-slate-500 leading-snug">{lineupLogo ? "Your logo, centered on every line-up." : `Using ${teamShortName || "your team"} as the watermark. Upload your own logo.`}</div>
           </div>
           <button onClick={() => logoInputRef.current?.click()} disabled={logoBusy} className="text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-full text-white flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>
             {logoBusy ? "…" : lineupLogo ? "Change" : "Upload"}
           </button>
           <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; uploadLogo(f); }} />
         </div>
-        {sending && <SendLineupSheet title={sending.name} formation={sending.formation} slots={sending.slots || []} logoUrl={logoUrl} chatGroups={chatGroups} postLineupImage={postLineupImage} onClose={() => setSending(null)} />}
+        {sending && <SendLineupSheet title={sending.name} formation={sending.formation} slots={sending.slots || []} logoUrl={logoUrl} teamShortName={teamShortName} chatGroups={chatGroups} postLineupImage={postLineupImage} onClose={() => setSending(null)} />}
         <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 pt-1">Saved line-ups</h3>
         {lineups.length === 0 ? (
           <div className="rounded-2xl p-6 border border-dashed border-slate-200 bg-white text-center">
@@ -4658,8 +4143,15 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
         {/* mow stripes */}
         {[0, 2, 4, 6, 8].map((i) => (<div key={i} className="absolute left-0 right-0" style={{ top: `${i * 10}%`, height: "10%", backgroundColor: "rgba(255,255,255,0.04)" }} />))}
         <PitchLines />
-        {/* watermark — centered team logo at 60%, behind the tokens */}
-        <img src={logoUrl} alt="" aria-hidden="true" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none object-contain" style={{ width: "50%", opacity: 0.6 }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+        {/* watermark — uploaded logo, or the active team's name, at 60%,
+            behind the tokens */}
+        {logoUrl ? (
+          <img src={logoUrl} alt="" aria-hidden="true" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none object-contain" style={{ width: "50%", opacity: 0.6 }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+        ) : (
+          <div aria-hidden="true" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center" style={{ width: "85%", opacity: 0.35 }}>
+            <span className="font-black text-white text-center leading-none" style={{ fontSize: 56 }}>{teamShortName}</span>
+          </div>
+        )}
         {draft.slots.map((s) => (
           <div
             key={s.id}
@@ -4694,46 +4186,498 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
           onClose={() => setActiveSlot(null)}
         />
       )}
-      {sending && <SendLineupSheet title={sending.name} formation={sending.formation} slots={sending.slots} logoUrl={logoUrl} chatGroups={chatGroups} postLineupImage={postLineupImage} onClose={() => setSending(null)} />}
+      {sending && <SendLineupSheet title={sending.name} formation={sending.formation} slots={sending.slots} logoUrl={logoUrl} teamShortName={teamShortName} chatGroups={chatGroups} postLineupImage={postLineupImage} onClose={() => setSending(null)} />}
     </div>
   );
 };
 
-// Coach Center — the renamed Practice tab. A landing with two doors: the
-// existing practice planner, and the new game-day line-up builder.
-const CoachCenterPage = ({ practiceProps, gameDayProps, pointsProps }) => {
-  const [view, setView] = useState(null); // null | practice | gameday | points
-  if (view === "practice" || view === "gameday" || view === "points") {
+// Roster & Invites — moved out of the coach Home tab into Coach Tools
+// (§9 Option B, "The Toolbelt"). Same invite system as before: email
+// invites (single + bulk), team-specific invite links, and the roster list
+// with org-admin-only role badges.
+const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks = [], addInviteLink, removeInviteLink, allUsers = [], requestProfileUpdate, activeTeamId }) => {
+  const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email, u.name])), [allUsers]);
+  // Teams this coach can invite/link to: the org admin sees all three, a
+  // team coach sees only their own team(s).
+  const myTeams = useMemo(() => {
+    if (isOrgAdmin) return [...TEAMS];
+    const mine = TEAMS.filter((t) => (user.teamIds || []).includes(t.id));
+    return mine.length ? mine : [getTeam(activeTeamId)];
+  }, [isOrgAdmin, user.teamIds, activeTeamId]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteTeamId, setInviteTeamId] = useState(activeTeamId);
+  const [inviteMsg, setInviteMsg] = useState("");
+  // Invite-link generator state (team-specific links, see addInviteLink).
+  const [linkTeamId, setLinkTeamId] = useState(activeTeamId);
+  const [linkExpiry, setLinkExpiry] = useState("");
+  const [linkMaxUses, setLinkMaxUses] = useState("");
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkMsg, setLinkMsg] = useState("");
+  const [lastLink, setLastLink] = useState(null); // { code, url }
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+
+  const parseEmails = (text) => [
+    ...new Set(
+      text
+        .split(/[\s,;]+/)
+        .map((s) => s.trim().toLowerCase())
+        .filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)),
+    ),
+  ];
+
+  const submitInvite = async () => {
+    setInviteMsg("");
+    try {
+      await addInvite(inviteEmail, inviteTeamId);
+      setInviteMsg(`Added ${inviteEmail.trim().toLowerCase()} to ${getTeam(inviteTeamId).shortName}.`);
+      setInviteEmail("");
+    } catch (e) {
+      setInviteMsg(e.message || "Couldn't add — check rules.");
+    }
+  };
+
+  const submitBulk = async () => {
+    setInviteMsg("");
+    const emails = parseEmails(bulkText);
+    if (!emails.length) {
+      setInviteMsg("No valid emails found — paste one per line or comma-separated.");
+      return;
+    }
+    try {
+      await addInvitesBatch(emails, inviteTeamId);
+      setInviteMsg(`Added ${emails.length} email${emails.length === 1 ? "" : "s"} to ${getTeam(inviteTeamId).shortName}.`);
+      setBulkText("");
+      setBulkOpen(false);
+    } catch (e) {
+      setInviteMsg("Couldn't import — " + (e.message || "check rules."));
+    }
+  };
+
+  // Generate a team-specific invite link. Expiry is a calendar date (the
+  // link stays live through the end of that day); max uses is optional.
+  const submitInviteLink = async () => {
+    setLinkMsg("");
+    setLinkBusy(true);
+    try {
+      const maxUses = linkMaxUses.trim() ? Math.max(1, parseInt(linkMaxUses, 10) || 0) : null;
+      const expiresAt = linkExpiry ? new Date(`${linkExpiry}T23:59:59`) : null;
+      const code = await addInviteLink(linkTeamId, { expiresAt, maxUses });
+      const url = `${window.location.origin}/?invite=${code}`;
+      setLastLink({ code, url });
+      setLinkExpiry("");
+      setLinkMaxUses("");
+      setLinkMsg(`Link created for ${getTeam(linkTeamId).shortName}.`);
+    } catch (e) {
+      setLinkMsg(e.message || "Couldn't create the link — check rules.");
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
+  const copyLink = async (url) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkMsg("Copied — share it with the player.");
+    } catch {
+      setLinkMsg("Copy didn't work — long-press the link to copy it manually.");
+    }
+  };
+
+  // Invite-link status + expiry label, precomputed per link. Done here (not
+  // in the JSX) because the Timestamp's .toDate() is an impure call the
+  // compiler flags during render — expiry comes from the .seconds field.
+  const sortedLinks = useMemo(() => {
+    const nowMs = new Date().getTime();
+    return [...(inviteLinks || [])]
+      .map((l) => {
+        const uses = l.uses || 0;
+        let expMs = l.expiresAt == null
+          ? null
+          : typeof l.expiresAt.seconds === "number"
+            ? l.expiresAt.seconds * 1000
+            : new Date(l.expiresAt).getTime();
+        if (expMs != null && Number.isNaN(expMs)) expMs = null;
+        const status = (l.maxUses != null && uses >= l.maxUses)
+          ? "Used up"
+          : (expMs != null && expMs <= nowMs) ? "Expired" : "Active";
+        const expiryLabel = expMs == null
+          ? "Never"
+          : new Date(expMs).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        return { ...l, _status: status, _expiryLabel: expiryLabel };
+      })
+      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  }, [inviteLinks]);
+
+  // Pending invites = roster emails nobody has signed in with yet.
+  const signedEmails = useMemo(() => new Set((allUsers || []).map((u) => (u.email || "").toLowerCase())), [allUsers]);
+  const pendingCount = (invites || []).filter((inv) => inv.email && !signedEmails.has(inv.email.toLowerCase())).length;
+
+  return (
+    <div className="pt-4 pb-6 px-5 space-y-4">
+      <div>
+        <h3 className="text-base font-bold text-slate-900">Roster &amp; Invites</h3>
+        <p className="text-xs text-slate-500 mt-0.5">{invites?.length || 0} on the roster{pendingCount > 0 ? ` · ${pendingCount} invite${pendingCount === 1 ? "" : "s"} still pending` : ""}</p>
+      </div>
+      {requestProfileUpdate && (
+        <button onClick={async () => { try { await requestProfileUpdate(); toast("Sent — everyone will be asked to add their name."); } catch (e) { toast("Couldn't send — " + (e.message || "")); } }} className="w-full py-2 rounded-full text-[11px] font-bold uppercase tracking-wider border border-slate-200 bg-white text-slate-700 flex items-center justify-center gap-1.5">
+          <Bell className="w-3.5 h-3.5" /> Ask everyone to update their info
+        </button>
+      )}
+      <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 space-y-2">
+        {myTeams.length > 1 && (
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">Invite to team</span>
+            <select
+              value={inviteTeamId}
+              onChange={(e) => setInviteTeamId(e.target.value)}
+              className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              {myTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+        )}
+        {!bulkOpen ? (
+          <>
+            <input
+              value={inviteEmail}
+              onChange={(e) => { setInviteEmail(e.target.value); setInviteMsg(""); }}
+              onKeyDown={(e) => e.key === "Enter" && submitInvite()}
+              type="email"
+              placeholder="player@example.com"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200"
+            />
+            <div className="flex gap-2">
+              <button onClick={submitInvite} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white flex items-center justify-center gap-1.5" style={{ backgroundColor: COLORS.primary }}>
+                <Plus className="w-3.5 h-3.5" /> Add
+              </button>
+              <button onClick={() => { setBulkOpen(true); setInviteMsg(""); }} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider border border-slate-200 text-slate-700 bg-white">
+                Paste many
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <textarea
+              value={bulkText}
+              onChange={(e) => { setBulkText(e.target.value); setInviteMsg(""); }}
+              rows={6}
+              placeholder={"Paste emails — one per line, or comma-separated.\n\nalex@example.com\nmaya@example.com\ndevin@example.com"}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-slate-200"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => { setBulkOpen(false); setBulkText(""); setInviteMsg(""); }} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button>
+              <button onClick={submitBulk} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white" style={{ backgroundColor: COLORS.primary }}>
+                Add all
+              </button>
+            </div>
+          </>
+        )}
+        {inviteMsg && (
+          <p className="text-[10px] font-semibold px-1" style={{ color: inviteMsg.startsWith("Added") ? COLORS.success : "#dc2626" }}>{inviteMsg}</p>
+        )}
+        <p className="text-[10px] text-slate-400 leading-relaxed px-1">
+          Players need their email on the roster before they can sign in. Then share the app URL — they pick "Email me a sign-in link" or "Continue with Google" and they're in.
+        </p>
+      </div>
+
+      {/* Invite links — share a link instead of adding emails. Anyone who
+          signs up with it joins THAT team (useAuth redeems ?invite=CODE
+          at first sign-in). Optional expiry date + max uses. */}
+      <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 space-y-2">
+        <div className="flex items-center gap-2 px-1">
+          <LinkIcon className="w-3.5 h-3.5 text-slate-400" />
+          <h4 className="text-xs font-bold text-slate-900">Invite links</h4>
+        </div>
+        <p className="text-[10px] text-slate-400 leading-relaxed px-1">
+          Share a link instead of adding emails — anyone who signs up with it joins that team.
+        </p>
+        {myTeams.length > 1 && (
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">Link for team</span>
+            <select
+              value={linkTeamId}
+              onChange={(e) => setLinkTeamId(e.target.value)}
+              className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              {myTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+        )}
+        <div className="flex gap-2">
+          <label className="flex-1 min-w-0">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">Expires (optional)</span>
+            <input
+              type="date"
+              value={linkExpiry}
+              onChange={(e) => setLinkExpiry(e.target.value)}
+              className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+            />
+          </label>
+          <label className="w-24 flex-shrink-0">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">Max uses</span>
+            <input
+              type="number"
+              min="1"
+              value={linkMaxUses}
+              onChange={(e) => setLinkMaxUses(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="∞"
+              className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+            />
+          </label>
+        </div>
+        <button onClick={submitInviteLink} disabled={linkBusy} className="w-full py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white flex items-center justify-center gap-1.5 disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>
+          <LinkIcon className="w-3.5 h-3.5" /> {linkBusy ? "Creating…" : "Create link"}
+        </button>
+        {lastLink && (
+          <div className="flex gap-2 items-center">
+            <input readOnly value={lastLink.url} onFocus={(e) => e.target.select()} className="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-[11px] font-mono text-slate-700 bg-slate-50 focus:outline-none" />
+            <button onClick={() => copyLink(lastLink.url)} className="py-2 px-3 rounded-full text-[11px] font-bold uppercase tracking-wider text-white flex items-center gap-1 flex-shrink-0" style={{ backgroundColor: COLORS.primary }}>
+              <Copy className="w-3.5 h-3.5" /> Copy
+            </button>
+          </div>
+        )}
+        {linkMsg && (
+          <p className="text-[10px] font-semibold px-1" style={{ color: linkMsg.startsWith("Link created") || linkMsg.startsWith("Copied") ? COLORS.success : "#dc2626" }}>{linkMsg}</p>
+        )}
+        {sortedLinks.length > 0 && (
+          <ul className="divide-y divide-slate-100">
+            {sortedLinks.map((l) => {
+              const status = l._status;
+              return (
+                <li key={l.id} className="flex items-center gap-2 py-2">
+                  <span className="flex-1 min-w-0 truncate">
+                    <span className="text-xs font-semibold text-slate-800">{getTeam(l.teamId).shortName}</span>
+                    <span className="text-[10px] text-slate-400 ml-1.5">{l.uses || 0}{l.maxUses != null ? `/${l.maxUses}` : ""} uses · expires {l._expiryLabel}</span>
+                  </span>
+                  <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={status === "Active" ? { backgroundColor: COLORS.success + "1A", color: COLORS.success } : { backgroundColor: "#fee2e2", color: "#dc2626" }}>{status}</span>
+                  <button onClick={() => removeInviteLink(l.id).catch(() => {})} title="Revoke link" aria-label="Revoke link" className="text-slate-300 hover:text-red-500 flex-shrink-0">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {(!invites || invites.length === 0) ? (
+        <p className="text-sm text-slate-400 italic text-center py-3">No players on the roster yet.</p>
+      ) : (
+        <ul className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          {invites.map((inv, i) => {
+            const isCoach = inv.role === "admin";
+            const isSelf = inv.email === user.email;
+            const toggleRole = async () => {
+              const next = isCoach ? "player" : "admin";
+              try {
+                await setInviteRole(inv.email, next);
+                setInviteMsg(`${inv.email} is now ${next === "admin" ? "a coach" : "a player"}.`);
+              } catch (e) {
+                setInviteMsg(e.message || "Couldn't change role.");
+              }
+            };
+            return (
+              <li key={inv.id} className={`flex items-center gap-2 px-3 py-2.5 ${i < invites.length - 1 ? "border-b border-slate-100" : ""}`}>
+                <span className="truncate flex-1">
+                  {nameByEmail[inv.email]
+                    ? <><span className="text-xs font-semibold text-slate-800">{nameByEmail[inv.email]}</span><span className="text-[10px] text-slate-400 ml-1.5">{inv.email}</span></>
+                    : <span className="text-xs font-mono text-slate-700">{inv.email}</span>}
+                </span>
+                {/* Role is org-admin-only (decision 2026-11-08): a team
+                    coach sees the badge but can't promote/demote anyone.
+                    setInviteRole + the rules enforce it server-side too. */}
+                {isOrgAdmin ? (
+                  <button
+                    onClick={toggleRole}
+                    disabled={isSelf}
+                    title={isSelf ? "You can't change your own role here." : isCoach ? "Make player" : "Make coach"}
+                    className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                    style={isCoach
+                      ? { backgroundColor: COLORS.primary, color: "white" }
+                      : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
+                  >
+                    {isCoach ? "Coach" : "Player"}
+                  </button>
+                ) : (
+                  <span
+                    title={isCoach ? "Coach — only the program admin can change roles." : "Player — only the program admin can change roles."}
+                    className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0"
+                    style={isCoach
+                      ? { backgroundColor: COLORS.primary, color: "white" }
+                      : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
+                  >
+                    {isCoach ? "Coach" : "Player"}
+                  </span>
+                )}
+                <button onClick={() => removeInvite(inv.id)} disabled={isSelf} title={isSelf ? "You can't remove yourself." : `Remove ${inv.email}`} aria-label={`Remove ${inv.email}`} className="text-slate-300 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+};
+
+// Announcements — management moved out of the coach Home tab into Coach
+// Tools (§9 Option B). Home keeps a read-only news list; posting, editing,
+// pinning and deleting live here.
+const AnnouncementsPage = ({ announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement }) => {
+  const [adding, setAdding] = useState(false);
+  const [editingAnnouncementId, setEditingAnnouncementId] = useState(null);
+  const [form, setForm] = useState({ title: "", body: "" });
+  const add = async () => {
+    if (!form.title.trim()) return;
+    try {
+      if (editingAnnouncementId) {
+        await updateAnnouncement(editingAnnouncementId, { title: form.title, body: form.body });
+      } else {
+        await addAnnouncement(form.title, form.body);
+      }
+      setForm({ title: "", body: "" });
+      setEditingAnnouncementId(null);
+      setAdding(false);
+    } catch (e) {
+      toast("Couldn't save — " + (e.message || "check your Firestore rules."));
+    }
+  };
+  const startEdit = (a) => {
+    setEditingAnnouncementId(a.id);
+    setForm({ title: a.title || "", body: a.body || "" });
+    setAdding(true);
+  };
+  const cancelEdit = () => {
+    setEditingAnnouncementId(null);
+    setForm({ title: "", body: "" });
+    setAdding(false);
+  };
+  const togglePin = (id, pinned) => togglePinAnnouncement(id, pinned).catch(() => {});
+  const del = (id) => deleteAnnouncement(id).catch(() => {});
+  const sorted = [...announcements].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
+  return (
+    <div className="pt-4 pb-6 px-5 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-base font-bold text-slate-900">Announcements</h3>
+          <p className="text-xs text-slate-500 mt-0.5">{announcements.length} post{announcements.length === 1 ? "" : "s"} · pinned first</p>
+        </div>
+        <button onClick={() => { setAdding(!adding); }} className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full text-white flex items-center gap-1 flex-shrink-0" style={{ backgroundColor: COLORS.primary }}><Plus className="w-3 h-3" /> Post</button>
+      </div>
+      {adding && (
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2">
+          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Announcement title" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="Details…" rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <div className="flex gap-2"><button onClick={cancelEdit} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button><button onClick={add} className="flex-1 py-2 rounded-full text-xs font-bold text-white" style={{ backgroundColor: COLORS.primary }}>{editingAnnouncementId ? "Save Changes" : "Post to Team"}</button></div>
+        </div>
+      )}
+      <ul className="space-y-2.5">
+        {sorted.map((a) => (
+          <li key={a.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">{a.pinned && <Pin className="w-3 h-3 flex-shrink-0" style={{ color: COLORS.accent }} />}<h4 className="font-semibold text-slate-900 text-sm">{a.title}</h4></div>
+                <p className="text-xs text-slate-500 leading-snug">{a.body}</p><span className="text-[10px] text-slate-400 font-medium">{formatAgo(a.createdAt)}</span>
+              </div>
+              <div className="flex flex-col gap-1.5"><button onClick={() => togglePin(a.id, a.pinned)} title="Pin" className="text-slate-300 hover:text-orange-500"><Pin className="w-4 h-4" /></button><button onClick={() => startEdit(a)} title="Edit" className="text-slate-300 hover:text-slate-600"><Pencil className="w-4 h-4" /></button><button onClick={() => del(a.id)} title="Delete" className="text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button></div>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {sorted.length === 0 && <p className="text-sm text-slate-400 italic text-center py-4">No announcements yet — post the first one.</p>}
+    </div>
+  );
+};
+
+// Documents — moved out of the coach Home tab into Coach Tools (§9
+// Option B). Same upload + sign flow as Home, grouped into folders by file
+// type. The org admin sees one team at a time via the team switcher, so
+// folders stay per-team.
+const DocumentsPage = ({ user, documents, rosterCount = 0, onUpload, onDelete, onSign }) => {
+  return (
+    <div className="pt-4 pb-6 px-5">
+      <div className="mb-3">
+        <h3 className="text-base font-bold text-slate-900">Documents</h3>
+        <p className="text-xs text-slate-500 mt-0.5">Handbooks, itineraries &amp; forms — {documents.length} file{documents.length === 1 ? "" : "s"}</p>
+      </div>
+      <DocumentsSection user={user} documents={documents} isAdmin rosterCount={rosterCount} onUpload={onUpload} onDelete={onDelete} onSign={onSign} groupByType hideHeader />
+    </div>
+  );
+};
+
+// Coach Center — the Coach tab. Option B ("The Toolbelt", §9): six simple
+// tiles, one per area — tap a tile, you're in that area. Everything here is
+// per-team (Fix 1 model); the org admin switches teams with the one team
+// switcher in the header, a single-team coach sees only theirs.
+const CoachCenterPage = ({ practiceProps, gameDayProps, rosterProps, calendarProps, documentsProps, announcementsProps }) => {
+  const [view, setView] = useState(null); // null | practice | gameday | roster | calendar | documents | announcements
+  const practices = practiceProps?.practices || [];
+  const programs = practiceProps?.programs || [];
+  const lineups = gameDayProps?.lineups || [];
+  const invites = rosterProps?.invites || [];
+  const allUsers = rosterProps?.allUsers || [];
+  const events = calendarProps?.events || [];
+  const documents = documentsProps?.documents || [];
+  const announcements = announcementsProps?.announcements || [];
+  const todayStr = fmtLocalDate(new Date());
+  const upcomingCount = events.filter((e) => (e.date || "") >= todayStr).length;
+  // Pending invites = roster emails nobody has signed in with yet. The
+  // roster is small, so this is computed inline (no memo needed).
+  const signedEmails = new Set(allUsers.map((u) => (u.email || "").toLowerCase()));
+  const pendingCount = invites.filter((inv) => inv.email && !signedEmails.has(inv.email.toLowerCase())).length;
+
+  const tiles = [
+    { id: "practice", label: "Practice", sub: "Drill library, sessions & programs", icon: ClipboardList, badge: `${practices.length} session${practices.length === 1 ? "" : "s"} · ${programs.length} program${programs.length === 1 ? "" : "s"}` },
+    { id: "gameday", label: "Game Day", sub: "Build & share your starting line-up", icon: Goal, badge: `${lineups.length} saved line-up${lineups.length === 1 ? "" : "s"}`, highlight: true },
+    { id: "roster", label: "Roster & Invites", sub: "Players, coaches & invite links", icon: Users, badge: `${invites.length} on roster`, alert: pendingCount > 0 ? `${pendingCount} pending` : null },
+    { id: "calendar", label: "Calendar", sub: "Practices, games & events", icon: CalendarIcon, badge: `${upcomingCount} upcoming` },
+    { id: "documents", label: "Documents", sub: "Handbooks, itineraries & forms", icon: FileText, badge: `${documents.length} file${documents.length === 1 ? "" : "s"}` },
+    { id: "announcements", label: "Announcements", sub: "News for the team", icon: Megaphone, badge: `${announcements.length} post${announcements.length === 1 ? "" : "s"}` },
+  ];
+
+  if (view) {
     return (
       <div>
         <div className="px-5 pt-4 pb-1">
           <button onClick={() => setView(null)} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> Coach Center</button>
         </div>
-        {view === "practice" ? <PracticePage {...practiceProps} /> : view === "gameday" ? <GameDayPage {...gameDayProps} /> : <CoachingPointsPage {...pointsProps} />}
+        {view === "practice" && <PracticePage {...practiceProps} />}
+        {view === "gameday" && <GameDayPage {...gameDayProps} />}
+        {view === "roster" && <RosterInvitesPage {...rosterProps} />}
+        {view === "calendar" && <CalendarPage {...calendarProps} />}
+        {view === "documents" && <DocumentsPage {...documentsProps} />}
+        {view === "announcements" && <AnnouncementsPage {...announcementsProps} />}
       </div>
     );
   }
   return (
-    <div className="pt-5 pb-6 px-5 space-y-3">
-      <button onClick={() => setView("practice")} className="w-full rounded-2xl p-5 bg-white border border-slate-100 shadow-sm flex items-center gap-4 text-left">
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft }}><ClipboardList className="w-6 h-6" style={{ color: COLORS.accent }} /></div>
-        <div className="flex-1"><div className="font-bold text-slate-900">Practice</div><div className="text-xs text-slate-500 mt-0.5">Drill library, sessions & programs</div></div>
-        <ChevronRight className="w-5 h-5 text-slate-300" />
-      </button>
-      <button onClick={() => setView("gameday")} className="w-full rounded-2xl p-5 shadow-sm flex items-center gap-4 text-left text-white" style={{ backgroundColor: COLORS.primary }}>
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 bg-white/15"><Goal className="w-6 h-6" style={{ color: COLORS.accent }} /></div>
-        <div className="flex-1"><div className="font-bold">Game Day</div><div className="text-xs text-white/70 mt-0.5">Build & share your starting line-up</div></div>
-        <ChevronRight className="w-5 h-5 text-white/50" />
-      </button>
-      <button onClick={() => setView("points")} className="w-full rounded-2xl p-5 bg-white border border-slate-100 shadow-sm flex items-center gap-4 text-left">
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft }}><Lightbulb className="w-6 h-6" style={{ color: COLORS.accent }} /></div>
-        <div className="flex-1"><div className="font-bold text-slate-900">Coaching Points</div><div className="text-xs text-slate-500 mt-0.5">Principles, scenarios & cues</div></div>
-        <ChevronRight className="w-5 h-5 text-slate-300" />
-      </button>
+    <div className="pt-5 pb-6 px-5">
+      <div className="grid grid-cols-2 gap-2.5">
+        {tiles.map((t) => {
+          const Icon = t.icon;
+          return (
+            <button key={t.id} onClick={() => setView(t.id)} className={`rounded-2xl p-4 shadow-sm flex flex-col items-start gap-2.5 text-left ${t.highlight ? "text-white" : "bg-white border border-slate-100"}`} style={t.highlight ? { backgroundColor: COLORS.primary } : {}}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${t.highlight ? "bg-white/15" : ""}`} style={t.highlight ? {} : { backgroundColor: COLORS.accentSoft }}>
+                <Icon className="w-5 h-5" style={{ color: COLORS.accent }} />
+              </div>
+              <div className="min-w-0">
+                <div className={`font-bold text-sm leading-tight ${t.highlight ? "" : "text-slate-900"}`}>{t.label}</div>
+                <div className={`text-[11px] leading-snug mt-0.5 ${t.highlight ? "text-white/70" : "text-slate-500"}`}>{t.sub}</div>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-auto">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.highlight ? "bg-white/15 text-white" : "bg-slate-100 text-slate-600"}`}>{t.badge}</span>
+                {t.alert && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">{t.alert}</span>}
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 };
-
 const DEFAULT_NUTRITION_CATEGORIES = ["Breakfast", "Lunch", "Dinner", "Snacks", "Pre-Game", "Post-Game"];
 
 // Default a freshly logged item to whichever standard meal slot the current
@@ -8928,8 +8872,11 @@ export default function TeamHubRolesApp() {
           {activeTab === "practice" && effUser.role === "admin" && (
             <CoachCenterPage
               practiceProps={{ user: effUser, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events }}
-              gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, setPlayerPhoto, lineupLogo: lineupLogo?.url || "", setLineupLogo }}
-              pointsProps={{ user: effUser, drills, addDrill, updateDrill, deleteDrill }}
+              gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, setPlayerPhoto, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId) }}
+              rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId }}
+              calendarProps={{ user: effUser, events, practices, teamWorkouts, personalEvents, addEvent, updateEvent, addPersonalEvent, updatePersonalEvent, deleteEvent, deletePersonalEvent, importEvents, groups: groupsList, addGroup, updateGroupMembers, deleteGroup, invites, allUsers, chatGroups }}
+              documentsProps={{ user: effUser, documents, rosterCount: invites.filter((i) => i.role !== "admin").length, onUpload: addDocument, onDelete: deleteDocument, onSign: signDocument }}
+              announcementsProps={{ announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement }}
             />
           )}
           {activeTab === "calendar" && <CalendarPage user={effUser} events={events} practices={practices} teamWorkouts={teamWorkouts} personalEvents={personalEvents} addEvent={addEvent} updateEvent={updateEvent} addPersonalEvent={addPersonalEvent} updatePersonalEvent={updatePersonalEvent} deleteEvent={deleteEvent} deletePersonalEvent={deletePersonalEvent} importEvents={importEvents} groups={groupsList} addGroup={addGroup} updateGroupMembers={updateGroupMembers} deleteGroup={deleteGroup} invites={invites} allUsers={allUsers} chatGroups={chatGroups} />}
