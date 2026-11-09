@@ -1,0 +1,1 @@
+Finally, Settings. People and Roles is where the org admin promotes or demotes coaches and assigns them to teams. And if you coach more than one team, the switcher at the top lets you jump between JVB, JVA, and Varsity.

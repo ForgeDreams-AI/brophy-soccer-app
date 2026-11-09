@@ -1,0 +1,8 @@
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/sections/coach-s1-48k.wav'
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/sections/coach-s2-48k.wav'
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/sections/coach-s3-48k.wav'
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/sections/coach-s4-48k.wav'
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/sections/coach-s5-48k.wav'
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/sections/coach-s6-48k.wav'
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/sections/coach-s7-48k.wav'
+file '/home/hatch/workspace/brophy-soccer-app/videos/walkthrough/sections/coach-s8-48k.wav'
