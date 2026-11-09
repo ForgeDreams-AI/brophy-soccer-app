@@ -6,7 +6,7 @@ import {
   Link as LinkIcon, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Wind, Activity, Dumbbell, Snowflake, StretchHorizontal, FileText,
   Image as ImageIcon, Mail, ArrowRight, Layers, Reply, BarChart3, ScanLine, Camera,
-  Bell, BellOff, Pencil, Copy,
+  Bell, BellOff, Pencil, Copy, Download,
   Users, Tag, Target, Footprints, Repeat, Flag, Zap, ImagePlus, Goal, Hash, Eye,
   ClipboardList, ExternalLink, Star, Shuffle, CornerDownRight, Crosshair, Swords, LayoutGrid, Lightbulb, SquareDashed,
 } from "lucide-react";
@@ -80,7 +80,7 @@ import QuoteOfDay from "./components/QuoteOfDay";
      lib/     — pure helpers + integrations (lifting engine, usda, exercises,
                 exerciseSearch, openfoodfacts, notifications, toast)
      hooks/   — React data hooks (useAuth, useCollection)
-     data/    — seed content (recipeSeed = 120 recipes, liftSeed = 20 lifts)
+     data/    — seed content (recipeSeed = 120 recipes, liftSeed = prehab starter set: bands-only hips / groin / ankles)
 
    SECTION MAP (grep the marker to jump):
      AUTH + TIME HELPERS ....... login/error + date utilities
@@ -6891,9 +6891,9 @@ const ExerciseLibrary = ({ items, loading, err, onPick, picker, myWorkouts = [],
     setSeeding(true);
     try {
       const { added, skipped } = await seedLifts();
-      toast(added ? `Added ${added} starter lift${added === 1 ? "" : "s"}${skipped ? ` · ${skipped} already existed` : ""}.` : "All starter lifts are already in your library.");
+      toast(added ? `Added ${added} prehab starter exercise${added === 1 ? "" : "s"}${skipped ? ` · ${skipped} already existed` : ""}.` : "All prehab starter exercises are already in your library.");
     } catch (e) {
-      toast("Couldn't add starter lifts — " + (e.message || "check Firestore rules."));
+      toast("Couldn't add prehab starter exercises — " + (e.message || "check Firestore rules."));
     } finally {
       setSeeding(false);
     }
@@ -6961,7 +6961,7 @@ const ExerciseLibrary = ({ items, loading, err, onPick, picker, myWorkouts = [],
         <div className="flex gap-2">
           <button onClick={() => setFormItem({})} className="flex-1 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white flex items-center justify-center gap-1.5" style={{ backgroundColor: COLORS.primary }}><Plus className="w-3.5 h-3.5" /> New exercise</button>
           {seedLifts && (
-            <button onClick={runSeedLifts} disabled={seeding} title="Add 20 coach-ready starter lifts" className="py-2.5 px-3 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border-2 bg-white disabled:opacity-50" style={{ borderColor: COLORS.primary, color: COLORS.primary }}><Dumbbell className="w-3.5 h-3.5" /> {seeding ? "Adding…" : "Starter lifts"}</button>
+            <button onClick={runSeedLifts} disabled={seeding} title="Add the prehab starter set — bands only, hips / groin / ankles" className="py-2.5 px-3 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border-2 bg-white disabled:opacity-50" style={{ borderColor: COLORS.primary, color: COLORS.primary }}><Dumbbell className="w-3.5 h-3.5" /> {seeding ? "Adding…" : "Prehab starter"}</button>
           )}
         </div>
       )}
@@ -7165,7 +7165,7 @@ const WorkoutsView = ({ workouts, canEdit, add, update, del, readOnlyLabel, lib,
               <Plus className="w-3.5 h-3.5" /> New workout
             </button>
             {seedWorkouts && (
-              <button onClick={runSeedWorkouts} disabled={seeding} title="Add 20 ready-made workouts grouped by focus area" className="py-2.5 px-3 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border-2 bg-white disabled:opacity-50" style={{ borderColor: COLORS.primary, color: COLORS.primary }}>
+              <button onClick={runSeedWorkouts} disabled={seeding} title="Add the prehab starter routines — pre-practice + at home" className="py-2.5 px-3 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border-2 bg-white disabled:opacity-50" style={{ borderColor: COLORS.primary, color: COLORS.primary }}>
                 <ClipboardList className="w-3.5 h-3.5" /> {seeding ? "Adding…" : "Starter set"}
               </button>
             )}
@@ -7176,7 +7176,7 @@ const WorkoutsView = ({ workouts, canEdit, add, update, del, readOnlyLabel, lib,
       )}
 
       {workouts.length === 0 ? (
-        <p className="text-sm text-slate-400 italic text-center py-6">No workouts yet.{canEdit && seedWorkouts ? " Tap “Starter set” for 20 ready-made sessions." : ""}</p>
+        <p className="text-sm text-slate-400 italic text-center py-6">No workouts yet.{canEdit && seedWorkouts ? " Tap “Starter set” for the prehab routines." : ""}</p>
       ) : grouped ? (
         <div className="space-y-4">
           {grouped.map(({ area, items }) => (
@@ -7201,6 +7201,42 @@ const WorkoutsView = ({ workouts, canEdit, add, update, del, readOnlyLabel, lib,
       )}
     </div>
   );
+};
+
+// Download a workout as a clean standalone file the player keeps for
+// themselves — a self-contained HTML page they can open, print, or save.
+// It is theirs to keep; nothing is shared back to the team.
+const downloadWorkoutFile = (workout) => {
+  const esc = (s) =>
+    String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const rows = (workout.exercises || []).map((ex, i) => {
+    const rx = [ex.sets ? `${ex.sets} sets` : "", ex.reps ? `× ${ex.reps}` : ""].filter(Boolean).join(" ");
+    const load = ex.pct ? ` @ ${ex.pct}%` : ex.weight ? ` @ ${ex.weight}` : "";
+    const notes = [ex.rpe ? `RPE ${ex.rpe}` : "", ex.tempo || "", ex.notes || ""].filter(Boolean).join(" · ");
+    return `<tr><td>${i + 1}</td><td><strong>${esc(ex.name)}</strong>${notes ? `<div class="notes">${esc(notes)}</div>` : ""}</td><td>${esc(rx + load)}</td></tr>`;
+  }).join("");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(workout.name || "My Program")} — Brophy Soccer</title><style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#0f172a;max-width:640px;margin:0 auto;padding:24px 20px;line-height:1.5}
+h1{font-size:22px;margin:0 0 4px}.sub{color:#64748b;font-size:13px;margin-bottom:20px}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#64748b}
+td:first-child{width:28px;color:#94a3b8}.notes{font-size:12px;color:#64748b;margin-top:2px}
+footer{margin-top:24px;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;padding-top:12px}
+@media print{body{padding:0}}
+</style></head><body>
+<h1>${esc(workout.name || "My Program")}</h1>
+<div class="sub">Brophy Soccer · My program · ${esc(date)}</div>
+<table><thead><tr><th>#</th><th>Exercise</th><th>Sets × Reps</th></tr></thead><tbody>${rows || `<tr><td colspan="3">No exercises yet.</td></tr>`}</tbody></table>
+<footer>In-season rules: bands only for prehab · never train to failure · technique before load · stop if pain is over 3/10. School lifting (2×/week) is separate from this prehab routine.</footer>
+</body></html>`;
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const slug = (workout.name || "my-program").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "my-program";
+  a.href = url; a.download = `brophy-${slug}.html`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
 const WorkoutDetail = ({ workout, canEdit, lib, onSave, onDelete, onDuplicate, onBack }) => {
@@ -7367,6 +7403,12 @@ const WorkoutDetail = ({ workout, canEdit, lib, onSave, onDelete, onDuplicate, o
 
       {dirty && canEdit && <p className="text-[10px] text-slate-400 text-center">Saving…</p>}
 
+      {exercises.length > 0 && (
+        <button onClick={() => downloadWorkoutFile({ name, exercises })} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200 text-slate-700 bg-white">
+          <Download className="w-3.5 h-3.5" /> Download a copy to keep
+        </button>
+      )}
+
       {picker && (
         <ExercisePicker items={lib.items} loading={lib.loading} err={lib.err} onPick={addEx} onClose={() => setPicker(false)} />
       )}
@@ -7425,6 +7467,7 @@ const GymPage = ({ user, myWorkouts, addMyWorkout, updateMyWorkout, deleteMyWork
             <button key={k} onClick={() => setView(k)} className={`flex-1 text-[11px] font-semibold py-2 rounded-full ${view === k ? "text-white" : "text-slate-500"}`} style={view === k ? { backgroundColor: COLORS.primary } : {}}>{lbl}</button>
           ))}
         </div>
+        <p className="text-[11px] leading-snug text-slate-500 mt-2 px-1">Pre-Practice Prehab — bands only, ~12 min before every practice and at home. Your school lifting (2×/week) is separate.</p>
       </div>
 
       {view === "library" && <ExerciseLibrary items={mergedLib.items} loading={mergedLib.loading} err={mergedLib.err} myWorkouts={myWorkouts} addMyWorkout={addMyWorkout} updateMyWorkout={updateMyWorkout} canEdit={isAdmin} uid={user.uid} addCustomExercise={addCustomExercise} updateCustomExercise={updateCustomExercise} deleteCustomExercise={deleteCustomExercise} seedLifts={seedLifts} seedTeamWorkouts={seedTeamWorkouts} />}
