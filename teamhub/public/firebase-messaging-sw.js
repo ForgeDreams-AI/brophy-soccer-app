@@ -1,17 +1,19 @@
 /* eslint-disable no-undef */
 // Service worker for Firebase Cloud Messaging — handles background pushes
 // when the app tab is closed or unfocused.
+// NOTE: the config below must match src/firebase.js (Brophy project).
+// It was still pointing at the old Phoenix College project until §11.
 
 importScripts("https://www.gstatic.com/firebasejs/12.14.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/12.14.0/firebase-messaging-compat.js");
 
 firebase.initializeApp({
-  apiKey: "AIzaSyCInEIJ0wl589Zy8kiJeuH1l9y3uR2ItOY",
-  authDomain: "phoenix-mens-soccer.firebaseapp.com",
-  projectId: "phoenix-mens-soccer",
-  storageBucket: "phoenix-mens-soccer.firebasestorage.app",
-  messagingSenderId: "127145444694",
-  appId: "1:127145444694:web:6439ca19555d9478eb82f7",
+  apiKey: "AIzaSyCsKiTGtjJmh9tCHCPQ82oUFLXnUcpUy6Q",
+  authDomain: "brophy-soccer-app.firebaseapp.com",
+  projectId: "brophy-soccer-app",
+  storageBucket: "brophy-soccer-app.firebasestorage.app",
+  messagingSenderId: "134702834848",
+  appId: "1:134702834848:web:dc2c53a34cc542633995c5",
 });
 
 const messaging = firebase.messaging();
@@ -19,7 +21,7 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   const notif = payload.notification || {};
   const data = payload.data || {};
-  self.registration.showNotification(notif.title || "Phoenix Bears", {
+  self.registration.showNotification(notif.title || "Brophy Soccer", {
     body: notif.body || "",
     icon: "/brand/logo.png",
     badge: "/brand/logo.png",

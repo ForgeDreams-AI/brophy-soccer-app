@@ -3,7 +3,7 @@ import { RELEASES, APP_VERSION } from "../data/whatsNew";
 
 // Thin bar shown at the very top of the app when a newer build is live. Tapping
 // Refresh reloads the tab, which fetches the new HTML + assets.
-export function UpdateBanner({ onReload, color = "#002E5D" }) {
+export function UpdateBanner({ onReload, color = "#980000" }) {
   return (
     <div className="w-full flex items-center gap-2 px-4 py-2 text-white text-xs font-semibold" style={{ backgroundColor: color }} role="status">
       <RefreshCw className="w-3.5 h-3.5 flex-shrink-0" />
@@ -14,7 +14,7 @@ export function UpdateBanner({ onReload, color = "#002E5D" }) {
 }
 
 // "What's New" screen — renders the changelog entries from data/whatsNew.js.
-export function WhatsNewModal({ onClose, accent = "#002E5D", soft = "#EEF2FF" }) {
+export function WhatsNewModal({ onClose, accent = "#980000", soft = "#FBECEC" }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-3xl w-full max-w-md max-h-[85vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>

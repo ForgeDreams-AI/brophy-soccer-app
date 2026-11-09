@@ -74,7 +74,7 @@ import { ARROW_LEGEND, wavyPath } from "./components/boardData";
 import QuoteOfDay from "./components/QuoteOfDay";
 
 /* ══════════════════════════════════════════════════════════════════════════
-   TeamHubRoles — the whole Phoenix app in one component tree. It's large, so
+   TeamHubRoles — the whole Brophy app in one component tree. It's large, so
    use this map (search for the ALL-CAPS section markers below) to jump around.
    Reusable logic and data now live in sibling folders, imported above:
      lib/     — pure helpers + integrations (lifting engine, usda, exercises,
@@ -238,18 +238,22 @@ const formatDateHeader = (ts) => {
 /* ──────────────────────────────────────────────
    THEME
    ────────────────────────────────────────────── */
-// Phoenix College Bears: navy + gold.
-// CTAs use `primary` (navy + white text). `accent` is for badges + decorative.
+// Brophy College Preparatory (Broncos) — Classic Brophy (Option A, §11).
+// Primary red #980000 sampled from brophyprep.org's header (Nov 2026);
+// accent red #A6192E is the site's own --brophy-red CSS variable.
+// accentSoft / bg are pale red tints DERIVED from #980000 (not from the site).
+// CTAs use `primary` (red + white text). `accent` is for badges + decorative.
 const COLORS = {
-  primary: "#002E5D",     // Bears navy (official)
-  accent: "#FFC845",      // Bears gold (official — pin icons, badges, the avatar tile)
-  accentSoft: "#FFF4D9",  // pale gold backgrounds
+  primary: "#980000",     // Brophy Red (site header)
+  accent: "#A6192E",      // Brophy red (site --brophy-red variable)
+  accentSoft: "#FBECEC",  // pale red backgrounds (derived)
   success: "#00B27A",
-  bg: "#EEF2FA",          // subtle navy tint so the app doesn't feel generic-white
+  bg: "#FAF4F4",          // subtle red tint so the app doesn't feel generic-white (derived)
   border: "#E2E8F0",
   textSecondary: "#64748B",
 };
-const APP_DOMAIN = "team.phoenixmensoccer.com";
+// Production domain (decided 2026-11-08, §11).
+const APP_DOMAIN = "BrophySoccer.forgedreams.ai";
 const TOUR_SEEN_KEY = "teamhub_tour_seen_v1";
 
 // Toast host — renders transient messages dispatched via toast(). Rendered once
@@ -447,7 +451,7 @@ const LoginScreen = ({ externalError, clearExternalError }) => {
         {bgLayer}
         <div className="w-full max-w-sm text-center relative z-10">
           <div className="w-16 h-16 mx-auto flex items-center justify-center mb-5">
-            <Mail className="w-10 h-10" style={{ color: COLORS.accent }} />
+            <Mail className="w-10 h-10" style={{ color: "#fff" }} />
           </div>
           <h1 className="text-white font-black text-2xl tracking-tight">Check your email</h1>
           <p className="text-white/80 text-sm mt-3 leading-relaxed">
@@ -468,8 +472,8 @@ const LoginScreen = ({ externalError, clearExternalError }) => {
       <div className="w-full max-w-sm relative z-10">
         <div className="text-center mb-8">
           <img
-            src="/brand/logo.png"
-            alt="Phoenix College Bears"
+            src="/brand/logo-white.png"
+            alt="Brophy College Preparatory"
             className="w-28 h-28 mx-auto mb-3 object-contain drop-shadow-lg"
           />
           <h1 className="text-white font-black text-3xl tracking-tight">Welcome</h1>
@@ -523,7 +527,7 @@ const Header = ({ title, user, onAvatarClick, onPreview }) => (
     <div className="flex items-center gap-2">
       <img src="/brand/logo.png" alt="" className="w-9 h-9 object-contain" />
       <div>
-        <div className="text-[10px] font-bold tracking-[0.18em] text-slate-400 leading-none">PHX BEARS</div>
+        <div className="text-[10px] font-bold tracking-[0.18em] text-slate-400 leading-none">BROPHY</div>
         <h1 className="text-base font-bold text-slate-900 leading-tight">{title}</h1>
       </div>
     </div>
@@ -861,7 +865,7 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
         <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Today</h3>
         {hero ? (
           <button onClick={onOpenSchedule} className="w-full text-left rounded-3xl p-5 shadow-sm" style={{ backgroundColor: COLORS.primary }}>
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(255,255,255,0.15)", color: COLORS.accent }}>{hero.type || "Session"}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "#fff" }}>{hero.type || "Session"}</span>
             <h4 className="text-xl font-bold text-white mt-2 leading-tight">{hero.title}</h4>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-white/80">
               {hero.start && <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{formatHourTime(hero.start)}{hero.end ? `–${formatHourTime(hero.end)}` : ""}</span>}
@@ -1054,7 +1058,7 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
     <section>
       <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Today</h3>
       {hero ? (
-        <div className="rounded-3xl p-5 text-white shadow-md" style={{ background: `linear-gradient(135deg, ${COLORS.primary}, #003B77)` }}>
+        <div className="rounded-3xl p-5 text-white shadow-md" style={{ background: `linear-gradient(135deg, ${COLORS.primary}, #6E0000)` }}>
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20">{hero.type || "Session"}</span>
             <span className="text-xs font-semibold opacity-90">{new Date(hero.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
@@ -1067,7 +1071,7 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
           {heroPlan && <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white/15"><ClipboardList className="w-3.5 h-3.5" />{heroPlan.name || "Practice plan"}{(heroPlan.blocks || []).length ? ` · ${(heroPlan.blocks || []).length} drills` : ""}</div>}
         </div>
       ) : nextEvent ? (
-        <div className="rounded-2xl p-4 text-white shadow-md" style={{ background: `linear-gradient(135deg, ${COLORS.primary}, #003B77)` }}>
+        <div className="rounded-2xl p-4 text-white shadow-md" style={{ background: `linear-gradient(135deg, ${COLORS.primary}, #6E0000)` }}>
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20">Next up</span>
             <span className="text-xs font-semibold opacity-90">{new Date(nextEvent.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
@@ -2353,7 +2357,7 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
         <div className="overflow-x-auto px-5">
           <div className="flex gap-1.5 w-max">
             {subfolders.map((s) => (
-              <button key={s} onClick={() => setSubfolder(s)} className={`px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${subfolder === s ? "text-white" : "bg-white text-slate-600 border border-slate-200"}`} style={subfolder === s ? { backgroundColor: COLORS.accent, color: COLORS.primary } : {}}>{s}</button>
+              <button key={s} onClick={() => setSubfolder(s)} className={`px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${subfolder === s ? "text-white" : "bg-white text-slate-600 border border-slate-200"}`} style={subfolder === s ? { backgroundColor: COLORS.accent, color: "#fff" } : {}}>{s}</button>
             ))}
           </div>
         </div>
@@ -2442,11 +2446,11 @@ const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups }) => {
   };
   const waterDots = Array.from({ length: WATER_CUPS_GOAL }, (_, i) => i < waterCups);
   return (
-    <div className="rounded-2xl p-4 text-white shadow-md" style={{ background: `linear-gradient(135deg, ${COLORS.primary}, #003B77)` }}>
+    <div className="rounded-2xl p-4 text-white shadow-md" style={{ background: `linear-gradient(135deg, ${COLORS.primary}, #6E0000)` }}>
       <div className="flex items-center justify-between mb-3">
         <div className="text-[10px] uppercase tracking-wider font-bold opacity-70">Today's Fuel</div>
         {streak > 0 && (
-          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1" style={{ backgroundColor: "rgba(244,199,94,0.22)", color: COLORS.accent }}>
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1" style={{ backgroundColor: "rgba(166,25,46,0.22)", color: COLORS.accent }}>
             🔥 {streak}-day streak
           </span>
         )}
@@ -2495,7 +2499,7 @@ const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups }) => {
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <button onClick={() => setWaterCups(Math.max(0, waterCups - 1))} disabled={waterCups === 0} aria-label="One less cup" className="w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-sm font-bold disabled:opacity-30">−</button>
-          <button onClick={() => setWaterCups(waterCups + 1)} aria-label="Add a cup" className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold" style={{ backgroundColor: COLORS.accent, color: COLORS.primary }}>+</button>
+          <button onClick={() => setWaterCups(waterCups + 1)} aria-label="Add a cup" className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold" style={{ backgroundColor: COLORS.accent, color: "#fff" }}>+</button>
         </div>
       </div>
     </div>
@@ -2558,11 +2562,11 @@ const DrillChip = ({ icon: Icon, children }) => (
   </span>
 );
 
-// Uniform drill diagram: Bears logo watermark at exactly 20% opacity behind the
+// Uniform drill diagram: Brophy logo watermark at exactly 20% opacity behind the
 // drill's diagram photo (or behind the category icon tile when no diagram yet).
 const DrillDiagram = ({ d, icon: Icon, className = "" }) => (
   <div className={`relative overflow-hidden rounded-xl bg-slate-900 ${className}`}>
-    <img src="/pc-bears-logo.png" alt="" aria-hidden="true" draggable="false"
+    <img src="/brand/logo.png" alt="" aria-hidden="true" draggable="false"
       className="absolute inset-0 m-auto w-3/4 max-h-full object-contain pointer-events-none select-none"
       style={{ opacity: 0.2 }} />
     {d.diagramData ? (
@@ -2596,7 +2600,7 @@ const ArrowLegendChips = () => (
   </div>
 );
 
-// Full uniform drill card: clear title → diagram (Bears watermark) → setup
+// Full uniform drill card: clear title → diagram (Brophy watermark) → setup
 // block → How to run it → Look for. Empty sections are hidden.
 const DrillModal = ({ item, onClose }) => {
   const embedUrl = item.videoUrl ? toEmbedUrl(item.videoUrl) : null;
@@ -2960,7 +2964,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
         <div className="overflow-x-auto px-5">
           <div className="flex gap-1.5 w-max">
             {tags.map((t) => (
-              <button key={t} onClick={() => setTag(t)} className={`px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap flex items-center gap-1 ${tag === t ? "text-white" : "bg-white text-slate-600 border border-slate-200"}`} style={tag === t ? { backgroundColor: COLORS.accent, color: COLORS.primary } : {}}>{t !== "All" && <Tag className="w-2.5 h-2.5" />}{t}</button>
+              <button key={t} onClick={() => setTag(t)} className={`px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap flex items-center gap-1 ${tag === t ? "text-white" : "bg-white text-slate-600 border border-slate-200"}`} style={tag === t ? { backgroundColor: COLORS.accent, color: "#fff" } : {}}>{t !== "All" && <Tag className="w-2.5 h-2.5" />}{t}</button>
             ))}
           </div>
         </div>
@@ -3017,12 +3021,12 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
   );
 };
 
-// Small reusable drill thumbnail (diagram or category-icon tile, Bears watermark).
+// Small reusable drill thumbnail (diagram or category-icon tile, Brophy watermark).
 const DrillThumb = ({ d, className = "w-10 h-10" }) => {
   const Icon = DRILL_CAT_ICON[d.cat] || Target;
   return (
     <div className={`${className} relative rounded-lg overflow-hidden bg-slate-900 flex-shrink-0`}>
-      <img src="/pc-bears-logo.png" alt="" aria-hidden="true" className="absolute inset-0 m-auto w-3/4 max-h-full object-contain pointer-events-none" style={{ opacity: 0.2 }} />
+      <img src="/brand/logo.png" alt="" aria-hidden="true" className="absolute inset-0 m-auto w-3/4 max-h-full object-contain pointer-events-none" style={{ opacity: 0.2 }} />
       {d.diagramData
         ? <BoardSvg state={d.diagramData} className="relative w-full h-full" />
         : d.diagram
@@ -3418,7 +3422,7 @@ const ProgramDetail = ({ program, practices, canEdit, onSave, onDelete, onBack, 
       {canEdit && (
         <>
           <button onClick={addDay} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200 text-slate-700 bg-white"><Plus className="w-3.5 h-3.5" /> Add day</button>
-          <button onClick={() => onAssign({ ...program, name, days })} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 text-white" style={{ backgroundColor: COLORS.accent, color: COLORS.primary }}><CalendarIcon className="w-3.5 h-3.5" /> Assign to calendar</button>
+          <button onClick={() => onAssign({ ...program, name, days })} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 text-white" style={{ backgroundColor: COLORS.accent, color: "#fff" }}><CalendarIcon className="w-3.5 h-3.5" /> Assign to calendar</button>
           {user?.role === "orgAdmin" && (
             <label className="flex items-center justify-between bg-white rounded-2xl px-4 py-3 shadow-sm border border-slate-100">
               <span className="text-sm font-semibold text-slate-700">Shared curriculum <span className="block text-[11px] font-normal text-slate-500">All coaches can follow this program</span></span>
@@ -3803,13 +3807,13 @@ const renderLineupBlob = async (title, formation, slots, logoUrl, teamShortName 
   const ctx = canvas.getContext("2d");
   const top = 120; // banner height
   // banner
-  ctx.fillStyle = "#002E5D";
+  ctx.fillStyle = "#980000";
   ctx.fillRect(0, 0, CARD_W, top);
   ctx.fillStyle = "#fff";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.font = "bold 44px system-ui, sans-serif";
   ctx.fillText((title || "Starting XI").slice(0, 30), CARD_W / 2, 52);
-  ctx.fillStyle = "#FFC845";
+  ctx.fillStyle = "#FFFFFF";
   ctx.font = "bold 24px system-ui, sans-serif";
   ctx.fillText(formation ? `Formation · ${formation}` : "Starting XI", CARD_W / 2, 92);
   // pitch
@@ -3830,8 +3834,8 @@ const renderLineupBlob = async (title, formation, slots, logoUrl, teamShortName 
   ctx.beginPath(); ctx.arc(CARD_W / 2, (pTop + CARD_H) / 2, 70, 0, Math.PI * 2); ctx.stroke();
   // watermark — the coach's uploaded logo centered on the pitch at 60%
   // opacity, behind the player tokens so faces stay legible. With no
-  // uploaded logo, the ACTIVE team's name is the watermark instead of the
-  // old Phoenix Bears mark (the full rebrand is §11; the name comes from
+  // uploaded logo, the ACTIVE team's name is the watermark instead
+  // (the Brophy logo watermarks drill diagrams; the name comes from
   // the teams config).
   if (useLogo && logoImg && logoImg.width) {
     ctx.save();
@@ -3864,7 +3868,7 @@ const renderLineupBlob = async (title, formation, slots, logoUrl, teamShortName 
       ctx.drawImage(im, cx - dw / 2, cy - dh / 2, dw, dh);
       ctx.restore();
     } else {
-      ctx.fillStyle = s.uid || s.name ? "#002E5D" : "rgba(255,255,255,0.18)";
+      ctx.fillStyle = s.uid || s.name ? "#980000" : "rgba(255,255,255,0.18)";
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#fff";
       ctx.font = "bold 30px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -3978,7 +3982,7 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
   const dragRef = useRef({ id: null, moved: false, sx: 0, sy: 0 });
 
   // The watermark shown on every line-up — the coach's uploaded logo, or
-  // the active team's name until they set one (no Phoenix Bears fallback).
+  // the active team's name until they set one (no logo fallback).
   const logoUrl = lineupLogo || "";
   const uploadLogo = async (file) => {
     if (!file) return;
@@ -4171,7 +4175,7 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
         ))}
       </div>
       <div className="flex items-center gap-2">
-        <button onClick={() => setSending({ name: (draft.name || "").trim() || `${draft.formation} line-up`, formation: draft.formation, slots: draft.slots })} className="flex-1 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white flex items-center justify-center gap-1.5" style={{ backgroundColor: COLORS.accent, color: COLORS.primary }}>
+        <button onClick={() => setSending({ name: (draft.name || "").trim() || `${draft.formation} line-up`, formation: draft.formation, slots: draft.slots })} className="flex-1 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white flex items-center justify-center gap-1.5" style={{ backgroundColor: COLORS.accent, color: "#fff" }}>
           <Send className="w-3.5 h-3.5" /> Send to chat
         </button>
       </div>
@@ -5464,7 +5468,7 @@ const PollCard = ({ message, own, myUid, onVote, isAdmin = false, onSeeVoters })
           return (
             <li key={i}>
               <button onClick={() => handle(i)} className="w-full text-left relative rounded-lg overflow-hidden border" style={{ borderColor: isMine ? COLORS.accent : (own ? "rgba(255,255,255,0.2)" : COLORS.border) }}>
-                <div className="absolute inset-y-0 left-0 transition-all" style={{ width: `${pct}%`, backgroundColor: isMine ? (own ? "rgba(244,199,94,0.45)" : COLORS.accentSoft) : (own ? "rgba(255,255,255,0.12)" : "rgba(20,39,92,0.06)") }} />
+                <div className="absolute inset-y-0 left-0 transition-all" style={{ width: `${pct}%`, backgroundColor: isMine ? (own ? "rgba(166,25,46,0.45)" : COLORS.accentSoft) : (own ? "rgba(255,255,255,0.12)" : "rgba(152,0,0,0.06)") }} />
                 <div className="relative px-2.5 py-1.5 flex items-center justify-between gap-2">
                   <span className="text-xs font-semibold truncate flex items-center gap-1">
                     {isMine && <Check className="w-3 h-3 flex-shrink-0" style={{ color: COLORS.accent }} />}
@@ -7718,7 +7722,7 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, onWhatsNew, isO
   const roleBadgeStyle = (role) => role === "orgAdmin"
     ? { backgroundColor: COLORS.primary, color: "white" }
     : role === "admin"
-    ? { backgroundColor: COLORS.accent, color: COLORS.primary }
+    ? { backgroundColor: COLORS.accent, color: "#fff" }
     : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` };
 
   return (
@@ -8179,7 +8183,7 @@ export default function TeamHubRolesApp() {
     return onForegroundMessage((payload) => {
       const n = payload.notification || {};
       try {
-        new Notification(n.title || "Phoenix Bears", { body: n.body, icon: "/brand/logo.png" });
+        new Notification(n.title || "Brophy Soccer", { body: n.body, icon: "/brand/logo.png" });
       } catch { /* permission revoked since enable; ignore */ }
     });
   }, [user]);

@@ -1,4 +1,4 @@
-name = "phoenix-mens-soccer-app"
+name = "brophy-soccer-app"
 compatibility_date = "2024-11-06"
 main = "./worker/index.js"
 

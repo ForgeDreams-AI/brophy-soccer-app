@@ -1,17 +1,18 @@
 // Web push notifications via Firebase Cloud Messaging.
-// The VAPID *public* key below is the one generated in Firebase console
-// (Project Settings → Cloud Messaging → Web Push certificates). It's
-// designed to be public — it ships in every browser bundle anyway —
-// so committing it directly is fine. Local dev can still override via
-// VITE_FIREBASE_VAPID_KEY in .env.local.
+// The VAPID *public* key is generated in the Brophy Firebase console
+// (Project Settings → Cloud Messaging → Web Push certificates) and set as
+// VITE_FIREBASE_VAPID_KEY in .env (gitignored) and as a build secret on
+// Cloudflare Pages (see .env.example). The key is public by design — it
+// ships in every browser bundle — but it belongs to the Brophy project:
+// the old Phoenix College key was removed in the §11 rebrand and there is
+// NO fallback here. Until the Brophy key is set, push stays unconfigured
+// and enablePushNotifications throws a clear error.
 
 import { getToken, onMessage } from "firebase/messaging";
 import { doc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { messaging, db } from "../firebase";
 
-const VAPID_KEY =
-  import.meta.env.VITE_FIREBASE_VAPID_KEY
-  || "BGg4ObgiQmIJmicqDBQyTU6gdKSqb49zXoKM6buURBt1qRMtIgBAQi3NcJWdSIIgX04JoggixD0yoTXmYOIkBuU";
+const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || "";
 
 export const notificationsSupported = () =>
   typeof window !== "undefined"

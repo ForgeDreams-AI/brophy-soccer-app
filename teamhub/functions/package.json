@@ -1,6 +1,6 @@
 {
   "name": "functions",
-  "description": "Phoenix Bears push-notification fan-out functions",
+  "description": "Brophy Soccer push-notification fan-out functions",
   "engines": { "node": "20" },
   "main": "index.js",
   "scripts": {

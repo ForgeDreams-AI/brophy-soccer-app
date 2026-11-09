@@ -7,7 +7,7 @@ import { toast } from "../lib/toast";
 // doc, which a Cloud Function fans out as a push notification to the team.
 // `colors` supplies the brand palette (primary/accent/accentSoft/bg).
 export default function QuoteOfDay({ quote, isAdmin, addQuote, colors }) {
-  const C = colors || { primary: "#002E5D", accent: "#FFC845", accentSoft: "#F6EFD6" };
+  const C = colors || { primary: "#980000", accent: "#A6192E", accentSoft: "#FBECEC" };
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [author, setAuthor] = useState("");

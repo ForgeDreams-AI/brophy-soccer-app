@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 
 // Brand palette (mirrors COLORS in TeamHubRoles so the tour matches the app).
-const NAVY = "#002E5D";
-const GOLD = "#FFC845";
+const RED = "#980000";
+const ACCENT = "#A6192E";
 
 // Role-aware welcome walkthrough. Self-contained: a centered card carousel that
 // steps through the app's features with Back / Next / Skip. Shown automatically
@@ -49,7 +49,7 @@ export default function WelcomeTour({ open, role, onClose }) {
       style={{ backgroundColor: "rgba(20,39,92,0.72)" }}>
       <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl overflow-hidden">
         {/* Header band */}
-        <div className="px-6 pt-7 pb-5 text-center" style={{ backgroundColor: NAVY }}>
+        <div className="px-6 pt-7 pb-5 text-center" style={{ backgroundColor: RED }}>
           <div className="text-5xl mb-2" aria-hidden="true">{step.icon}</div>
           <h2 className="text-white text-lg font-black">{step.title}</h2>
         </div>
@@ -62,7 +62,7 @@ export default function WelcomeTour({ open, role, onClose }) {
           <div className="flex justify-center gap-1.5 my-4" aria-hidden="true">
             {steps.map((_, idx) => (
               <span key={idx} className="h-1.5 rounded-full transition-all"
-                style={{ width: idx === i ? 18 : 6, backgroundColor: idx === i ? GOLD : "#E2E8F0" }} />
+                style={{ width: idx === i ? 18 : 6, backgroundColor: idx === i ? ACCENT : "#E2E8F0" }} />
             ))}
           </div>
 
@@ -77,7 +77,7 @@ export default function WelcomeTour({ open, role, onClose }) {
             <button
               onClick={() => (last ? onClose() : setI((n) => Math.min(steps.length - 1, n + 1)))}
               className="flex-1 py-2.5 rounded-full text-sm font-bold text-white"
-              style={{ backgroundColor: NAVY }}>
+              style={{ backgroundColor: RED }}>
               {last ? "Let's go!" : "Next"}
             </button>
           </div>

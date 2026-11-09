@@ -1,10 +1,10 @@
-# TeamHub — Phoenix Men's Soccer
+# TeamHub — Brophy Soccer
 
-Mobile-first team app for Phoenix Men's Soccer. Built per `../TeamHub_Build_Guide.md`.
+Mobile-first team app for Brophy Soccer. Built per `../TeamHub_Build_Guide.md`.
 
-- **Production URL:** `team.phoenixmensoccer.com`
+- **Production URL:** `BrophySoccer.forgedreams.ai`
 - **Hosting:** Cloudflare Pages (domain registered on Cloudflare)
-- **Backend:** Firebase Auth + Firestore (project: `phoenix-mens-soccer`)
+- **Backend:** Firebase Auth + Firestore (project: `brophy-soccer-app`)
 - **Stack:** Vite + React + Tailwind v3 + Firebase JS SDK + lucide-react
 
 ## What's wired
@@ -59,7 +59,7 @@ After your first sign-in, Firebase console → Firestore → `users/<your-uid>` 
    git init
    git add -A
    git commit -m "Initial TeamHub commit"
-   gh repo create phoenix-mens-soccer-app --private --source=. --remote=origin --push
+   gh repo create brophy-soccer-app --private --source=. --remote=origin --push
    ```
 
    (Or create the repo manually on GitHub and `git remote add origin … && git push -u origin main`.)
@@ -69,13 +69,14 @@ After your first sign-in, Firebase console → Firestore → `users/<your-uid>` 
    - **Build command:** `npm run build`
    - **Build output directory:** `dist`
    - **Root directory:** `teamhub` ← important (since this folder is nested in the repo)
-   - **Environment variables (production AND preview):** `VITE_USDA_API_KEY=<your USDA key>`
+   - **Environment variables (production AND preview):** `VITE_USDA_API_KEY=<your USDA key>`, `VITE_FIREBASE_VAPID_KEY=<your VAPID key>`
+     (VAPID key: generate in the Brophy Firebase console → Project Settings → Cloud Messaging → Web Push certificates.)
 
    Click **Save and Deploy**. First build takes ~2 min.
 
-3. **Add the custom domain.** Pages project → **Custom domains** → **Set up** → `team.phoenixmensoccer.com`. Cloudflare creates the DNS automatically since the domain is on Cloudflare. SSL is auto-provisioned.
+3. **Add the custom domain.** Pages project → **Custom domains** → **Set up** → `BrophySoccer.forgedreams.ai`. Cloudflare creates the DNS automatically since the domain is on Cloudflare. SSL is auto-provisioned.
 
-4. **Authorize the new domain in Firebase.** Firebase console → Authentication → Settings → **Authorized domains** → add `team.phoenixmensoccer.com` (and the Pages preview URL `*.phoenix-mens-soccer-app.pages.dev` if you want preview deploys to work for sign-in too).
+4. **Authorize the new domain in Firebase.** Firebase console → Authentication → Settings → **Authorized domains** → add `BrophySoccer.forgedreams.ai` (and the Pages preview URL `*.brophy-soccer-app.pages.dev` if you want preview deploys to work for sign-in too).
 
 ### Ongoing deploys
 
@@ -106,7 +107,7 @@ player's **profile photo** into that image, the browser has to read the photos
 back off the canvas, which requires CORS on the Storage bucket. Apply it once:
 
 ```bash
-gsutil cors set cors.json gs://phoenix-mens-soccer.firebasestorage.app
+gsutil cors set cors.json gs://brophy-soccer-app.firebasestorage.app
 ```
 
 Without it, the line-up still sends fine — players just show as their initials
