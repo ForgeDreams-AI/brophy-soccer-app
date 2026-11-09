@@ -316,7 +316,9 @@ service cloud.firestore {
 
     // The player's OWN daily nutrition goal (calories + protein, optional).
     // Set by the player, for the player — no coach sets or reads it here.
-    match /logs/{uid}/goal {
+    // Stored as a document inside the goals subcollection (4 segments) so
+    // the path is a valid Firestore document reference.
+    match /logs/{uid}/goals/{goalId} {
       allow read, write: if isOwner(uid);
     }
 

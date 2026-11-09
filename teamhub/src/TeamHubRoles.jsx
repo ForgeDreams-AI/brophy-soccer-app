@@ -4699,7 +4699,7 @@ const TargetBar = ({ label, value, goal, unit }) => {
 
 // The player's OWN daily goal (calories + protein, optional). No coach sets
 // it — the player sets it for themselves if they want to, and it lives in
-// their private food-log area (logs/{uid}/goal). The hero bars and the
+// their private food-log area (logs/{uid}/goals/main). The hero bars and the
 // Today checklist show progress against this goal when one is set.
 const MyNutritionGoalSection = ({ goal, totals = { cal: 0, protein: 0 }, onSave, onClear }) => {
   const [open, setOpen] = useState(false);
@@ -8478,16 +8478,18 @@ export default function TeamHubRolesApp() {
 
   // The player's OWN daily nutrition goal (calories + protein, optional).
   // No coach sets it — the player sets it for themselves if they want to,
-  // and it lives in their private food-log area (logs/{uid}/goal). The Today
-  // page and the nutrition hero only ever show the player their own goal.
-  const myNutritionGoal = useDoc(user ? `logs/${user.uid}/goal` : null);
+  // and it lives in their private food-log area (logs/{uid}/goals/main).
+  // The Today page and the nutrition hero only ever show the player their
+  // own goal. (Path must be a valid Firestore document: an even number of
+  // segments. logs/{uid}/goal has 3 and crashes the app on sign-in.)
+  const myNutritionGoal = useDoc(user ? `logs/${user.uid}/goals/main` : null);
   const saveMyNutritionGoal = ({ cal, protein }) =>
-    setDoc(doc(db, "logs", user.uid, "goal"), {
+    setDoc(doc(db, "logs", user.uid, "goals", "main"), {
       cal: Number(cal) || 0,
       protein: Number(protein) || 0,
       updatedAt: serverTimestamp(),
     }, { merge: true });
-  const clearMyNutritionGoal = () => deleteDoc(doc(db, "logs", user.uid, "goal"));
+  const clearMyNutritionGoal = () => deleteDoc(doc(db, "logs", user.uid, "goals", "main"));
   const myNutritionTotals = useMemo(() => {
     const k = formatDayKey(new Date());
     return logged.filter((l) => formatDayKey(l.createdAt) === k)
