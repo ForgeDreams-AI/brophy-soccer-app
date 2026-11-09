@@ -1,158 +1,116 @@
-import { useRef, useState } from "react";
-import { X, Trash2, RotateCcw, Undo2, MousePointer2, Spline, Save } from "lucide-react";
-
-// A lightweight coach's tactics board (TacticalPad-style): drag player tokens
-// (home / away / neutral), the ball, cones and goals around a field, and draw
-// movement / pass arrows (yellow) or plain field lines (white). The field
-// backdrop switches per sport so it works for any team. Self-contained SVG (no
-// external assets) so it themes, serializes, and exports to PNG cleanly.
-// Positions are normalized 0..1 so the board scales to any size.
+// ─── Practice Board (Option C — Diagram Studio First) ──────────────────────
+// A to-scale pitch board for building drills. The drill is built ON the board:
+// the coach places players, cones, goals, zones and arrows on a pitch whose
+// dimensions are real yards, then the drill's setup fields are filled in from
+// that. Works on desktop (mouse drag) AND phone (tap-to-place, big targets).
+//
+// Board state lives in ./boardData (v2, stored on the drill doc as
+// `diagramData`). All positions are normalized 0..1 across the pitch area, so
+// a board stays valid when the yard dimensions change.
 //
 // onSave(pngBlob, state) — pngBlob is a rasterized image saved as the drill
-// diagram; state is { field, tokens, arrows } JSON so the board is re-editable.
+// diagram; state is the structured JSON above so the board is re-editable.
 
-const W = 680, H = 1000; // portrait board
-const R = 20;            // token radius in board units
-const TEAM = { home: "#002E5D", away: "#DC2626", neutral: "#F59E0B" };
-const ARROW = "#FFC845";  // movement / pass color
-const LINE = "#FFFFFF";   // field-line color
+import { useRef, useState } from "react";
+import {
+  VB_W, LEG_H, clamp, BOARD_PRESETS, TEAM_COLORS, ARROW_LEGEND,
+  wavyPath, normalizeBoardState, boardDims,
+} from "./boardData";
+import {
+  X, Trash2, RotateCcw, Undo2, MousePointer2, Spline, Save,
+  Copy, Magnet, Hand, SquareDashed, CircleDashed,
+} from "lucide-react";
+
+const M = 30;          // pitch inset margin
+const R = 19;          // player token radius (board units)
+const HIT_R = 30;      // invisible touch-hit radius around tokens
 const rid = () => Math.random().toString(36).slice(2, 9);
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
-
-const FIELDS = [
-  ["soccer", "Soccer — Full"],
-  ["soccer-half", "Soccer — Half"],
-  ["soccer-third", "Soccer — Att. third"],
-  ["soccer-box", "Soccer — Penalty box"],
-  ["basketball", "Basketball"],
-  ["football", "Football"],
-  ["blank", "Blank"],
-];
-const bgFor = (field) => (field === "basketball" ? "#B5763B" : field === "blank" ? "#3A7A4E" : "#2E7D46");
-
-// A hand-drawn "dribble" squiggle from (x1,y1)→(x2,y2): a sine wave along the
-// line, tapered to 0 at both ends so it starts/ends cleanly. Returns an SVG path.
-const wavyPath = (x1, y1, x2, y2, amp = 7, wl = 20) => {
-  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
-  const ux = dx / len, uy = dy / len, px = -uy, py = ux; // along + perpendicular
-  const steps = Math.max(8, Math.round(len / 6));
-  let d = `M ${x1.toFixed(1)} ${y1.toFixed(1)}`;
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    const off = Math.sin(t * (len / wl) * Math.PI * 2) * amp * Math.sin(t * Math.PI);
-    const x = x1 + ux * len * t + px * off, y = y1 + uy * len * t + py * off;
-    d += ` L ${x.toFixed(1)} ${y.toFixed(1)}`;
-  }
-  return d;
-};
+const ARROW_GOLD = "#FFC845";
 
 // White line style shared by all field markings.
 const L = { fill: "none", stroke: "rgba(255,255,255,0.85)", strokeWidth: 3 };
 
-function Field({ field }) {
-  const m = 26, x0 = m, y0 = m, x1 = W - m, y1 = H - m, cx = W / 2, cy = H / 2;
-  const bg = <rect x={0} y={0} width={W} height={H} fill={bgFor(field)} />;
-
-  if (field === "blank") {
-    return <g>{bg}<rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} {...L} /></g>;
-  }
-
-  // Soccer surfaces — attacking view, goal at the TOP (like ForgeDreams' packs).
-  if (field === "soccer-half" || field === "soccer-third" || field === "soccer-box") {
-    const boxW = field === "soccer-box" ? 600 : field === "soccer-third" ? 460 : 400;
-    const boxD = field === "soccer-box" ? 560 : field === "soccer-third" ? 300 : 180;
-    const sixW = boxW * 0.5, sixD = boxD * 0.32, spot = y0 + boxD * 0.66;
-    const goalW = field === "soccer-box" ? 240 : 130;
-    return (
-      <g>
-        {bg}
-        <rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} {...L} />
-        <rect x={cx - goalW / 2} y={y0 - 6} width={goalW} height={6} fill="rgba(255,255,255,0.9)" />
-        <rect x={cx - boxW / 2} y={y0} width={boxW} height={boxD} {...L} />
-        <rect x={cx - sixW / 2} y={y0} width={sixW} height={sixD} {...L} />
-        <circle cx={cx} cy={spot} r={4} fill="rgba(255,255,255,0.85)" />
-        <path d={`M ${cx - 80} ${y0 + boxD} A 90 90 0 0 0 ${cx + 80} ${y0 + boxD}`} {...L} />
-        {field === "soccer-half" && (
-          <>
-            <line x1={x0} y1={y1} x2={x1} y2={y1} {...L} />
-            <path d={`M ${cx - 90} ${y1} A 90 90 0 0 0 ${cx + 90} ${y1}`} {...L} />
-          </>
-        )}
-        {field === "soccer-third" && <line x1={x0} y1={y1} x2={x1} y2={y1} {...L} strokeDasharray="10 8" />}
-      </g>
-    );
-  }
-
-  if (field === "basketball") {
-    const keyW = 160, keyH = 190, ftR = 60, hoopY = 44;
-    const arc = (top) => {
-      const r = 240, y = top ? y0 + 2 : y1 - 2;
-      return `M ${x0 + 18} ${y} A ${r} ${r} 0 0 ${top ? 1 : 0} ${x1 - 18} ${y}`;
-    };
-    return (
-      <g>
-        {bg}
-        <rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} {...L} />
-        <line x1={x0} y1={cy} x2={x1} y2={cy} {...L} />
-        <circle cx={cx} cy={cy} r={70} {...L} />
-        {/* top */}
-        <rect x={cx - keyW / 2} y={y0} width={keyW} height={keyH} {...L} />
-        <circle cx={cx} cy={y0 + keyH} r={ftR} {...L} />
-        <line x1={cx - 40} y1={y0 + hoopY} x2={cx + 40} y2={y0 + hoopY} {...L} />
-        <circle cx={cx} cy={y0 + hoopY + 12} r={9} {...L} />
-        <path d={arc(true)} {...L} />
-        {/* bottom */}
-        <rect x={cx - keyW / 2} y={y1 - keyH} width={keyW} height={keyH} {...L} />
-        <circle cx={cx} cy={y1 - keyH} r={ftR} {...L} />
-        <line x1={cx - 40} y1={y1 - hoopY} x2={cx + 40} y2={y1 - hoopY} {...L} />
-        <circle cx={cx} cy={y1 - hoopY - 12} r={9} {...L} />
-        <path d={arc(false)} {...L} />
-      </g>
-    );
-  }
-
-  if (field === "football") {
-    const ez = 120; // end-zone depth
-    const lines = [];
-    const top = y0 + ez, bot = y1 - ez;
-    const step = (bot - top) / 10;
-    for (let i = 0; i <= 10; i++) {
-      const y = top + step * i;
-      lines.push(<line key={i} x1={x0} y1={y} x2={x1} y2={y} {...L} strokeWidth={i === 5 ? 4 : 2} />);
+// To-scale pitch markings. (wYd = yards across, dYd = yards deep, goal at the
+// top for portrait presets, goals at both ends for the full pitch.)
+function PitchMarks({ preset, wYd, dYd, pitchH }) {
+  const X = (xYd) => M + (xYd / wYd) * (VB_W - 2 * M);
+  const Y = (yYd) => M + (yYd / dYd) * (pitchH - 2 * M);
+  const cx = VB_W / 2;
+  const bg = <rect x={0} y={0} width={VB_W} height={pitchH} fill="#2E7D46" />;
+  const stripes = Array.from({ length: 8 }).map((_, i) => (
+    <rect key={i} x={0} y={(pitchH / 8) * i} width={VB_W} height={pitchH / 8} fill={i % 2 ? "#2A7341" : "#2E7D46"} />
+  ));
+  const boundary = <rect x={M} y={M} width={VB_W - 2 * M} height={pitchH - 2 * M} {...L} />;
+  const goalBar = (gx, gy, horizontal) => (
+    horizontal
+      ? <rect x={gx - (3.66 / wYd) * (VB_W - 2 * M)} y={gy - 5} width={(7.32 / wYd) * (VB_W - 2 * M)} height={10} fill="rgba(255,255,255,0.95)" />
+      : <rect x={gx - 5} y={gy - (3.66 / dYd) * (pitchH - 2 * M)} width={10} height={(7.32 / dYd) * (pitchH - 2 * M)} fill="rgba(255,255,255,0.95)" />
+  );
+  // Penalty arc: circle r=9.15yd around the spot, drawn only outside the box.
+  const arc = (spotX, spotY, boxEdge, horizontal, sweep = 1) => {
+    const r = 9.15;
+    const off = Math.sqrt(Math.max(0, r * r - 36)); // 6yd from spot to box line
+    if (horizontal) {
+      const x1 = X(boxEdge), y1 = Y(spotY - off), x2 = X(boxEdge), y2 = Y(spotY + off);
+      return <path d={`M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${(r / wYd) * (VB_W - 2 * M)} ${(r / dYd) * (pitchH - 2 * M)} 0 0 ${sweep} ${x2.toFixed(1)} ${y2.toFixed(1)}`} {...L} />;
     }
+    const x1 = X(spotX - off), y1 = Y(boxEdge), x2 = X(spotX + off), y2 = Y(boxEdge);
+    return <path d={`M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${(r / wYd) * (VB_W - 2 * M)} ${(r / dYd) * (pitchH - 2 * M)} 0 0 ${sweep} ${x2.toFixed(1)} ${y2.toFixed(1)}`} {...L} />;
+  };
+
+  if (preset.id === "grid") {
     return (
       <g>
-        {bg}
-        <rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} {...L} />
-        <line x1={x0} y1={top} x2={x1} y2={top} {...L} />
-        <line x1={x0} y1={bot} x2={x1} y2={bot} {...L} />
-        {lines}
+        {bg}{stripes}{boundary}
+        <line x1={cx} y1={M} x2={cx} y2={pitchH - M} {...L} strokeDasharray="8 6" strokeWidth={2} />
       </g>
     );
   }
 
-  // soccer (default)
-  const boxW = 380, boxH = 150, gW = 190, gH = 60;
+  if (preset.orient === "portrait") {
+    // Goal at the top; penalty box measured down from the top line.
+    const boxW = preset.id === "box" ? wYd : 44, boxD = 18, sixW = 20, sixD = 6;
+    return (
+      <g>
+        {bg}{stripes}{boundary}
+        {goalBar(cx, M, true)}
+        <rect x={X(cx - boxW / 2)} y={M} width={X(cx + boxW / 2) - X(cx - boxW / 2)} height={Y(boxD) - M} {...L} />
+        <rect x={X(cx - sixW / 2)} y={M} width={X(cx + sixW / 2) - X(cx - sixW / 2)} height={Y(sixD) - M} {...L} />
+        <circle cx={cx} cy={Y(12)} r={4} fill="rgba(255,255,255,0.85)" />
+        {arc(cx, 12, boxD, false)}
+        <line x1={M} y1={pitchH - M} x2={VB_W - M} y2={pitchH - M} {...L} strokeWidth={4} />
+      </g>
+    );
+  }
+
+  // Full pitch, landscape — goals at both ends.
+  const boxW = 44, boxD = 18, sixW = 20, sixD = 6;
+  const box = (left) => {
+    const x0 = left ? M : VB_W - M - (X(boxD) - M);
+    return (
+      <g key={left ? "l" : "r"}>
+        <rect x={x0} y={Y((dYd - boxW) / 2)} width={X(boxD) - M} height={Y((dYd + boxW) / 2) - Y((dYd - boxW) / 2)} {...L} />
+        <rect x={left ? M : VB_W - M - (X(sixD) - M)} y={Y((dYd - sixW) / 2)} width={X(sixD) - M} height={Y((dYd + sixW) / 2) - Y((dYd - sixW) / 2)} {...L} />
+        <circle cx={left ? X(12) : X(wYd - 12)} cy={pitchH / 2} r={4} fill="rgba(255,255,255,0.85)" />
+        {arc(left ? 12 : wYd - 12, dYd / 2, left ? boxD : wYd - boxD, true, left ? 1 : 0)}
+        {goalBar(left ? M : VB_W - M, pitchH / 2, false)}
+      </g>
+    );
+  };
   return (
     <g>
-      {bg}
-      {Array.from({ length: 10 }).map((_, i) => (
-        <rect key={i} x={0} y={(H / 10) * i} width={W} height={H / 10} fill={i % 2 ? "#2A7341" : "#2E7D46"} />
-      ))}
-      <rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} {...L} />
-      <line x1={x0} y1={cy} x2={x1} y2={cy} {...L} />
-      <circle cx={cx} cy={cy} r={90} {...L} />
-      <circle cx={cx} cy={cy} r={5} fill="rgba(255,255,255,0.85)" />
-      <rect x={cx - boxW / 2} y={y0} width={boxW} height={boxH} {...L} />
-      <rect x={cx - gW / 2} y={y0} width={gW} height={gH} {...L} />
-      <rect x={cx - boxW / 2} y={y1 - boxH} width={boxW} height={boxH} {...L} />
-      <rect x={cx - gW / 2} y={y1 - gH} width={gW} height={gH} {...L} />
+      {bg}{stripes}{boundary}
+      <line x1={cx} y1={M} x2={cx} y2={pitchH - M} {...L} />
+      <circle cx={cx} cy={pitchH / 2} r={(10 / wYd) * (VB_W - 2 * M)} {...L} />
+      <circle cx={cx} cy={pitchH / 2} r={5} fill="rgba(255,255,255,0.85)" />
+      {box(true)}{box(false)}
     </g>
   );
 }
 
-// A goal, drawn as a white frame with a light net, centered on (x,y).
-function Goal({ x, y }) {
+// A goal marker, drawn as a white frame with a light net.
+function GoalMark({ x, y }) {
   const w = 84, h = 34;
   const left = x - w / 2, top = y - h / 2;
   const nets = [];
@@ -166,55 +124,197 @@ function Goal({ x, y }) {
   );
 }
 
+// Read-only render of a board state (thumbnails, session rows, PDFs). No
+// editing chrome — just the pitch, zones, arrows and markers.
+export function BoardSvg({ state, className = "", showLegend = false }) {
+  const s = normalizeBoardState(state);
+  const { preset, wYd, dYd, pitchH, vbH } = boardDims(s);
+  const px = (x) => M + x * (VB_W - 2 * M);
+  const py = (y) => M + y * (pitchH - 2 * M);
+  return (
+    <svg viewBox={`0 0 ${VB_W} ${showLegend ? vbH : pitchH}`} className={className} role="img" aria-label="Drill diagram">
+      <defs>
+        <marker id="bs-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill={ARROW_GOLD} />
+        </marker>
+        <marker id="bs-open" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M 0.5 0.5 L 9 5 L 0.5 9.5" fill="none" stroke={ARROW_GOLD} strokeWidth="1.8" strokeLinecap="round" />
+        </marker>
+      </defs>
+      <PitchMarks preset={preset} wYd={wYd} dYd={dYd} pitchH={pitchH} />
+      {s.zones.map((z) => (
+        z.shape === "circle"
+          ? <circle key={z.id} cx={px(z.x)} cy={py(z.y)} r={z.r * (VB_W - 2 * M)} fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.7)" strokeWidth={2} strokeDasharray="8 6" />
+          : <rect key={z.id} x={px(z.x)} y={py(z.y)} width={z.w * (VB_W - 2 * M)} height={z.h * (pitchH - 2 * M)} fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.7)" strokeWidth={2} strokeDasharray="8 6" rx={6} />
+      ))}
+      {s.arrows.map((a) => {
+        const p = { x1: px(a.from.x), y1: py(a.from.y), x2: px(a.to.x), y2: py(a.to.y) };
+        if (a.kind === "dribble") return <path key={a.id} d={wavyPath(p.x1, p.y1, p.x2, p.y2)} fill="none" stroke={ARROW_GOLD} strokeWidth={3.5} strokeLinecap="round" markerEnd="url(#bs-head)" />;
+        if (a.kind === "shot") {
+          const dx = p.x2 - p.x1, dy = p.y2 - p.y1, len = Math.hypot(dx, dy) || 1, ox = (-dy / len) * 4, oy = (dx / len) * 4;
+          return (
+            <g key={a.id}>
+              <line x1={p.x1 + ox} y1={p.y1 + oy} x2={p.x2 + ox} y2={p.y2 + oy} stroke={ARROW_GOLD} strokeWidth={2.5} strokeLinecap="round" />
+              <line x1={p.x1 - ox} y1={p.y1 - oy} x2={p.x2 - ox} y2={p.y2 - oy} stroke={ARROW_GOLD} strokeWidth={2.5} strokeLinecap="round" markerEnd="url(#bs-head)" />
+            </g>
+          );
+        }
+        return (
+          <line key={a.id} {...p} stroke={ARROW_GOLD} strokeWidth={a.kind === "pass" ? 3.5 : 4} strokeLinecap="round"
+            strokeDasharray={a.kind === "run" ? "10 7" : undefined}
+            markerEnd={a.kind === "pass" ? "url(#bs-open)" : "url(#bs-head)"} />
+        );
+      })}
+      {s.tokens.map((t) => {
+        const x = px(t.x), y = py(t.y);
+        if (t.kind === "ball") return (
+          <g key={t.id}>
+            <circle cx={x} cy={y} r={12} fill="#fff" stroke="#111" strokeWidth={2} />
+            <circle cx={x} cy={y} r={4.5} fill="#111" />
+          </g>
+        );
+        if (t.kind === "cone") return (
+          <polygon key={t.id} points={`${x},${y - 16} ${x - 13},${y + 12} ${x + 13},${y + 12}`} fill="#F97316" stroke="#7C2D12" strokeWidth={2} />
+        );
+        if (t.kind === "goal") return <GoalMark key={t.id} x={x} y={y} />;
+        if (t.kind === "mannequin") return (
+          <g key={t.id}>
+            <rect x={x - 9} y={y - 18} width={18} height={36} rx={8} fill="#94A3B8" stroke="#475569" strokeWidth={2} />
+            <rect x={x - 13} y={y + 16} width={26} height={5} rx={2.5} fill="#64748B" />
+          </g>
+        );
+        return (
+          <g key={t.id}>
+            <circle cx={x} cy={y} r={R} fill={TEAM_COLORS[t.kind] || "#64748B"} stroke="rgba(0,0,0,0.4)" strokeWidth={2} />
+            {t.label ? <text x={x} y={y + R * 0.34} textAnchor="middle" fontSize={R * 0.85} fontWeight="700" fill="#fff" style={{ pointerEvents: "none" }}>{t.label}</text> : null}
+          </g>
+        );
+      })}
+      {showLegend && <LegendStrip y={pitchH} />}
+    </svg>
+  );
+}
+
+// The fixed 5-arrow legend, drawn as an SVG strip so it exports with the PNG.
+function LegendStrip({ y }) {
+  const items = [
+    { kind: "pass", label: "Pass" },
+    { kind: "run", label: "Run" },
+    { kind: "dribble", label: "Dribble" },
+    { kind: "shot", label: "Shot" },
+    { kind: "direction", label: "Direction" },
+  ];
+  const colW = VB_W / 5;
+  return (
+    <g>
+      <rect x={0} y={y} width={VB_W} height={LEG_H} fill="#0F172A" />
+      {items.map((it, i) => {
+        const cx = colW * i + colW / 2;
+        const x1 = cx - 42, x2 = cx + 42, cy = y + 30;
+        const sample = it.kind === "dribble"
+          ? <path d={wavyPath(x1, cy, x2, cy, 5, 14)} fill="none" stroke={ARROW_GOLD} strokeWidth={3} strokeLinecap="round" markerEnd="url(#bs-head)" />
+          : it.kind === "shot"
+            ? <g><line x1={x1} y1={cy - 4} x2={x2} y2={cy - 4} stroke={ARROW_GOLD} strokeWidth={2} /><line x1={x1} y1={cy + 4} x2={x2} y2={cy + 4} stroke={ARROW_GOLD} strokeWidth={2} markerEnd="url(#bs-head)" /></g>
+            : <line x1={x1} y1={cy} x2={x2} y2={cy} stroke={ARROW_GOLD} strokeWidth={3.5} strokeLinecap="round" strokeDasharray={it.kind === "run" ? "9 6" : undefined} markerEnd={it.kind === "pass" ? "url(#bs-open)" : "url(#bs-head)"} />;
+        return (
+          <g key={it.kind}>
+            {sample}
+            <text x={cx} y={y + 58} textAnchor="middle" fontSize={13} fontWeight="600" fill="#fff">{it.label}</text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
 export default function TacticsBoard({ initial, onSave, onClose }) {
+  const init = normalizeBoardState(initial);
   const svgRef = useRef(null);
-  const [field, setField] = useState(() => initial?.field || "soccer");
-  const [tokens, setTokens] = useState(() => initial?.tokens || []);
-  const [arrows, setArrows] = useState(() => initial?.arrows || []);
-  const [mode, setMode] = useState("move");       // move | draw
-  const [drawKind, setDrawKind] = useState("run"); // run | pass | line
+  const [field, setField] = useState(init.field);
+  const [lengthYd, setLengthYd] = useState(init.lengthYd);
+  const [widthYd, setWidthYd] = useState(init.widthYd);
+  const [tokens, setTokens] = useState(init.tokens);
+  const [arrows, setArrows] = useState(init.arrows);
+  const [zones, setZones] = useState(init.zones);
+  const [mode, setMode] = useState("move");       // move | draw | place
+  const [drawKind, setDrawKind] = useState("run"); // pass | run | dribble | shot | direction | zone
+  const [placeKind, setPlaceKind] = useState(null); // token kind being placed
+  const [snap, setSnap] = useState(false);
   const [selId, setSelId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState(null);
   const dragId = useRef(null);
+  const dragKind = useRef(null); // 'token' | 'zone'
   const drawFrom = useRef(null);
   const moved = useRef(false);
   const undoStack = useRef([]);
 
+  const dims = boardDims({ field, lengthYd, widthYd });
+  const { pitchH, vbH } = dims;
+  const state = () => ({ field, lengthYd, widthYd, tokens, arrows, zones });
+
   const snapshot = () => {
-    undoStack.current.push({ field, tokens, arrows });
+    undoStack.current.push({ field, lengthYd, widthYd, tokens, arrows, zones });
     if (undoStack.current.length > 60) undoStack.current.shift();
   };
   const undo = () => {
     const prev = undoStack.current.pop();
-    if (prev) { setField(prev.field ?? field); setTokens(prev.tokens); setArrows(prev.arrows); setSelId(null); }
+    if (!prev) return;
+    setField(prev.field); setLengthYd(prev.lengthYd); setWidthYd(prev.widthYd);
+    setTokens(prev.tokens); setArrows(prev.arrows); setZones(prev.zones || []); setSelId(null);
   };
 
+  const snapPt = (p) => (snap ? { x: clamp01(Math.round(p.x / 0.05) * 0.05), y: clamp01(Math.round(p.y / 0.05) * 0.05) } : p);
   const toBoard = (e) => {
     const r = svgRef.current.getBoundingClientRect();
-    return { x: clamp01((e.clientX - r.left) / r.width), y: clamp01((e.clientY - r.top) / r.height) };
+    // The SVG includes the legend strip at the bottom; map only the pitch area.
+    const pitchPx = (r.height * pitchH) / vbH;
+    return { x: clamp01((e.clientX - r.left) / r.width), y: clamp01((e.clientY - r.top) / pitchPx) };
   };
 
   const nextLabel = (kind) => {
-    if (kind === "home" || kind === "away" || kind === "neutral") return String(tokens.filter((t) => t.kind === kind).length + 1);
+    if (kind === "focus" || kind === "opp") return String(tokens.filter((t) => t.kind === kind).length + 1);
+    if (kind === "gk") return "GK";
     return "";
   };
-  const addToken = (kind) => {
+  const placeToken = (kind, p) => {
     snapshot();
-    const y = kind === "away" ? 0.28 : kind === "home" ? 0.72 : kind === "goal" ? 0.08 : 0.5;
-    const spread = tokens.filter((t) => t.kind === kind).length;
-    const x = kind === "goal" ? 0.5 : clamp01(0.2 + (spread % 5) * 0.15);
-    setTokens((ts) => [...ts, { id: rid(), kind, x, y, label: nextLabel(kind) }]);
+    const pt = snapPt(p);
+    setTokens((ts) => [...ts, { id: rid(), kind, x: pt.x, y: pt.y, label: nextLabel(kind) }]);
+  };
+  const changeField = (f) => {
+    const preset = BOARD_PRESETS.find((p) => p.id === f);
+    snapshot();
+    setField(f);
+    setLengthYd(preset.lengthYd);
+    setWidthYd(preset.widthYd);
+  };
+  const changeDims = (len, wid) => {
+    setLengthYd(clamp(Number(len) || 10, 5, 130));
+    setWidthYd(clamp(Number(wid) || 10, 5, 130));
   };
 
   const onTokenDown = (e, t) => {
     e.stopPropagation();
     if (mode !== "move") { setSelId(t.id); return; }
     e.preventDefault();
-    dragId.current = t.id;
+    dragId.current = t.id; dragKind.current = "token";
     moved.current = false;
     setSelId(t.id);
     svgRef.current.setPointerCapture?.(e.pointerId);
+  };
+  const onZoneDown = (e, z) => {
+    e.stopPropagation();
+    if (mode !== "move") { setSelId(z.id); return; }
+    e.preventDefault();
+    dragId.current = z.id; dragKind.current = "zone";
+    moved.current = false;
+    setSelId(z.id);
+    svgRef.current.setPointerCapture?.(e.pointerId);
+  };
+  const onArrowDown = (e, a) => {
+    e.stopPropagation();
+    if (mode === "move") setSelId(a.id);
   };
   const onBoardDown = (e) => {
     if (mode === "draw") {
@@ -222,49 +322,84 @@ export default function TacticsBoard({ initial, onSave, onClose }) {
       drawFrom.current = p;
       setDraft({ from: p, to: p });
       svgRef.current.setPointerCapture?.(e.pointerId);
+    } else if (mode === "place" && placeKind) {
+      placeToken(placeKind, toBoard(e));
     } else if (e.target === svgRef.current || e.target.dataset?.pitch) {
       setSelId(null);
     }
   };
   const onMove = (e) => {
-    if (dragId.current) {
+    if (dragId.current && dragKind.current === "token") {
       if (!moved.current) { moved.current = true; snapshot(); }
       const p = toBoard(e);
       setTokens((ts) => ts.map((t) => (t.id === dragId.current ? { ...t, x: p.x, y: p.y } : t)));
+    } else if (dragId.current && dragKind.current === "zone") {
+      if (!moved.current) { moved.current = true; snapshot(); }
+      const p = toBoard(e);
+      setZones((zs) => zs.map((z) => {
+        if (z.id !== dragId.current) return z;
+        if (z.shape === "circle") return { ...z, x: p.x, y: p.y };
+        return { ...z, x: clamp01(p.x - z.w / 2), y: clamp01(p.y - z.h / 2) };
+      }));
     } else if (drawFrom.current) {
       setDraft({ from: drawFrom.current, to: toBoard(e) });
     }
   };
   const onUp = () => {
-    dragId.current = null;
-    moved.current = false;
+    if (dragId.current && snap) {
+      const id = dragId.current;
+      setTokens((ts) => ts.map((t) => (t.id === id ? { ...t, ...snapPt(t) } : t)));
+      setZones((zs) => zs.map((z) => (z.id === id ? { ...z, x: Math.round(z.x / 0.05) * 0.05, y: Math.round(z.y / 0.05) * 0.05 } : z)));
+    }
+    dragId.current = null; dragKind.current = null; moved.current = false;
     if (drawFrom.current && draft) {
       const dx = draft.to.x - draft.from.x, dy = draft.to.y - draft.from.y;
       if (Math.hypot(dx, dy) > 0.03) {
         snapshot();
-        setArrows((as) => [...as, { id: rid(), ...draft, kind: drawKind }]);
+        if (drawKind === "zone") {
+          const x = Math.min(draft.from.x, draft.to.x), y = Math.min(draft.from.y, draft.to.y);
+          setZones((zs) => [...zs, { id: rid(), shape: "rect", x, y, w: Math.abs(dx), h: Math.abs(dy) }]);
+        } else {
+          setArrows((as) => [...as, { id: rid(), kind: drawKind, from: draft.from, to: draft.to }]);
+        }
       }
     }
     drawFrom.current = null;
     setDraft(null);
   };
 
+  const selToken = tokens.find((t) => t.id === selId) || null;
+  const selZone = zones.find((z) => z.id === selId) || null;
+  const selArrow = arrows.find((a) => a.id === selId) || null;
+  const sel = selToken || selZone || selArrow;
+
   const removeSelected = () => {
     if (!selId) return;
     snapshot();
     setTokens((ts) => ts.filter((t) => t.id !== selId));
     setArrows((as) => as.filter((a) => a.id !== selId));
+    setZones((zs) => zs.filter((z) => z.id !== selId));
     setSelId(null);
   };
+  const duplicateSelected = () => {
+    if (!selToken && !selZone) return;
+    snapshot();
+    if (selToken) {
+      const copy = { ...selToken, id: rid(), x: clamp01(selToken.x + 0.06), y: clamp01(selToken.y + 0.06), label: nextLabel(selToken.kind) };
+      setTokens((ts) => [...ts, copy]); setSelId(copy.id);
+    } else if (selZone) {
+      const copy = { ...selZone, id: rid(), x: clamp01(selZone.x + 0.05), y: clamp01(selZone.y + 0.05) };
+      setZones((zs) => [...zs, copy]); setSelId(copy.id);
+    }
+  };
   const setLabel = (id, label) => setTokens((ts) => ts.map((t) => (t.id === id ? { ...t, label: label.slice(0, 3) } : t)));
-  const clearBoard = () => { snapshot(); setTokens([]); setArrows([]); setSelId(null); };
-  const changeField = (f) => { if (f !== field) { snapshot(); setField(f); } };
+  const clearBoard = () => { snapshot(); setTokens([]); setArrows([]); setZones([]); setSelId(null); };
 
   // Rasterize the current board (minus editing chrome) to a PNG blob.
   const exportPng = () => new Promise((resolve, reject) => {
     const node = svgRef.current.cloneNode(true);
-    node.setAttribute("width", W);
-    node.setAttribute("height", H);
+    node.setAttribute("width", VB_W);
+    node.setAttribute("height", vbH);
     node.querySelectorAll("[data-skip]").forEach((n) => n.remove());
     const xml = new XMLSerializer().serializeToString(node);
     const src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(xml)));
@@ -272,7 +407,7 @@ export default function TacticsBoard({ initial, onSave, onClose }) {
     img.onload = () => {
       const scale = 2;
       const canvas = document.createElement("canvas");
-      canvas.width = W * scale; canvas.height = H * scale;
+      canvas.width = VB_W * scale; canvas.height = vbH * scale;
       canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
       canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("export failed"))), "image/png");
     };
@@ -285,19 +420,29 @@ export default function TacticsBoard({ initial, onSave, onClose }) {
     setSelId(null);
     try {
       const blob = await exportPng();
-      await onSave?.(blob, { field, tokens, arrows });
+      await onSave?.(blob, state());
     } catch {
-      await onSave?.(null, { field, tokens, arrows });
+      await onSave?.(null, state());
     } finally {
       setBusy(false);
     }
   };
 
-  const arrowPx = (a) => ({ x1: a.from.x * W, y1: a.from.y * H, x2: a.to.x * W, y2: a.to.y * H });
-  const strokeFor = (kind) => (kind === "line" ? LINE : ARROW);
-  const sel = tokens.find((t) => t.id === selId) || null;
-  const TOKEN_BTNS = [
-    ["home", "Home", TEAM.home], ["away", "Away", TEAM.away], ["neutral", "Neutral", TEAM.neutral],
+  const px = (x) => M + x * (VB_W - 2 * M);
+  const py = (y) => M + y * (pitchH - 2 * M);
+  const arrowPx = (a) => ({ x1: px(a.from.x), y1: py(a.from.y), x2: px(a.to.x), y2: py(a.to.y) });
+
+  const PLACE_BTNS = [
+    ["focus", "Focus", TEAM_COLORS.focus],
+    ["opp", "Opp", TEAM_COLORS.opp],
+    ["gk", "GK", TEAM_COLORS.gk],
+    ["ball", "Ball", "#FFFFFF"],
+    ["cone", "Cone", "#F97316"],
+    ["goal", "Goal", "#FFFFFF"],
+    ["mannequin", "Mannequin", "#94A3B8"],
+  ];
+  const DRAW_BTNS = [
+    ["pass", "Pass"], ["run", "Run"], ["dribble", "Dribble"], ["shot", "Shot"], ["direction", "Direction"], ["zone", "Zone"],
   ];
 
   return (
@@ -307,147 +452,242 @@ export default function TacticsBoard({ initial, onSave, onClose }) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-white text-sm font-bold flex-shrink-0">Board</span>
-            <select value={field} onChange={(e) => changeField(e.target.value)} aria-label="Field type" className="text-[11px] font-semibold bg-white/10 text-white rounded px-1.5 py-1 outline-none cursor-pointer">
-              {FIELDS.map(([id, lbl]) => <option key={id} value={id} className="text-slate-900">{lbl}</option>)}
+            <select value={field} onChange={(e) => changeField(e.target.value)} aria-label="Pitch size" className="text-[11px] font-semibold bg-white/10 text-white rounded px-1.5 py-1 outline-none cursor-pointer">
+              {BOARD_PRESETS.map((p) => <option key={p.id} value={p.id} className="text-slate-900">{p.label}</option>)}
             </select>
+            <span className="text-[11px] font-semibold text-white/50 whitespace-nowrap">{lengthYd} × {widthYd} yd</span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={undo} disabled={busy} title="Undo" className="w-9 h-9 rounded-full flex items-center justify-center text-white bg-white/10 hover:bg-white/20 disabled:opacity-30"><Undo2 className="w-4 h-4" /></button>
-            <button onClick={save} disabled={busy} className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full text-white" style={{ backgroundColor: TEAM.home }}><Save className="w-3.5 h-3.5" /> {busy ? "Saving…" : "Save"}</button>
-            <button onClick={onClose} className="w-9 h-9 rounded-full flex items-center justify-center text-white bg-white/10 hover:bg-white/20"><X className="w-4 h-4" /></button>
+            <button onClick={undo} disabled={busy} title="Undo" aria-label="Undo" className="min-w-11 min-h-11 w-11 h-11 rounded-full flex items-center justify-center text-white bg-white/10 hover:bg-white/20 disabled:opacity-30"><Undo2 className="w-4 h-4" /></button>
+            <button onClick={save} disabled={busy} className="flex items-center gap-1.5 text-xs font-bold px-3 py-2.5 rounded-full text-white min-h-11" style={{ backgroundColor: TEAM_COLORS.focus }}><Save className="w-3.5 h-3.5" /> {busy ? "Saving…" : "Save"}</button>
+            <button onClick={onClose} aria-label="Close board" className="min-w-11 min-h-11 w-11 h-11 rounded-full flex items-center justify-center text-white bg-white/10 hover:bg-white/20"><X className="w-4 h-4" /></button>
           </div>
         </div>
+
+        {/* grid dimensions (only for the Grid preset) */}
+        {field === "grid" && (
+          <div className="px-4 py-2 bg-slate-800/60 border-b border-white/10 flex items-center gap-2">
+            <span className="text-[11px] font-bold text-white/60">Grid size</span>
+            <label className="flex items-center gap-1 text-[11px] font-semibold text-white">
+              <input type="number" min={5} max={130} value={lengthYd} onChange={(e) => changeDims(e.target.value, widthYd)} className="w-16 bg-white/10 text-white text-xs font-bold text-center rounded-lg px-2 py-2 border border-white/15 outline-none" /> yd long
+            </label>
+            <span className="text-white/40 text-xs">×</span>
+            <label className="flex items-center gap-1 text-[11px] font-semibold text-white">
+              <input type="number" min={5} max={130} value={widthYd} onChange={(e) => changeDims(lengthYd, e.target.value)} className="w-16 bg-white/10 text-white text-xs font-bold text-center rounded-lg px-2 py-2 border border-white/15 outline-none" /> yd wide
+            </label>
+          </div>
+        )}
 
         {/* board */}
         <div className="flex-1 overflow-auto flex items-center justify-center p-3">
           <svg
             ref={svgRef}
-            viewBox={`0 0 ${W} ${H}`}
-            className="w-full max-w-sm rounded-xl shadow-2xl touch-none"
-            style={{ aspectRatio: `${W} / ${H}` }}
+            viewBox={`0 0 ${VB_W} ${vbH}`}
+            className="w-full max-w-sm rounded-xl shadow-2xl touch-none select-none"
+            style={{ aspectRatio: `${VB_W} / ${vbH}` }}
             onPointerDown={onBoardDown}
             onPointerMove={onMove}
             onPointerUp={onUp}
             onPointerLeave={onUp}
           >
             <defs>
-              <marker id="tb-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill={ARROW} />
+              <marker id="tb-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill={ARROW_GOLD} />
+              </marker>
+              <marker id="tb-open" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+                <path d="M 0.5 0.5 L 9 5 L 0.5 9.5" fill="none" stroke={ARROW_GOLD} strokeWidth="1.8" strokeLinecap="round" />
+              </marker>
+              {/* bs-* ids are what LegendStrip uses (same shapes, so the strip
+                  exports with the PNG from either SVG). */}
+              <marker id="bs-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill={ARROW_GOLD} />
+              </marker>
+              <marker id="bs-open" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+                <path d="M 0.5 0.5 L 9 5 L 0.5 9.5" fill="none" stroke={ARROW_GOLD} strokeWidth="1.8" strokeLinecap="round" />
               </marker>
             </defs>
-            <g data-pitch="1"><Field field={field} /></g>
+            <g data-pitch="1"><PitchMarks preset={dims.preset} wYd={dims.wYd} dYd={dims.dYd} pitchH={pitchH} /></g>
 
-            {/* committed runs (arrow), passes (dashed + order number), dribbles (wavy), lines (white) */}
-            {(() => {
-              let passSeq = 0;
-              return arrows.map((a) => {
-                const p = arrowPx(a);
-                const onDown = (e) => { e.stopPropagation(); if (mode === "move") setSelId(a.id); };
-                const cursor = { cursor: mode === "move" ? "pointer" : "crosshair" };
-                const passNo = a.kind === "pass" ? ++passSeq : null;
-                const mid = { x: (p.x1 + p.x2) / 2, y: (p.y1 + p.y2) / 2 };
+            {/* zones */}
+            {zones.map((z) => {
+              const onDown = (e) => onZoneDown(e, z);
+              const selected = z.id === selId;
+              return z.shape === "circle" ? (
+                <circle key={z.id} cx={px(z.x)} cy={py(z.y)} r={z.r * (VB_W - 2 * M)} fill="rgba(255,255,255,0.12)" stroke={selected ? "#38BDF8" : "rgba(255,255,255,0.7)"} strokeWidth={2.5} strokeDasharray="8 6" onPointerDown={onDown} style={{ cursor: "grab" }} />
+              ) : (
+                <rect key={z.id} x={px(z.x)} y={py(z.y)} width={z.w * (VB_W - 2 * M)} height={z.h * (pitchH - 2 * M)} rx={6} fill="rgba(255,255,255,0.12)" stroke={selected ? "#38BDF8" : "rgba(255,255,255,0.7)"} strokeWidth={2.5} strokeDasharray="8 6" onPointerDown={onDown} style={{ cursor: "grab" }} />
+              );
+            })}
+
+            {/* arrows */}
+            {arrows.map((a) => {
+              const p = arrowPx(a);
+              const selected = a.id === selId;
+              const onDown = (e) => onArrowDown(e, a);
+              const halo = selected ? { stroke: "#38BDF8", strokeWidth: 8, opacity: 0.35 } : null;
+              if (a.kind === "dribble") {
                 return (
                   <g key={a.id}>
-                    {a.kind === "dribble" ? (
-                      <path d={wavyPath(p.x1, p.y1, p.x2, p.y2)} fill="none" stroke={ARROW} strokeWidth={3.5} strokeLinecap="round" markerEnd="url(#tb-arrow)" onPointerDown={onDown} style={cursor} />
-                    ) : (
-                      <line {...p} stroke={strokeFor(a.kind)} strokeWidth={4} strokeLinecap="round" strokeDasharray={a.kind === "pass" ? "2 12" : undefined} markerEnd={a.kind === "line" ? undefined : "url(#tb-arrow)"} onPointerDown={onDown} style={cursor} />
-                    )}
-                    {passNo != null && (
-                      <g style={{ pointerEvents: "none" }}>
-                        <circle cx={mid.x} cy={mid.y} r={12} fill="#111827" stroke="#fff" strokeWidth={1.5} />
-                        <text x={mid.x} y={mid.y + 4} textAnchor="middle" fontSize={13} fontWeight="700" fill="#fff">{passNo}</text>
-                      </g>
-                    )}
+                    {halo && <path d={wavyPath(p.x1, p.y1, p.x2, p.y2)} fill="none" {...halo} strokeLinecap="round" />}
+                    <path d={wavyPath(p.x1, p.y1, p.x2, p.y2)} fill="none" stroke={ARROW_GOLD} strokeWidth={3.5} strokeLinecap="round" markerEnd="url(#tb-head)" onPointerDown={onDown} style={{ cursor: "pointer" }} />
                   </g>
                 );
-              });
-            })()}
-            {draft && (drawKind === "dribble"
-              ? <path data-skip d={wavyPath(draft.from.x * W, draft.from.y * H, draft.to.x * W, draft.to.y * H)} fill="none" stroke={ARROW} strokeWidth={4} strokeLinecap="round" markerEnd="url(#tb-arrow)" />
-              : <line data-skip x1={draft.from.x * W} y1={draft.from.y * H} x2={draft.to.x * W} y2={draft.to.y * H} stroke={strokeFor(drawKind)} strokeWidth={4} strokeLinecap="round" strokeDasharray={drawKind === "pass" ? "2 12" : undefined} markerEnd={drawKind === "line" ? undefined : "url(#tb-arrow)"} />)}
+              }
+              if (a.kind === "shot") {
+                const dx = p.x2 - p.x1, dy = p.y2 - p.y1, len = Math.hypot(dx, dy) || 1, ox = (-dy / len) * 4, oy = (dx / len) * 4;
+                return (
+                  <g key={a.id} onPointerDown={onDown} style={{ cursor: "pointer" }}>
+                    <line x1={p.x1 + ox} y1={p.y1 + oy} x2={p.x2 + ox} y2={p.y2 + oy} stroke={ARROW_GOLD} strokeWidth={2.5} strokeLinecap="round" />
+                    <line x1={p.x1 - ox} y1={p.y1 - oy} x2={p.x2 - ox} y2={p.y2 - oy} stroke={ARROW_GOLD} strokeWidth={2.5} strokeLinecap="round" markerEnd="url(#tb-head)" />
+                  </g>
+                );
+              }
+              return (
+                <g key={a.id}>
+                  {halo && <line {...p} {...halo} strokeLinecap="round" />}
+                  <line {...p} stroke={ARROW_GOLD} strokeWidth={a.kind === "pass" ? 3.5 : 4} strokeLinecap="round"
+                    strokeDasharray={a.kind === "run" ? "10 7" : undefined}
+                    markerEnd={a.kind === "pass" ? "url(#tb-open)" : "url(#tb-head)"} onPointerDown={onDown} style={{ cursor: "pointer" }} />
+                </g>
+              );
+            })}
+            {draft && (drawKind === "zone"
+              ? <rect data-skip x={px(Math.min(draft.from.x, draft.to.x))} y={py(Math.min(draft.from.y, draft.to.y))} width={Math.abs(draft.to.x - draft.from.x) * (VB_W - 2 * M)} height={Math.abs(draft.to.y - draft.from.y) * (pitchH - 2 * M)} fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.7)" strokeWidth={2.5} strokeDasharray="8 6" rx={6} />
+              : drawKind === "dribble"
+                ? <path data-skip d={wavyPath(draft.from.x * (VB_W - 2 * M) + M, draft.from.y * (pitchH - 2 * M) + M, draft.to.x * (VB_W - 2 * M) + M, draft.to.y * (pitchH - 2 * M) + M)} fill="none" stroke={ARROW_GOLD} strokeWidth={4} strokeLinecap="round" markerEnd="url(#tb-head)" />
+                : <line data-skip x1={px(draft.from.x)} y1={py(draft.from.y)} x2={px(draft.to.x)} y2={py(draft.to.y)} stroke={ARROW_GOLD} strokeWidth={4} strokeLinecap="round" strokeDasharray={drawKind === "run" ? "10 7" : undefined} markerEnd={drawKind === "pass" ? "url(#tb-open)" : "url(#tb-head)"} />)}
 
             {/* tokens */}
             {tokens.map((t) => {
-              const x = t.x * W, y = t.y * H;
+              const x = px(t.x), y = py(t.y);
               const selected = t.id === selId;
-              const halo = selected ? <circle data-skip cx={x} cy={y} r={R + 5} fill="none" stroke="#38BDF8" strokeWidth={3} strokeDasharray="3 3" /> : null;
+              const halo = selected ? <circle data-skip cx={x} cy={y} r={R + 6} fill="none" stroke="#38BDF8" strokeWidth={3} strokeDasharray="3 3" /> : null;
               if (t.kind === "ball") {
                 return (
                   <g key={t.id} onPointerDown={(e) => onTokenDown(e, t)} style={{ cursor: "grab" }}>
-                    {selected && <circle data-skip cx={x} cy={y} r={R * 0.9} fill="none" stroke="#38BDF8" strokeWidth={3} strokeDasharray="3 3" />}
-                    <circle cx={x} cy={y} r={R * 0.62} fill="#fff" stroke="#111" strokeWidth={2} />
-                    <circle cx={x} cy={y} r={R * 0.24} fill="#111" />
+                    <circle cx={x} cy={y} r={HIT_R} fill="transparent" />
+                    {selected && <circle data-skip cx={x} cy={y} r={R + 4} fill="none" stroke="#38BDF8" strokeWidth={3} strokeDasharray="3 3" />}
+                    <circle cx={x} cy={y} r={12} fill="#fff" stroke="#111" strokeWidth={2} />
+                    <circle cx={x} cy={y} r={4.5} fill="#111" />
                   </g>
                 );
               }
               if (t.kind === "cone") {
                 return (
                   <g key={t.id} onPointerDown={(e) => onTokenDown(e, t)} style={{ cursor: "grab" }}>
+                    <circle cx={x} cy={y} r={HIT_R} fill="transparent" />
                     {halo}
-                    <polygon points={`${x},${y - R * 0.9} ${x - R * 0.7},${y + R * 0.7} ${x + R * 0.7},${y + R * 0.7}`} fill="#F97316" stroke="#7C2D12" strokeWidth={2} />
+                    <polygon points={`${x},${y - 16} ${x - 13},${y + 12} ${x + 13},${y + 12}`} fill="#F97316" stroke="#7C2D12" strokeWidth={2} />
                   </g>
                 );
               }
               if (t.kind === "goal") {
                 return (
                   <g key={t.id} onPointerDown={(e) => onTokenDown(e, t)} style={{ cursor: "grab" }}>
+                    <circle cx={x} cy={y} r={HIT_R} fill="transparent" />
                     {selected && <rect data-skip x={x - 48} y={y - 22} width={96} height={44} rx={4} fill="none" stroke="#38BDF8" strokeWidth={3} strokeDasharray="3 3" />}
-                    <Goal x={x} y={y} />
+                    <GoalMark x={x} y={y} />
                   </g>
                 );
               }
-              // home / away / neutral disc
+              if (t.kind === "mannequin") {
+                return (
+                  <g key={t.id} onPointerDown={(e) => onTokenDown(e, t)} style={{ cursor: "grab" }}>
+                    <circle cx={x} cy={y} r={HIT_R} fill="transparent" />
+                    {halo}
+                    <rect x={x - 9} y={y - 18} width={18} height={36} rx={8} fill="#94A3B8" stroke="#475569" strokeWidth={2} />
+                    <rect x={x - 13} y={y + 16} width={26} height={5} rx={2.5} fill="#64748B" />
+                  </g>
+                );
+              }
               return (
                 <g key={t.id} onPointerDown={(e) => onTokenDown(e, t)} style={{ cursor: "grab" }}>
+                  <circle cx={x} cy={y} r={HIT_R} fill="transparent" />
                   {halo}
-                  <circle cx={x} cy={y} r={R} fill={TEAM[t.kind] || "#64748B"} stroke="rgba(0,0,0,0.4)" strokeWidth={2} />
+                  <circle cx={x} cy={y} r={R} fill={TEAM_COLORS[t.kind] || "#64748B"} stroke="rgba(0,0,0,0.4)" strokeWidth={2} />
                   {t.label ? <text x={x} y={y + R * 0.34} textAnchor="middle" fontSize={R * 0.85} fontWeight="700" fill="#fff" style={{ pointerEvents: "none" }}>{t.label}</text> : null}
                 </g>
               );
             })}
+            <LegendStrip y={pitchH} />
           </svg>
         </div>
 
         {/* selection bar */}
-        {sel && (sel.kind === "home" || sel.kind === "away" || sel.kind === "neutral") && (
+        {sel && (
           <div className="px-3 py-2 bg-slate-800 border-t border-white/10 flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-white/40">Number</span>
-            <input value={sel.label} onChange={(e) => setLabel(sel.id, e.target.value)} maxLength={3} className="w-16 bg-white/10 text-white text-xs font-bold text-center rounded px-2 py-1.5 border border-white/15 outline-none" />
-            <button onClick={removeSelected} className="ml-auto flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-red-500/80 text-white"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
-          </div>
-        )}
-        {sel && !(sel.kind === "home" || sel.kind === "away" || sel.kind === "neutral") && (
-          <div className="px-3 py-2 bg-slate-800 border-t border-white/10 flex items-center">
             <span className="text-[10px] font-black uppercase tracking-wider text-white/40">Selected</span>
-            <button onClick={removeSelected} className="ml-auto flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-red-500/80 text-white"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
+            {selToken && (selToken.kind === "focus" || selToken.kind === "opp" || selToken.kind === "gk") && (
+              <input value={selToken.label || ""} onChange={(e) => setLabel(selToken.id, e.target.value)} maxLength={3} aria-label="Player number" className="w-16 bg-white/10 text-white text-xs font-bold text-center rounded-lg px-2 py-2 border border-white/15 outline-none" />
+            )}
+            {(selToken || selZone) && (
+              <button onClick={duplicateSelected} className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-full bg-white/10 text-white min-h-11"><Copy className="w-3.5 h-3.5" /> Duplicate</button>
+            )}
+            <button onClick={removeSelected} className="ml-auto flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-full bg-red-500/80 text-white min-h-11"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
           </div>
         )}
 
-        {/* toolbar */}
+        {/* toolbar — tap-to-place row, then move/draw row */}
         <div className="bg-slate-800 border-t border-white/10 px-3 py-2.5 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
-            {TOKEN_BTNS.map(([kind, lbl, color]) => (
-              <button key={kind} onClick={() => addToken(kind)} className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full bg-white/10 text-white hover:bg-white/20"><span className="w-3 h-3 rounded-full" style={{ background: color }} /> {lbl}</button>
+            <button onClick={() => { setMode("place"); setPlaceKind(null); }} aria-pressed={mode === "place"} title="Tap to place" className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2.5 rounded-full min-h-11 ${mode === "place" ? "text-white" : "text-white/60 bg-white/10"}`} style={mode === "place" ? { backgroundColor: TEAM_COLORS.focus } : {}}><Hand className="w-4 h-4" /> Place</button>
+            {PLACE_BTNS.map(([kind, lbl, color]) => (
+              <button key={kind} onClick={() => { setMode("place"); setPlaceKind(kind); }} aria-pressed={mode === "place" && placeKind === kind} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2.5 rounded-full min-h-11 ${mode === "place" && placeKind === kind ? "text-white ring-2 ring-sky-400" : "text-white bg-white/10"}`} style={mode === "place" && placeKind === kind ? { backgroundColor: TEAM_COLORS.focus } : {}}>
+                {kind === "cone"
+                  ? <span className="w-0 h-0" style={{ borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderBottom: "9px solid #F97316" }} />
+                  : kind === "ball"
+                    ? <span className="w-3 h-3 rounded-full bg-white border border-black" />
+                    : kind === "goal"
+                      ? <span className="w-3.5 h-2 border-2 border-white rounded-sm" />
+                      : kind === "mannequin"
+                        ? <span className="w-2.5 h-4 rounded-full bg-slate-400" />
+                        : <span className="w-3 h-3 rounded-full" style={{ background: color }} />}
+                {lbl}
+              </button>
             ))}
-            <button onClick={() => addToken("ball")} className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full bg-white/10 text-white hover:bg-white/20"><span className="w-3 h-3 rounded-full bg-white border border-black" /> Ball</button>
-            <button onClick={() => addToken("cone")} className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full bg-white/10 text-white hover:bg-white/20"><span className="w-0 h-0" style={{ borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderBottom: "9px solid #F97316" }} /> Cone</button>
-            <button onClick={() => addToken("goal")} className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full bg-white/10 text-white hover:bg-white/20"><span className="w-3.5 h-2 border-2 border-white rounded-sm" /> Goal</button>
-            <button onClick={clearBoard} className="ml-auto flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full bg-white/10 text-white hover:bg-white/20"><RotateCcw className="w-3.5 h-3.5" /> Clear</button>
+            <button onClick={clearBoard} className="ml-auto flex items-center gap-1.5 text-xs font-bold px-3 py-2.5 rounded-full bg-white/10 text-white min-h-11"><RotateCcw className="w-3.5 h-3.5" /> Clear</button>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1 bg-white/5 rounded-full p-1">
-              <button onClick={() => setMode("move")} aria-pressed={mode === "move"} className={`flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-full ${mode === "move" ? "text-white" : "text-white/50"}`} style={mode === "move" ? { backgroundColor: TEAM.home } : {}}><MousePointer2 className="w-3.5 h-3.5" /> Move</button>
-              <button onClick={() => setMode("draw")} aria-pressed={mode === "draw"} className={`flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-full ${mode === "draw" ? "text-white" : "text-white/50"}`} style={mode === "draw" ? { backgroundColor: TEAM.home } : {}}><Spline className="w-3.5 h-3.5" /> Draw</button>
+              <button onClick={() => { setMode("move"); setPlaceKind(null); }} aria-pressed={mode === "move"} className={`flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-full min-h-9 ${mode === "move" ? "text-white" : "text-white/50"}`} style={mode === "move" ? { backgroundColor: TEAM_COLORS.focus } : {}}><MousePointer2 className="w-3.5 h-3.5" /> Move</button>
+              <button onClick={() => { setMode("draw"); setPlaceKind(null); }} aria-pressed={mode === "draw"} className={`flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-full min-h-9 ${mode === "draw" ? "text-white" : "text-white/50"}`} style={mode === "draw" ? { backgroundColor: TEAM_COLORS.focus } : {}}><Spline className="w-3.5 h-3.5" /> Draw</button>
             </div>
             {mode === "draw" && (
-              <div className="flex items-center gap-1">
-                {[["run", "Run"], ["pass", "Pass"], ["dribble", "Dribble"], ["line", "Line"]].map(([k, lbl]) => (
-                  <button key={k} onClick={() => setDrawKind(k)} aria-pressed={drawKind === k} className={`text-[11px] font-bold px-2.5 py-1.5 rounded-full border ${drawKind === k ? "text-white border-sky-400 bg-sky-500/25" : "text-white/60 border-white/15 bg-white/5"}`}>{lbl}</button>
+              <div className="flex items-center gap-1 flex-wrap">
+                {DRAW_BTNS.map(([k, lbl]) => (
+                  <button key={k} onClick={() => setDrawKind(k)} aria-pressed={drawKind === k} className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-2 rounded-full border min-h-9 ${drawKind === k ? "text-white border-sky-400 bg-sky-500/25" : "text-white/60 border-white/15 bg-white/5"}`}>
+                    {k === "zone" && (lbl === "Zone" ? <SquareDashed className="w-3 h-3" /> : <CircleDashed className="w-3 h-3" />)}
+                    {lbl}
+                  </button>
                 ))}
               </div>
             )}
-            <span className="text-[10px] text-white/40 font-medium ml-auto">{mode === "draw" ? (drawKind === "line" ? "Drag to draw a white field line" : drawKind === "dribble" ? "Drag to draw a dribble" : drawKind === "pass" ? "Drag to draw a pass (auto-numbered)" : "Drag to draw a run") : "Drag players, ball, cones & goals"}</span>
+            <button onClick={() => setSnap(!snap)} aria-pressed={snap} title="Snap markers to a grid" className={`flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-full border min-h-9 ${snap ? "text-white border-sky-400 bg-sky-500/25" : "text-white/60 border-white/15 bg-white/5"}`}><Magnet className="w-3.5 h-3.5" /> Snap</button>
+            <span className="text-[10px] text-white/40 font-medium ml-auto">
+              {mode === "place" ? (placeKind ? `Tap the pitch to place a ${placeKind}` : "Pick a marker, then tap the pitch")
+                : mode === "draw" ? (drawKind === "zone" ? "Drag to draw a zone" : `Drag to draw a ${drawKind}`)
+                  : "Drag players, ball, cones & goals"}
+            </span>
+          </div>
+          {/* printed legend (also drawn into the exported PNG) */}
+          <div className="flex items-center gap-3 flex-wrap pt-1 border-t border-white/5">
+            {ARROW_LEGEND.map((a) => (
+              <span key={a.id} className="flex items-center gap-1.5 text-[10px] font-semibold text-white/60">
+                <svg width="26" height="10" viewBox="0 0 26 10" aria-hidden="true">
+                  {a.id === "dribble"
+                    ? <path d={wavyPath(1, 5, 25, 5, 2.5, 8)} fill="none" stroke={ARROW_GOLD} strokeWidth={1.8} />
+                    : a.id === "shot"
+                      ? <g><line x1="1" y1="3" x2="25" y2="3" stroke={ARROW_GOLD} strokeWidth={1.4} /><line x1="1" y1="7" x2="25" y2="7" stroke={ARROW_GOLD} strokeWidth={1.4} /></g>
+                      : <line x1="1" y1="5" x2="25" y2="5" stroke={ARROW_GOLD} strokeWidth={2} strokeDasharray={a.id === "run" ? "4 3" : undefined} markerEnd={a.id === "pass" ? "url(#tb-open)" : undefined} />}
+                </svg>
+                {a.label}
+              </span>
+            ))}
+            <span className="flex items-center gap-1.5 text-[10px] font-semibold text-white/60 ml-auto">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: TEAM_COLORS.focus }} /> Focus
+              <span className="w-2.5 h-2.5 rounded-full ml-2" style={{ background: TEAM_COLORS.opp }} /> Opp
+              <span className="w-2.5 h-2.5 rounded-full ml-2" style={{ background: TEAM_COLORS.gk }} /> GK
+            </span>
           </div>
         </div>
       </div>

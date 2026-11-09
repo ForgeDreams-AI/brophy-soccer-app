@@ -8,7 +8,7 @@ import {
   Image as ImageIcon, Mail, ArrowRight, Layers, Reply, BarChart3, ScanLine, Camera,
   Bell, BellOff, Pencil, Copy,
   Users, Tag, Target, Footprints, Repeat, Flag, Zap, ImagePlus, Goal, Hash, Eye,
-  ClipboardList, ExternalLink, Star, Shuffle, CornerDownRight, Crosshair, Swords, LayoutGrid, Lightbulb,
+  ClipboardList, ExternalLink, Star, Shuffle, CornerDownRight, Crosshair, Swords, LayoutGrid, Lightbulb, SquareDashed,
 } from "lucide-react";
 import {
   sendSignInLinkToEmail,
@@ -69,7 +69,8 @@ import { TEAMS, TEAM_IDS, DEFAULT_TEAM_ID, isValidTeamId, teamDocFields } from "
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { APP_VERSION } from "./data/whatsNew";
 import { UpdateBanner, WhatsNewModal } from "./components/UpdateUI";
-import TacticsBoard from "./components/TacticsBoard";
+import TacticsBoard, { BoardSvg } from "./components/TacticsBoard";
+import { ARROW_LEGEND, wavyPath } from "./components/boardData";
 import QuoteOfDay from "./components/QuoteOfDay";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2829,13 +2830,34 @@ const DrillDiagram = ({ d, icon: Icon, className = "" }) => (
     <img src="/pc-bears-logo.png" alt="" aria-hidden="true" draggable="false"
       className="absolute inset-0 m-auto w-3/4 max-h-full object-contain pointer-events-none select-none"
       style={{ opacity: 0.2 }} />
-    {d.diagram ? (
+    {d.diagramData ? (
+      <BoardSvg state={d.diagramData} className="relative w-full h-full" />
+    ) : d.diagram ? (
       <img src={d.diagram} alt="Drill diagram" className="relative w-full h-full object-cover" loading="lazy" />
     ) : (
       <div className="relative w-full h-full flex items-center justify-center">
         {Icon ? <Icon className="w-8 h-8 text-white/90" /> : null}
       </div>
     )}
+  </div>
+);
+
+// The fixed 5-arrow board legend, shown under any drill diagram drawn on the
+// board (the same legend is also baked into the exported board PNG).
+const ArrowLegendChips = () => (
+  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 pt-1">
+    {ARROW_LEGEND.map((a) => (
+      <span key={a.id} className="flex items-center gap-1 text-[10px] font-semibold text-slate-500">
+        <svg width="24" height="10" viewBox="0 0 24 10" aria-hidden="true">
+          {a.id === "dribble"
+            ? <path d={wavyPath(1, 5, 23, 5, 2.5, 8)} fill="none" stroke="#D97706" strokeWidth={1.8} />
+            : a.id === "shot"
+              ? <g><line x1="1" y1="3" x2="23" y2="3" stroke="#D97706" strokeWidth={1.4} /><line x1="1" y1="7" x2="23" y2="7" stroke="#D97706" strokeWidth={1.4} /></g>
+              : <line x1="1" y1="5" x2="23" y2="5" stroke="#D97706" strokeWidth={2} strokeDasharray={a.id === "run" ? "4 3" : undefined} />}
+        </svg>
+        {a.label}
+      </span>
+    ))}
   </div>
 );
 
@@ -2846,13 +2868,19 @@ const DrillModal = ({ item, onClose }) => {
   const Icon = DRILL_CAT_ICON[item.cat] || Target;
   const title = item.title || item.name;
   const setup = item.setup || {};
+  const gridLabel = setup.lengthYd && setup.widthYd ? `${setup.lengthYd} × ${setup.widthYd} yd` : setup.grid;
+  const equipList = Array.isArray(setup.equipment) ? setup.equipment.join(", ") : (setup.equipment || item.equipment);
   const setupRows = [
-    ["Grid", setup.grid],
+    ["Grid", gridLabel],
     ["Teams", setup.teams],
     ["Players", item.players],
     ["Duration", item.dur],
-    ["Equipment", setup.equipment || item.equipment],
-  ].filter(([, v]) => v && String(v).trim());
+    ["Cones", setup.cones],
+    ["Balls", setup.balls],
+    ["Goals", setup.goals],
+    ["Mannequins", setup.mannequins],
+    ["Equipment", equipList],
+  ].filter(([, v]) => v !== undefined && v !== null && v !== "" && String(v).trim());
   const howTo = item.howTo || item.desc || "";
   const objectives = (item.objectives || [])
     .map((o) => String(o).replace(/^General:\s*/i, "").trim())
@@ -2876,6 +2904,7 @@ const DrillModal = ({ item, onClose }) => {
         </div>
         <div className="p-5 space-y-4">
           <DrillDiagram d={item} icon={Icon} className="w-full aspect-[4/3]" />
+          {item.diagramData && <ArrowLegendChips />}
           {setupRows.length > 0 && (
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Setup</h4>
@@ -2990,7 +3019,7 @@ const PointModal = ({ item, onClose }) => {
 
 const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCreating = false }) => {
   const isAdmin = user.role === "admin";
-  const blank = { name: "", title: "", kind: "drill", cat: DRILL_CATS[0], tags: "", dur: "", players: "", equipment: "", setupGrid: "", setupTeams: "", howTo: "", objectives: "", desc: "", info: "", videoUrl: "", photos: [], diagram: "", diagramData: null, scenario: "", cues: "" };
+  const blank = { name: "", title: "", kind: "drill", cat: DRILL_CATS[0], tags: "", dur: "", players: "", equipment: "", setupLengthYd: "", setupWidthYd: "", setupCones: "", setupBalls: "", setupGoals: "", setupMannequins: "", setupTeams: "", howTo: "", objectives: "", desc: "", info: "", videoUrl: "", photos: [], diagram: "", diagramData: null, scenario: "", cues: "" };
   const [cat, setCat] = useState(DRILL_CATS[0]);
   const [tag, setTag] = useState("All");
   const [kind, setKind] = useState("drill"); // "all" | "drill" | "point" — drills show by default
@@ -3006,7 +3035,8 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
   // drill diagram shows) and keep the editable JSON so it can be reopened.
   const saveBoard = async (pngBlob, state) => {
     setBoardOpen(false);
-    setForm((p) => ({ ...p, diagramData: state }));
+    // The board's yard dimensions are the drill's setup dimensions.
+    setForm((p) => ({ ...p, diagramData: state, setupLengthYd: state?.lengthYd ?? p.setupLengthYd, setupWidthYd: state?.widthYd ?? p.setupWidthYd }));
     if (!pngBlob) return;
     setUploading(true);
     try {
@@ -3063,20 +3093,34 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
 
   const startEdit = (d) => {
     setEditingId(d.id);
-    setForm({ name: d.name || "", title: d.title || "", kind: d.kind || "drill", cat: d.cat || DRILL_CATS[0], tags: (d.tags || []).join(", "), dur: d.dur || "", players: d.players || "", equipment: d.equipment || "", setupGrid: d.setup?.grid || "", setupTeams: d.setup?.teams || "", howTo: d.howTo || "", objectives: (d.objectives || []).join("\n"), desc: d.desc || "", info: d.info || "", videoUrl: d.videoUrl || "", photos: d.photos || [], diagram: d.diagram || "", diagramData: d.diagramData || null, scenario: d.scenario || "", cues: (d.cues || []).join("\n") });
+    const gridMatch = String(d.setup?.grid || "").match(/(\d+)\s*[x×]\s*(\d+)/);
+    const lenYd = d.setup?.lengthYd ?? d.diagramData?.lengthYd ?? (gridMatch ? gridMatch[1] : "");
+    const widYd = d.setup?.widthYd ?? d.diagramData?.widthYd ?? (gridMatch ? gridMatch[2] : "");
+    const equipStr = Array.isArray(d.setup?.equipment) ? d.setup.equipment.join(", ") : (d.equipment || "");
+    setForm({ name: d.name || "", title: d.title || "", kind: d.kind || "drill", cat: d.cat || DRILL_CATS[0], tags: (d.tags || []).join(", "), dur: d.dur || "", players: d.players || "", equipment: equipStr, setupLengthYd: lenYd, setupWidthYd: widYd, setupCones: d.setup?.cones ?? "", setupBalls: d.setup?.balls ?? "", setupGoals: d.setup?.goals ?? "", setupMannequins: d.setup?.mannequins ?? "", setupTeams: d.setup?.teams || "", howTo: d.howTo || "", objectives: (d.objectives || []).join("\n"), desc: d.desc || "", info: d.info || "", videoUrl: d.videoUrl || "", photos: d.photos || [], diagram: d.diagram || "", diagramData: d.diagramData || null, scenario: d.scenario || "", cues: (d.cues || []).join("\n") });
     setAdding(true);
   };
   const cancel = () => { setEditingId(null); setForm(blank); setAdding(false); setNewCat(false); };
-  const save = async () => {
-    if (!form.name.trim()) return;
-    const data = {
+  // Structured drill record: setup carries real yard dimensions + counts.
+  const buildData = () => {
+    const numOrNull = (v) => { const n = Number(v); return Number.isFinite(n) && String(v).trim() !== "" ? n : null; };
+    const lenYd = numOrNull(form.setupLengthYd), widYd = numOrNull(form.setupWidthYd);
+    const equipArr = form.equipment.split(",").map((t) => t.trim()).filter(Boolean);
+    return {
       name: form.name.trim(),
       title: form.title.trim(),
       kind: form.kind || "drill",
       cat: (form.cat || "").trim() || DRILL_CATS[0],
       tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
       dur: form.dur.trim(), players: form.players.trim(), equipment: form.equipment.trim(),
-      setup: { grid: form.setupGrid.trim(), teams: form.setupTeams.trim(), equipment: form.equipment.trim() },
+      setup: {
+        grid: lenYd && widYd ? `${lenYd}x${widYd} yd` : "",
+        teams: form.setupTeams.trim(),
+        lengthYd: lenYd, widthYd: widYd,
+        cones: numOrNull(form.setupCones), balls: numOrNull(form.setupBalls),
+        goals: numOrNull(form.setupGoals), mannequins: numOrNull(form.setupMannequins),
+        equipment: equipArr,
+      },
       howTo: form.howTo.trim(),
       objectives: form.objectives.split("\n").map((t) => t.trim()).filter(Boolean),
       desc: form.desc.trim(), info: form.info.trim(), videoUrl: form.videoUrl.trim(),
@@ -3084,12 +3128,25 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
       scenario: form.scenario.trim(),
       cues: form.cues.split("\n").map((t) => t.trim()).filter(Boolean),
     };
+  };
+  const save = async () => {
+    if (!form.name.trim()) return;
+    const data = buildData();
     try {
       if (editingId) await updateDrill(editingId, data);
       else await addDrill(data);
       setCat(data.cat);
       cancel();
     } catch (e) { toast("Couldn't save drill — " + (e.message || "check Firestore rules.")); }
+  };
+  // Duplicate for a progression: same drill + board, harder variation to fill in.
+  const duplicateDrill = async (d) => {
+    const copy = { ...d };
+    delete copy.id;
+    copy.name = `${d.name || "Drill"} — Progression`;
+    copy.title = `${d.title || d.name || "Drill"} — Progression`;
+    try { await addDrill(copy); toast("Duplicated — edit the copy for the progression."); }
+    catch (e) { toast("Couldn't duplicate — " + (e.message || "check Firestore rules.")); }
   };
   const del = (id) => deleteDrill(id).catch(() => {});
 
@@ -3154,11 +3211,27 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
           <div className="grid grid-cols-3 gap-2">
             <input value={form.dur} onChange={(e) => setForm({ ...form, dur: e.target.value })} placeholder="Duration" className="border border-slate-200 rounded-lg px-2 py-2 text-xs" />
             <input value={form.players} onChange={(e) => setForm({ ...form, players: e.target.value })} placeholder="# Players" className="border border-slate-200 rounded-lg px-2 py-2 text-xs" />
-            <input value={form.equipment} onChange={(e) => setForm({ ...form, equipment: e.target.value })} placeholder="Equipment" className="border border-slate-200 rounded-lg px-2 py-2 text-xs" />
+            <input value={form.equipment} onChange={(e) => setForm({ ...form, equipment: e.target.value })} placeholder="Equipment (comma-separated)" className="border border-slate-200 rounded-lg px-2 py-2 text-xs" />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <input value={form.setupGrid} onChange={(e) => setForm({ ...form, setupGrid: e.target.value })} placeholder="Grid size (e.g. 20x15 yd)" className="border border-slate-200 rounded-lg px-2 py-2 text-xs" />
-            <input value={form.setupTeams} onChange={(e) => setForm({ ...form, setupTeams: e.target.value })} placeholder="Teams (e.g. 4v4+2)" className="border border-slate-200 rounded-lg px-2 py-2 text-xs" />
+          {/* Structured setup — dimensions in yards + counts. The board uses
+              the same yard dimensions, so the diagram is drawn to scale. */}
+          <div className="bg-slate-50 rounded-xl border border-slate-100 p-3 space-y-2">
+            <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Setup — grid &amp; equipment</div>
+            <div className="grid grid-cols-3 gap-2">
+              <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+                <input type="number" min={0} value={form.setupLengthYd} onChange={(e) => setForm({ ...form, setupLengthYd: e.target.value })} placeholder="—" className="w-full min-w-0 border border-slate-200 rounded-lg px-2 py-2 text-xs text-center" /> yd long
+              </label>
+              <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+                <input type="number" min={0} value={form.setupWidthYd} onChange={(e) => setForm({ ...form, setupWidthYd: e.target.value })} placeholder="—" className="w-full min-w-0 border border-slate-200 rounded-lg px-2 py-2 text-xs text-center" /> yd wide
+              </label>
+              <input value={form.setupTeams} onChange={(e) => setForm({ ...form, setupTeams: e.target.value })} placeholder="Teams (e.g. 4v4+2)" className="border border-slate-200 rounded-lg px-2 py-2 text-xs" />
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              <label className="text-[11px] font-semibold text-slate-600">Cones<input type="number" min={0} value={form.setupCones} onChange={(e) => setForm({ ...form, setupCones: e.target.value })} placeholder="0" className="w-full mt-0.5 border border-slate-200 rounded-lg px-2 py-2 text-xs text-center" /></label>
+              <label className="text-[11px] font-semibold text-slate-600">Balls<input type="number" min={0} value={form.setupBalls} onChange={(e) => setForm({ ...form, setupBalls: e.target.value })} placeholder="0" className="w-full mt-0.5 border border-slate-200 rounded-lg px-2 py-2 text-xs text-center" /></label>
+              <label className="text-[11px] font-semibold text-slate-600">Goals<input type="number" min={0} value={form.setupGoals} onChange={(e) => setForm({ ...form, setupGoals: e.target.value })} placeholder="0" className="w-full mt-0.5 border border-slate-200 rounded-lg px-2 py-2 text-xs text-center" /></label>
+              <label className="text-[11px] font-semibold text-slate-600">Mannequins<input type="number" min={0} value={form.setupMannequins} onChange={(e) => setForm({ ...form, setupMannequins: e.target.value })} placeholder="0" className="w-full mt-0.5 border border-slate-200 rounded-lg px-2 py-2 text-xs text-center" /></label>
+            </div>
           </div>
           <textarea value={form.howTo} onChange={(e) => setForm({ ...form, howTo: e.target.value })} rows={3} placeholder="How to run it — instructions" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <textarea value={form.objectives} onChange={(e) => setForm({ ...form, objectives: e.target.value })} rows={2} placeholder="Look for — one goal per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
@@ -3186,15 +3259,21 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
               <ImagePlus className="w-3.5 h-3.5" /> Photos
               <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }} />
             </label>
-            <button type="button" onClick={() => setBoardOpen(true)} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600 text-center flex items-center justify-center gap-1.5">
-              <Layers className="w-3.5 h-3.5" /> {form.diagramData ? "Board ✓" : "Board"}
+            <button type="button" onClick={() => setBoardOpen(true)} className="flex-1 py-2 rounded-full text-xs font-bold text-white text-center flex items-center justify-center gap-1.5" style={{ backgroundColor: COLORS.primary }}>
+              <Layers className="w-3.5 h-3.5" /> {form.diagramData ? "Edit board" : "Build on the board"}
             </button>
             <label className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600 text-center cursor-pointer flex items-center justify-center gap-1.5">
               <ImageIcon className="w-3.5 h-3.5" /> {form.diagram && !form.diagramData ? "Diagram ✓" : "Diagram"}
               <input type="file" accept="image/*" className="hidden" onChange={(e) => { setDiagram(e.target.files?.[0]); setForm((p) => ({ ...p, diagramData: null })); e.target.value = ""; }} />
             </label>
           </div>
-          {form.diagram && (
+          {form.diagramData && (
+            <div className="relative">
+              <BoardSvg state={form.diagramData} showLegend className="w-full rounded-xl border border-slate-100" />
+              <button type="button" onClick={() => setForm((p) => ({ ...p, diagram: "", diagramData: null }))} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 border border-slate-200 flex items-center justify-center shadow"><X className="w-3.5 h-3.5 text-slate-600" /></button>
+            </div>
+          )}
+          {form.diagram && !form.diagramData && (
             <div className="relative">
               <img src={form.diagram} alt="Drill diagram" className="w-full rounded-xl border border-slate-100" />
               <button type="button" onClick={() => setForm((p) => ({ ...p, diagram: "", diagramData: null }))} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 border border-slate-200 flex items-center justify-center shadow"><X className="w-3.5 h-3.5 text-slate-600" /></button>
@@ -3258,10 +3337,11 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
                     </div>
                     <div className="p-3 pt-2.5 flex-1">
                       <h4 className="font-bold text-sm text-slate-900 leading-tight pr-4">{d.title || d.name}</h4>
-                      {(d.dur || d.players || d.setup?.teams) && (
+                      {(d.dur || d.players || d.setup?.teams || d.setup?.grid) && (
                         <div className="flex items-center gap-2 mt-1.5 text-[10px] font-semibold text-slate-500">
                           {d.dur && <span className="inline-flex items-center gap-0.5"><Clock className="w-3 h-3" />{d.dur}</span>}
                           {d.players && <span className="inline-flex items-center gap-0.5"><Users className="w-3 h-3" />{d.players}</span>}
+                          {d.setup?.grid && <span className="inline-flex items-center gap-0.5"><SquareDashed className="w-3 h-3" />{d.setup.grid}</span>}
                           {d.setup?.teams && <span className="inline-flex items-center gap-0.5"><Swords className="w-3 h-3" />{d.setup.teams}</span>}
                         </div>
                       )}
@@ -3275,6 +3355,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
                   {isAdmin && (
                     <div className="absolute top-3 right-2.5 flex gap-1.5">
                       <button onClick={(e) => { e.stopPropagation(); startEdit(d); }} title="Edit" className="text-slate-300 hover:text-slate-600 bg-white/80 rounded-full p-0.5"><Pencil className="w-3.5 h-3.5" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); duplicateDrill(d); }} title="Duplicate for a progression" className="text-slate-300 hover:text-slate-600 bg-white/80 rounded-full p-0.5"><Copy className="w-3.5 h-3.5" /></button>
                       <button onClick={(e) => { e.stopPropagation(); del(d.id); }} title="Delete" className="text-slate-300 hover:text-red-500 bg-white/80 rounded-full p-0.5"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   )}
@@ -3415,9 +3496,11 @@ const DrillThumb = ({ d, className = "w-10 h-10" }) => {
   return (
     <div className={`${className} relative rounded-lg overflow-hidden bg-slate-900 flex-shrink-0`}>
       <img src="/pc-bears-logo.png" alt="" aria-hidden="true" className="absolute inset-0 m-auto w-3/4 max-h-full object-contain pointer-events-none" style={{ opacity: 0.2 }} />
-      {d.diagram
-        ? <img src={d.diagram} alt="" className="relative w-full h-full object-cover" loading="lazy" />
-        : <div className="relative w-full h-full flex items-center justify-center"><Icon className="w-4 h-4 text-white/90" /></div>}
+      {d.diagramData
+        ? <BoardSvg state={d.diagramData} className="relative w-full h-full" />
+        : d.diagram
+          ? <img src={d.diagram} alt="" className="relative w-full h-full object-cover" loading="lazy" />
+          : <div className="relative w-full h-full flex items-center justify-center"><Icon className="w-4 h-4 text-white/90" /></div>}
     </div>
   );
 };
@@ -3467,11 +3550,33 @@ const DrillPicker = ({ drills, onPick, onClose }) => {
   );
 };
 
+// Session phases for a timed-block practice (the 90-min high-school template).
+const SESSION_PHASES = ["Warm-Up & Rondo", "Technical", "Tactical / Positional", "Scrimmage", "Cool-Down & Debrief"];
+const SESSION_TEMPLATES = [
+  { name: "Full session — 90 min", targetMin: 90, blocks: [
+    { phase: "Warm-Up & Rondo", name: "Warm-Up & Rondo", dur: "12" },
+    { phase: "Technical", name: "Dribbling & 1v1", dur: "12" },
+    { phase: "Technical", name: "Passing & Combination", dur: "12" },
+    { phase: "Technical", name: "Shooting & Crossing", dur: "12" },
+    { phase: "Tactical / Positional", name: "Positional Play", dur: "12" },
+    { phase: "Scrimmage", name: "Scrimmage", dur: "20" },
+    { phase: "Cool-Down & Debrief", name: "Cool-Down & Debrief", dur: "10" },
+  ]},
+  { name: "Short session — 60 min", targetMin: 60, blocks: [
+    { phase: "Warm-Up & Rondo", name: "Warm-Up & Rondo", dur: "10" },
+    { phase: "Technical", name: "Technical Work", dur: "10" },
+    { phase: "Tactical / Positional", name: "Tactical Work", dur: "10" },
+    { phase: "Scrimmage", name: "Scrimmage", dur: "20" },
+    { phase: "Cool-Down & Debrief", name: "Cool-Down & Debrief", dur: "10" },
+  ]},
+];
+function parseBlockMin(dur) { const n = parseInt(String(dur || ""), 10); return Number.isFinite(n) ? n : 0; }
+
 const PracticeCard = ({ practice, onOpen }) => (
   <button onClick={onOpen} className="w-full bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center justify-between gap-3 text-left">
     <div className="min-w-0">
       <div className="font-bold text-sm text-slate-900 leading-tight truncate">{practice.name || "Untitled practice"}</div>
-      <div className="text-[11px] text-slate-500 mt-0.5 truncate">{practice.blocks?.length || 0} drill{(practice.blocks?.length || 0) === 1 ? "" : "s"}{practice.desc ? ` · ${practice.desc}` : ""}</div>
+      <div className="text-[11px] text-slate-500 mt-0.5 truncate">{practice.blocks?.length || 0} drill{(practice.blocks?.length || 0) === 1 ? "" : "s"}{(practice.blocks || []).reduce((s, b) => s + parseBlockMin(b.dur), 0) > 0 ? ` · ${(practice.blocks || []).reduce((s, b) => s + parseBlockMin(b.dur), 0)} min` : ""}{practice.desc ? ` · ${practice.desc}` : ""}</div>
     </div>
     <div className="flex items-center gap-2 flex-shrink-0">
       {practice.published && <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>Published</span>}
@@ -3488,22 +3593,29 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
   const [cat, setCat] = useState(practice.cat || "");
   const [blocks, setBlocks] = useState(practice.blocks || []);
   const [published, setPublished] = useState(!!practice.published);
+  const [targetMin, setTargetMin] = useState(practice.targetMin || 90);
   const [dirty, setDirty] = useState(false);
   const [picker, setPicker] = useState(false);
+  const [pickForBlock, setPickForBlock] = useState(null);
   const [viewDrill, setViewDrill] = useState(null);
+  const totalMin = blocks.reduce((s, b) => s + parseBlockMin(b.dur), 0);
 
   useEffect(() => {
     if (!dirty || !canEdit) return;
-    const t = setTimeout(() => { onSave({ name, desc, cat, blocks, published }); setDirty(false); }, 700);
+    const t = setTimeout(() => { onSave({ name, desc, cat, blocks, published, targetMin }); setDirty(false); }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, desc, cat, blocks, published, dirty]);
+  }, [name, desc, cat, blocks, published, targetMin, dirty]);
 
-  const handleBack = () => { if (dirty && canEdit) onSave({ name, desc, cat, blocks, published }); onBack(); };
+  const handleBack = () => { if (dirty && canEdit) onSave({ name, desc, cat, blocks, published, targetMin }); onBack(); };
   const setBlock = (i, field, value) => { setBlocks(blocks.map((b, j) => (j === i ? { ...b, [field]: value } : b))); setDirty(true); };
   const removeBlock = (i) => { setBlocks(blocks.filter((_, j) => j !== i)); setDirty(true); };
   const moveBlock = (i, dir) => { const j = i + dir; if (j < 0 || j >= blocks.length) return; const n = [...blocks]; [n[i], n[j]] = [n[j], n[i]]; setBlocks(n); setDirty(true); };
-  const addBlock = (d) => { setBlocks([...blocks, { drillId: d.id, name: d.name, cat: d.cat || "", dur: d.dur || "", notes: "" }]); setDirty(true); setPicker(false); };
+  const addBlock = (d) => { setBlocks([...blocks, { drillId: d.id, name: d.name, cat: d.cat || "", dur: d.dur || "", phase: "", notes: "" }]); setDirty(true); setPicker(false); };
+  // Fill a template row with a drill from the library.
+  const fillBlock = (i, d) => { setBlocks(blocks.map((b, j) => (j === i ? { ...b, drillId: d.id, name: d.name, cat: d.cat || "", dur: b.dur || d.dur || "" } : b))); setDirty(true); setPickForBlock(null); };
+  // Drop a timed-block template in as the session skeleton; each row gets a drill.
+  const applyTemplate = (t) => { setBlocks(t.blocks.map((b) => ({ ...b, drillId: "", notes: "" }))); setTargetMin(t.targetMin); setDirty(true); };
   const confirmDelete = async () => { if (!confirm(`Delete "${practice.name}"? This can't be undone.`)) return; try { await onDelete(); } catch (e) { toast("Couldn't delete — " + e.message); } };
   const drillById = (id) => drills.find((d) => d.id === id);
 
@@ -3522,8 +3634,39 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
         <><h2 className="text-xl font-bold text-slate-900">{name || "Untitled"}</h2>{cat && <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>{cat}</span>}{desc && <p className="text-sm text-slate-600">{desc}</p>}</>
       )}
 
+      {/* Timeline total — running minutes vs the session target. */}
+      <div className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-slate-100">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-700">Session total</span>
+          <span className={`text-sm font-bold ${totalMin > targetMin ? "text-red-600" : "text-slate-900"}`}>{totalMin} / {targetMin} min</span>
+        </div>
+        <div className="h-2 rounded-full bg-slate-100 overflow-hidden mt-2">
+          <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, (totalMin / Math.max(1, targetMin)) * 100)}%`, backgroundColor: totalMin > targetMin ? "#DC2626" : COLORS.success }} />
+        </div>
+        {totalMin > targetMin && <p className="text-[11px] font-semibold text-red-600 mt-1.5">Over the planned length by {totalMin - targetMin} min — trim a block.</p>}
+        {canEdit && (
+          <label className="flex items-center gap-2 mt-2 text-[11px] font-semibold text-slate-500">
+            Target length
+            <input type="number" min={10} max={240} value={targetMin} onChange={(e) => { setTargetMin(Number(e.target.value) || 90); setDirty(true); }} className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center" /> min
+          </label>
+        )}
+      </div>
+
       {blocks.length === 0 ? (
-        <p className="text-sm text-slate-400 italic text-center py-6">No drills yet.{canEdit ? " Add one below." : ""}</p>
+        canEdit ? (
+          <div className="space-y-2">
+            <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Start from a template</p>
+            {SESSION_TEMPLATES.map((t) => (
+              <button key={t.name} onClick={() => applyTemplate(t)} className="w-full bg-white rounded-2xl p-3 shadow-sm border border-slate-100 text-left">
+                <div className="text-sm font-bold text-slate-900">{t.name}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">{t.blocks.map((b) => `${b.name} ${b.dur}'`).join(" · ")}</div>
+              </button>
+            ))}
+            <p className="text-[11px] text-slate-400 text-center pt-1">…or add drills below and build it block by block.</p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400 italic text-center py-6">No drills yet.</p>
+        )
       ) : (
         <ul className="space-y-2">
           {blocks.map((b, i) => {
@@ -3532,10 +3675,10 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
               <li key={i} className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
                 <div className="flex items-center gap-2.5">
                   <span className="flex-shrink-0 w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center text-white" style={{ backgroundColor: COLORS.primary }}>{i + 1}</span>
-                  {d && <DrillThumb d={d} className="w-9 h-9" />}
+                  {d ? <DrillThumb d={d} className="w-9 h-9" /> : <button onClick={() => canEdit && setPickForBlock(i)} className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0" aria-label="Pick a drill"><Plus className="w-4 h-4 text-slate-400" /></button>}
                   <button onClick={() => d && setViewDrill(d)} className="flex-1 min-w-0 text-left">
-                    <div className="font-semibold text-sm text-slate-900 leading-tight truncate">{b.name}</div>
-                    <div className="text-[10px] text-slate-500">{b.cat}{b.dur ? ` · ${b.dur}` : ""}{!d ? " · (drill deleted)" : ""}</div>
+                    <div className="font-semibold text-sm text-slate-900 leading-tight truncate">{b.name || "Pick a drill"}</div>
+                    <div className="text-[10px] text-slate-500">{b.phase ? `${b.phase} · ` : ""}{b.cat}{b.dur ? ` · ${b.dur} min` : ""}{!d && b.drillId ? " · (drill deleted)" : ""}</div>
                   </button>
                   {canEdit && (
                     <div className="flex items-center gap-1 flex-shrink-0">
@@ -3547,8 +3690,14 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
                 </div>
                 {canEdit ? (
                   <div className="grid grid-cols-3 gap-2 mt-2">
-                    <input value={b.dur} onChange={(e) => setBlock(i, "dur", e.target.value)} placeholder="Time" className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center" />
-                    <input value={b.notes} onChange={(e) => setBlock(i, "notes", e.target.value)} placeholder="Notes (optional)" className="col-span-2 border border-slate-200 rounded-lg px-2 py-1.5 text-xs" />
+                    <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+                      <input type="number" min={0} value={b.dur} onChange={(e) => setBlock(i, "dur", e.target.value)} placeholder="Min" aria-label="Minutes" className="w-full min-w-0 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center" /> min
+                    </label>
+                    <select value={b.phase || ""} onChange={(e) => setBlock(i, "phase", e.target.value)} aria-label="Phase" className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+                      <option value="">Phase…</option>
+                      {SESSION_PHASES.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <input value={b.notes} onChange={(e) => setBlock(i, "notes", e.target.value)} placeholder="Notes (optional)" className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs" />
                   </div>
                 ) : (b.notes ? <div className="text-[11px] text-slate-600 mt-1.5 pl-[34px]">{b.notes}</div> : null)}
               </li>
@@ -3569,6 +3718,7 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
       )}
       {dirty && canEdit && <p className="text-[10px] text-slate-400 text-center">Saving…</p>}
       {picker && <DrillPicker drills={drills} onPick={addBlock} onClose={() => setPicker(false)} />}
+      {pickForBlock !== null && <DrillPicker drills={drills} onPick={(d) => fillBlock(pickForBlock, d)} onClose={() => setPickForBlock(null)} />}
       {viewDrill && <DrillModal item={viewDrill} onClose={() => setViewDrill(null)} />}
     </div>
   );
@@ -3645,36 +3795,41 @@ const PracticePicker = ({ practices, onPick, onClose }) => (
   </div>
 );
 
-const ProgramCard = ({ program, onOpen }) => (
-  <button onClick={onOpen} className="w-full bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center justify-between gap-3 text-left">
-    <div className="min-w-0">
-      <div className="font-bold text-sm text-slate-900 leading-tight truncate">{program.name || "Untitled program"}</div>
-      <div className="text-[11px] text-slate-500 mt-0.5 truncate">{program.days?.length || 0} day{(program.days?.length || 0) === 1 ? "" : "s"}{program.desc ? ` · ${program.desc}` : ""}</div>
-    </div>
-    <div className="flex items-center gap-2 flex-shrink-0">
-      {program.published && <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>Published</span>}
-      <ChevronRight className="w-4 h-4 text-slate-300" />
-    </div>
-  </button>
+const ProgramCard = ({ program, onOpen, onCopy }) => (
+  <div className="w-full bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center gap-1 pr-2">
+    <button onClick={onOpen} className="flex-1 min-w-0 p-4 flex items-center justify-between gap-3 text-left">
+      <div className="min-w-0">
+        <div className="font-bold text-sm text-slate-900 leading-tight truncate">{program.name || "Untitled program"}</div>
+        <div className="text-[11px] text-slate-500 mt-0.5 truncate">{program.days?.length || 0} day{(program.days?.length || 0) === 1 ? "" : "s"}{program.desc ? ` · ${program.desc}` : ""}{program.createdByName ? ` · ${program.createdByName}` : ""}</div>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {program.shared && <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Shared</span>}
+        {program.published && <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>Published</span>}
+        <ChevronRight className="w-4 h-4 text-slate-300" />
+      </div>
+    </button>
+    {onCopy && <button onClick={onCopy} title="Copy this program" aria-label="Copy program" className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0"><Copy className="w-4 h-4 text-slate-500" /></button>}
+  </div>
 );
 
 // Build/view a program — an ordered sequence of days, each pointing to a practice.
-const ProgramDetail = ({ program, practices, canEdit, onSave, onDelete, onBack, onAssign }) => {
+const ProgramDetail = ({ program, practices, canEdit, onSave, onDelete, onBack, onAssign, user }) => {
   const [name, setName] = useState(program.name || "");
   const [desc, setDesc] = useState(program.desc || "");
   const [days, setDays] = useState(program.days || []);
   const [published, setPublished] = useState(!!program.published);
+  const [shared, setShared] = useState(!!program.shared);
   const [dirty, setDirty] = useState(false);
   const [pickFor, setPickFor] = useState(null); // index of day choosing a practice
 
   useEffect(() => {
     if (!dirty || !canEdit) return;
-    const t = setTimeout(() => { onSave({ name, desc, days, published }); setDirty(false); }, 700);
+    const t = setTimeout(() => { onSave({ name, desc, days, published, shared }); setDirty(false); }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, desc, days, published, dirty]);
+  }, [name, desc, days, published, shared, dirty]);
 
-  const handleBack = () => { if (dirty && canEdit) onSave({ name, desc, days, published }); onBack(); };
+  const handleBack = () => { if (dirty && canEdit) onSave({ name, desc, days, published, shared }); onBack(); };
   const addDay = () => { setDays([...days, { label: `Day ${days.length + 1}`, practiceId: "", note: "" }]); setDirty(true); };
   const setDay = (i, field, value) => { setDays(days.map((d, j) => (j === i ? { ...d, [field]: value } : d))); setDirty(true); };
   const removeDay = (i) => { setDays(days.filter((_, j) => j !== i)); setDirty(true); };
@@ -3737,6 +3892,12 @@ const ProgramDetail = ({ program, practices, canEdit, onSave, onDelete, onBack, 
         <>
           <button onClick={addDay} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200 text-slate-700 bg-white"><Plus className="w-3.5 h-3.5" /> Add day</button>
           <button onClick={() => onAssign({ ...program, name, days })} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 text-white" style={{ backgroundColor: COLORS.accent, color: COLORS.primary }}><CalendarIcon className="w-3.5 h-3.5" /> Assign to calendar</button>
+          {user?.role === "orgAdmin" && (
+            <label className="flex items-center justify-between bg-white rounded-2xl px-4 py-3 shadow-sm border border-slate-100">
+              <span className="text-sm font-semibold text-slate-700">Shared curriculum <span className="block text-[11px] font-normal text-slate-500">All coaches can follow this program</span></span>
+              <button onClick={() => { setShared(!shared); setDirty(true); }} aria-label="Toggle shared curriculum" className="w-11 h-6 rounded-full transition-colors relative bg-slate-200" style={shared ? { backgroundColor: COLORS.success } : {}}><span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${shared ? "left-[22px]" : "left-0.5"}`} /></button>
+            </label>
+          )}
           <label className="flex items-center justify-between bg-white rounded-2xl px-4 py-3 shadow-sm border border-slate-100">
             <span className="text-sm font-semibold text-slate-700">Published to players</span>
             <button onClick={() => { setPublished(!published); setDirty(true); }} aria-label="Toggle published" className="w-11 h-6 rounded-full transition-colors relative bg-slate-200" style={published ? { backgroundColor: COLORS.success } : {}}><span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${published ? "left-[22px]" : "left-0.5"}`} /></button>
@@ -3750,12 +3911,14 @@ const ProgramDetail = ({ program, practices, canEdit, onSave, onDelete, onBack, 
   );
 };
 
-const ProgramsView = ({ programs, practices, canEdit, add, update, del, onAssign, startCreating = false }) => {
+const ProgramsView = ({ programs, practices, canEdit, add, update, del, onAssign, onCopy, user, startCreating = false }) => {
   const [openId, setOpenId] = useState(null);
   const [creating, setCreating] = useState(startCreating);
   const [newName, setNewName] = useState("");
   const open = programs.find((p) => p.id === openId);
-  if (open) return <ProgramDetail program={open} practices={practices} canEdit={canEdit} onSave={(d) => update(open.id, d)} onDelete={async () => { await del(open.id); setOpenId(null); }} onBack={() => setOpenId(null)} onAssign={onAssign} />;
+  const sharedPrograms = programs.filter((p) => p.shared);
+  const myPrograms = programs.filter((p) => !p.shared);
+  if (open) return <ProgramDetail program={open} practices={practices} canEdit={canEdit} onSave={(d) => update(open.id, d)} onDelete={async () => { await del(open.id); setOpenId(null); }} onBack={() => setOpenId(null)} onAssign={onAssign} user={user} />;
   const create = async () => {
     if (!newName.trim()) return;
     try { const ref = await add(newName); setNewName(""); setCreating(false); if (ref?.id) setOpenId(ref.id); }
@@ -3785,19 +3948,33 @@ const ProgramsView = ({ programs, practices, canEdit, add, update, del, onAssign
           </div>
         ) : null
       ) : (
-        <ul className="space-y-2">{programs.map((p) => <li key={p.id}><ProgramCard program={p} onOpen={() => setOpenId(p.id)} /></li>)}</ul>
+        <div className="space-y-4">
+          {sharedPrograms.length > 0 && (
+            <div>
+              <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Shared curriculum</h4>
+              <ul className="space-y-2">{sharedPrograms.map((p) => <li key={p.id}><ProgramCard program={p} onOpen={() => setOpenId(p.id)} onCopy={canEdit ? () => onCopy?.(p) : undefined} /></li>)}</ul>
+            </div>
+          )}
+          {myPrograms.length > 0 && (
+            <div>
+              <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">My programs</h4>
+              <ul className="space-y-2">{myPrograms.map((p) => <li key={p.id}><ProgramCard program={p} onOpen={() => setOpenId(p.id)} onCopy={canEdit ? () => onCopy?.(p) : undefined} /></li>)}</ul>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
 };
 
-// Built-in starter practices the coach can spin up and then fill with drills.
-const PRACTICE_STARTERS = [
-  { name: "Technical Day", cat: "Technical", desc: "Warm-up → technical work → small-sided games.", icon: Target, color: "#2563eb" },
-  { name: "Game Prep", cat: "Game Prep", desc: "Activation, shape work, set pieces.", icon: Goal, color: "#16a34a" },
-  { name: "Conditioning", cat: "Conditioning", desc: "Fitness blocks with the ball.", icon: Dumbbell, color: "#ea580c" },
-  { name: "Recovery", cat: "Recovery", desc: "Light mobility and regeneration.", icon: Clock, color: "#7c3aed" },
-];
+// Session templates — a timed-block skeleton the coach fills with drills.
+// (The 90-min default follows the high-school timed-block model; the 60-min
+// variant is the same shape, compressed.)
+const PRACTICE_STARTERS = SESSION_TEMPLATES.map((t) => ({
+  name: t.name, cat: "Session", targetMin: t.targetMin, blocks: t.blocks,
+  desc: t.blocks.map((b) => `${b.name} ${b.dur}'`).join(" · "),
+  icon: t.targetMin === 90 ? Target : Clock, color: t.targetMin === 90 ? "#2563eb" : "#16a34a",
+}));
 
 // One section row on the Practice home: title + a Create / Library split.
 const SectionBanner = ({ icon: Icon, title, count, onCreate, onLibrary }) => (
@@ -3822,7 +3999,7 @@ const NewPracticeChooser = ({ practices, onCreate }) => (
         {PRACTICE_STARTERS.map((t) => {
           const Icon = t.icon;
           return (
-            <button key={t.name} onClick={() => onCreate({ name: t.name, cat: t.cat, desc: t.desc })} className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col gap-2 text-left hover:bg-slate-50">
+            <button key={t.name} onClick={() => onCreate({ name: t.name, cat: t.cat, desc: t.desc, blocks: (t.blocks || []).map((b) => ({ ...b, drillId: "", notes: "" })), targetMin: t.targetMin || 90 })} className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col gap-2 text-left hover:bg-slate-50">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${t.color}1a` }}><Icon className="w-4 h-4" style={{ color: t.color }} /></div>
               <div className="min-w-0"><div className="font-semibold text-sm text-slate-900 truncate">{t.name}</div><div className="text-[11px] text-slate-500 line-clamp-2 leading-snug">{t.desc}</div></div>
             </button>
@@ -3850,9 +4027,72 @@ const NewPracticeChooser = ({ practices, onCreate }) => (
   </div>
 );
 
+// Assign a program onto the calendar — the coach picks the DATE and TIME for
+// each day (no fixed drop time), so other coaches can see what is scheduled
+// and what they need to run.
+const AssignProgramModal = ({ program, practices, importEvents, onClose }) => {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [days, setDays] = useState(() =>
+    (program.days || []).map((d, i) => {
+      const dt = new Date(todayStr + "T00:00:00"); dt.setDate(dt.getDate() + i);
+      return { date: dt.toISOString().slice(0, 10), start: "15:00", end: "17:00" };
+    })
+  );
+  const [busy, setBusy] = useState(false);
+  const setDay = (i, field, value) => setDays(days.map((d, j) => (j === i ? { ...d, [field]: value } : d)));
+  const practiceById = (id) => practices.find((p) => p.id === id);
+  const confirmAssign = async () => {
+    const rows = program.days.map((day, i) => {
+      const practice = practiceById(day.practiceId);
+      return {
+        title: `${program.name}: ${day.label || `Day ${i + 1}`}${practice ? ` — ${practice.name}` : ""}`,
+        date: days[i]?.date || todayStr,
+        start: days[i]?.start || "15:00", end: days[i]?.end || "17:00",
+        location: "", type: "Practice",
+        programId: program.id, practiceId: day.practiceId || "",
+      };
+    });
+    setBusy(true);
+    try { await importEvents(rows, { notify: false }); toast(`Added ${rows.length} session${rows.length === 1 ? "" : "s"} to the calendar.`); onClose(); }
+    catch (e) { toast("Couldn't assign — " + (e.message || "check rules.")); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[85vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-slate-100 px-5 py-3 flex items-center justify-between z-10">
+          <h3 className="text-base font-bold text-slate-900">Assign “{program.name}”</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-xs text-slate-500">Pick a date and time for each day. Other coaches will see these sessions on the calendar with the practice attached.</p>
+          {program.days.map((day, i) => {
+            const p = practiceById(day.practiceId);
+            return (
+              <div key={i} className="bg-slate-50 rounded-2xl p-3 border border-slate-100 space-y-2">
+                <div className="text-sm font-bold text-slate-900">{day.label || `Day ${i + 1}`}{p ? ` — ${p.name}` : " — Rest / unassigned"}</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <input type="date" value={days[i]?.date || ""} onChange={(e) => setDay(i, "date", e.target.value)} aria-label="Date" className="border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white" />
+                  <input type="time" value={days[i]?.start || ""} onChange={(e) => setDay(i, "start", e.target.value)} aria-label="Start time" className="border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white" />
+                  <input type="time" value={days[i]?.end || ""} onChange={(e) => setDay(i, "end", e.target.value)} aria-label="End time" className="border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white" />
+                </div>
+              </div>
+            );
+          })}
+          <div className="flex gap-2 pt-1">
+            <button onClick={onClose} className="flex-1 py-2.5 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button>
+            <button onClick={confirmAssign} disabled={busy} className="flex-1 py-2.5 rounded-full text-xs font-bold text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{busy ? "Adding…" : `Add ${program.days.length} session${program.days.length === 1 ? "" : "s"} to calendar`}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PracticePage = ({ user, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events = [] }) => {
   const isAdmin = user.role === "admin";
   const [nav, setNav] = useState({ section: "home", mode: null, openId: null });
+  const [assignTarget, setAssignTarget] = useState(null);
   const go = (section, mode, openId = null) => setNav({ section, mode, openId });
   const home = () => setNav({ section: "home", mode: null, openId: null });
 
@@ -3861,25 +4101,17 @@ const PracticePage = ({ user, drills, addDrill, updateDrill, deleteDrill, practi
   const todayEvent = events.find((e) => e.date === today && e.practiceId);
   const todayPractice = todayEvent && practices.find((p) => p.id === todayEvent.practiceId);
 
-  // Assign a program onto the calendar: one event per day, starting from a date.
-  const assignProgram = async (program) => {
+  // Assign a program: open the per-day date/time picker (no fixed drop time).
+  const openAssign = (program) => {
     if (!program.days?.length) { toast("Add some days to the program first."); return; }
-    const startStr = window.prompt("Start date for Day 1 (YYYY-MM-DD):", new Date().toISOString().slice(0, 10));
-    if (!startStr) return;
-    const start = new Date(startStr + "T00:00:00");
-    if (isNaN(start.getTime())) { toast("That doesn't look like a valid date."); return; }
-    const rows = program.days.map((day, i) => {
-      const dt = new Date(start); dt.setDate(start.getDate() + i);
-      const practice = practices.find((p) => p.id === day.practiceId);
-      return {
-        title: `${program.name}: ${day.label || `Day ${i + 1}`}${practice ? ` — ${practice.name}` : ""}`,
-        date: dt.toISOString().slice(0, 10),
-        start: "15:00", end: "17:00", location: "", type: "Practice",
-        programId: program.id, practiceId: day.practiceId || "",
-      };
-    });
-    try { await importEvents(rows, { notify: false }); toast(`Added ${rows.length} session${rows.length === 1 ? "" : "s"} to the calendar.`); }
-    catch (e) { toast("Couldn't assign — " + (e.message || "check rules.")); }
+    setAssignTarget(program);
+  };
+  // Copy a shared program to make it your own.
+  const copyProgram = async (program) => {
+    try {
+      await addProgram({ name: `${program.name} (copy)`, desc: program.desc || "", days: program.days || [], published: false, shared: false });
+      toast("Copied — open it to make it yours.");
+    } catch (e) { toast("Couldn't copy — " + (e.message || "check rules.")); }
   };
 
   const createPracticeFrom = async (data) => {
@@ -3914,6 +4146,7 @@ const PracticePage = ({ user, drills, addDrill, updateDrill, deleteDrill, practi
       </div>
     );
   }
+  // (Assign modal is rendered below, after the section screen.)
 
   // ── Section screens (back to home + the chosen view) ──
   const sectionTitle = { drills: "Drills", practices: "Practices", programs: "Programs" }[nav.section];
@@ -3926,7 +4159,8 @@ const PracticePage = ({ user, drills, addDrill, updateDrill, deleteDrill, practi
       {nav.section === "drills" && <DrillsPage user={user} drills={drills} addDrill={addDrill} updateDrill={updateDrill} deleteDrill={deleteDrill} startCreating={nav.mode === "create"} />}
       {nav.section === "practices" && nav.mode === "create" && <NewPracticeChooser practices={practices} onCreate={createPracticeFrom} />}
       {nav.section === "practices" && nav.mode === "library" && <PracticesView practices={practices} drills={drills} canEdit={isAdmin} add={addPractice} update={updatePractice} del={deletePractice} initialOpenId={nav.openId} hideCreate />}
-      {nav.section === "programs" && <ProgramsView programs={programs} practices={practices} canEdit={isAdmin} add={addProgram} update={updateProgram} del={deleteProgram} onAssign={assignProgram} startCreating={nav.mode === "create"} />}
+      {nav.section === "programs" && <ProgramsView user={user} programs={programs} practices={practices} canEdit={isAdmin} add={addProgram} update={updateProgram} del={deleteProgram} onAssign={openAssign} onCopy={copyProgram} startCreating={nav.mode === "create"} />}
+      {assignTarget && <AssignProgramModal program={assignTarget} practices={practices} importEvents={importEvents} onClose={() => setAssignTarget(null)} />}
     </div>
   );
 };
@@ -7911,7 +8145,7 @@ export default function TeamHubRolesApp() {
     const base = typeof input === "string" ? { name: input } : (input || {});
     return addDoc(collection(db, "practices"), {
       desc: "", cat: "", blocks: [], published: false,
-      createdByName: user.name, createdAt: serverTimestamp(),
+      createdByName: user.name, createdByUid: user.uid, createdAt: serverTimestamp(),
       ...base,
       teamId: activeTeamId,
       name: (base.name || "").trim(),
@@ -7922,8 +8156,15 @@ export default function TeamHubRolesApp() {
 
   // Programs — ordered sequences of practices (dates assigned at assign-time).
   const programs = useCollection("programs", where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
-  const addProgram = (name) =>
-    addDoc(collection(db, "programs"), { teamId: activeTeamId, name: name.trim(), desc: "", days: [], published: false, createdByName: user.name, createdAt: serverTimestamp() });
+  // Accepts a plain name (string) or a full object (copy / shared curriculum).
+  const addProgram = (input) => {
+    const base = typeof input === "string" ? { name: input } : (input || {});
+    return addDoc(collection(db, "programs"), {
+      teamId: activeTeamId, name: (base.name || "").trim(), desc: base.desc || "", days: base.days || [],
+      published: !!base.published, shared: !!base.shared,
+      createdByUid: user.uid, createdByName: user.name, createdAt: serverTimestamp(),
+    });
+  };
   const updateProgram = (id, data) => updateDoc(doc(db, "programs", id), data);
   const deleteProgram = (id) => deleteDoc(doc(db, "programs", id));
 
