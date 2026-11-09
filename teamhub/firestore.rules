@@ -160,6 +160,22 @@ service cloud.firestore {
         && request.resource.data.name.size() > 0;
       allow update, delete: if isAdmin();
     }
+    // Drill suggestions (the review queue / limbo for the standalone Drill
+    // Library site): anyone signed in can suggest a video from the Soccer
+    // Video Library; only coaches remove one (approve = create the drill,
+    // then delete; dismiss = delete). Merged from the drill-library repo's
+    // firestore.rules — deploy with the app's rules, never deploy the
+    // library's file on its own (it would overwrite the app's rules).
+    match /drillSuggestions/{suggestionId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.suggestedByUid == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.videoUrl is string
+        && request.resource.data.videoUrl.size() > 0;
+      allow update, delete: if isAdmin();
+    }
     match /practices/{id} {
       allow read:   if isMemberOf(rTeam());
       allow create: if coachCreate();
