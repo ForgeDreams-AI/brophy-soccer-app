@@ -16,7 +16,7 @@ const COACH_STEPS = [
   { icon: "📅", title: "Schedule", body: "Create games, practices, and events — and choose exactly who sees each one (everyone, a group, or specific players)." },
   { icon: "💪", title: "Train", body: "Your hub for workouts, nutrition targets, and the video library. Create and assign training content here." },
   { icon: "💬", title: "Chat", body: "Team channels plus private messages. You can make a channel visible to just one group, and pin important posts." },
-  { icon: "🧑‍🤝‍🧑", title: "Roster & documents", body: "Invite players by email, manage the roster, share documents for e-signing, and take daily attendance." },
+  { icon: "🧑‍🤝‍🧑", title: "Roster & documents", body: "Invite players by email, manage the roster, share documents for e-signing, and see each player's daily wellness check-in." },
   { icon: "🔔", title: "Notifications", body: "Turn these on (in Settings) so players get a ping for every new announcement, event, and message." },
   { icon: "✅", title: "You're all set!", body: "That's the whole app. Tap “Replay the tour” in Settings whenever you want to see this again." },
 ];

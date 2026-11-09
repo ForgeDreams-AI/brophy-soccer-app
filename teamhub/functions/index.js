@@ -275,19 +275,6 @@ exports.onDMCreated = onDocumentCreated("dms/{id}", async (event) => {
   });
 });
 
-// Assignments / to-dos: notify only the players the assignment is for.
-exports.onAssignmentCreated = onDocumentCreated("assignments/{id}", async (event) => {
-  const data = event.data?.data();
-  if (!data) return;
-  const bundle = await tokensForAudience(data.visibleTo, { teamId: data.teamId, excludeUid: data.createdByUid });
-  await sendToTokens(bundle, {
-    title: `✅ New: ${data.title || data.workoutName || "Assignment"}`,
-    body: trunc(data.body || (data.link ? "Tap to open the link." : "Tap for details.")),
-    link: "/?tab=home",
-    tag: `assignment-${event.params.id}`,
-  });
-});
-
 // Delegation: when an event gets a "run by" coach (on create or later edit),
 // notify just that coach. Guarded so unrelated event edits don't re-fire.
 exports.onEventDelegated = onDocumentWritten("events/{id}", async (event) => {

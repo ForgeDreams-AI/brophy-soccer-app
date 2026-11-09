@@ -20,19 +20,12 @@ const COACH_EMAIL = "coach@coachcameron.com";
 /* ──────────────────────────────────────────────
    SEED DATA  (real app → Firestore)
    ────────────────────────────────────────────── */
-const seedAnnouncements = [
-  { id: "a1", title: "Practice Moved to 5:00 PM", body: "Field 3 conflict — meet at Field 1, 5 PM sharp. Bring both jerseys.", ts: "2h ago", pinned: true },
-  { id: "a2", title: "Team Photo Day — Friday", body: "Home jersey, white socks, clean cleats. Arrive 15 min early.", ts: "5h ago", pinned: false },
-];
-const seedEvents = [
-  { id: "e1", title: "Team Practice", date: "2026-06-08", start: "15:00", end: "17:30", location: "Field 1", type: "Practice" },
-  { id: "e2", title: "Game vs. Central State", date: "2026-06-09", start: "14:00", end: "16:30", location: "Memorial Stadium", type: "Game" },
-  { id: "e3", title: "Morning Lift", date: "2026-06-10", start: "06:30", end: "08:00", location: "S&C Center", type: "Strength" },
-];
+// Starts clean for Brophy — no sample announcements; coaches post real ones.
+const seedAnnouncements = [];
+const seedEvents = [];
 const VIDEO_CATS = ["Film", "Breathing", "Stretching", "Mobility", "Strength", "Cooldown"];
 const CAT_ICON = { Film: Video, Breathing: Wind, Stretching: StretchHorizontal, Mobility: Activity, Strength: Dumbbell, Cooldown: Snowflake };
 const seedVideos = [
-  { id: "v1", title: "Central State — Scouting Breakdown", cat: "Film", type: "video", dur: "12:10", diff: "Medium", desc: "Saturday's opponent. Watch the back line spacing before film session.", url: "https://youtube.com/..." },
   { id: "v2", title: "4-7-8 Breathing Technique", cat: "Breathing", type: "video", dur: "5 min", diff: "Easy", desc: "Inhale 4, hold 7, exhale 8. Drops your heart rate before lights out.", url: "https://youtube.com/..." },
   { id: "v3", title: "Box Breathing Reset", cat: "Breathing", type: "audio", dur: "8 min", diff: "Easy", desc: "Navy SEAL go-to. Use before games and high-pressure moments.", url: "" },
   { id: "v4", title: "Full-Body Static Stretch", cat: "Stretching", type: "video", dur: "15 min", diff: "Easy", desc: "End-of-day flow. Hold each position 45 seconds.", url: "https://youtube.com/..." },
@@ -50,7 +43,7 @@ const workoutPlans = [
 const seedMessages = [
   { id: "m1", sender: "Coach Cameron", initials: "CC", text: "Film session moved to 6 PM in Team Room A.", time: "9:14 AM", isCoach: true },
   { id: "m2", sender: "Maya Patel", initials: "MP", text: "Got it — bringing the clips from Saturday.", time: "9:16 AM" },
-  { id: "m3", sender: "Coach Cameron", initials: "CC", text: "Scouting report attached — read before film.", time: "11:48 AM", isCoach: true, attachment: { type: "pdf", name: "Central_State_Scout.pdf" } },
+  { id: "m3", sender: "Coach Cameron", initials: "CC", text: "Scouting report attached — read before film.", time: "11:48 AM", isCoach: true, attachment: { type: "pdf", name: "Scouting_Report.pdf" } },
   { id: "m4", sender: "Devin Wallace", initials: "DW", text: "This set play is clean: https://youtube.com/watch?v=abc", time: "12:15 PM" },
   { id: "m5", sender: "Coach Cameron", initials: "CC", text: "Proud of this group.", time: "1:02 PM", isCoach: true, attachment: { type: "image", name: "team_huddle.jpg" } },
 ];

@@ -67,8 +67,8 @@ import { liftSeedDocs } from "./data/liftSeed";
 import { workoutSeedDocs, AREA_ORDER } from "./data/workoutSeed";
 import { TEAMS, TEAM_IDS, DEFAULT_TEAM_ID, isValidTeamId, teamDocFields, getTeam, getTeamShortName } from "./data/teams";
 import { useAppUpdate } from "./hooks/useAppUpdate";
-import { APP_VERSION } from "./data/whatsNew";
-import { UpdateBanner, WhatsNewModal } from "./components/UpdateUI";
+import { BUILD_ID } from "./lib/appVersion";
+import { UpdateBanner } from "./components/UpdateUI";
 import TacticsBoard, { BoardSvg } from "./components/TacticsBoard";
 import { ARROW_LEGEND, wavyPath } from "./components/boardData";
 import QuoteOfDay from "./components/QuoteOfDay";
@@ -285,19 +285,13 @@ const Toaster = () => {
 /* ──────────────────────────────────────────────
    SEED DATA  (real app → Firestore)
    ────────────────────────────────────────────── */
-const seedAnnouncements = [
-  { id: "a1", title: "Practice Moved to 5:00 PM", body: "Field 3 conflict — meet at Field 1, 5 PM sharp. Bring both jerseys.", ts: "2h ago", pinned: true },
-  { id: "a2", title: "Team Photo Day — Friday", body: "Home jersey, white socks, clean cleats. Arrive 15 min early.", ts: "5h ago", pinned: false },
-];
-const seedEvents = [
-  { id: "e1", title: "Team Practice", date: "2026-06-08", start: "15:00", end: "17:30", location: "Field 1", type: "Practice" },
-  { id: "e2", title: "Game vs. Central State", date: "2026-06-09", start: "14:00", end: "16:30", location: "Memorial Stadium", type: "Game" },
-  { id: "e3", title: "Morning Lift", date: "2026-06-10", start: "06:30", end: "08:00", location: "S&C Center", type: "Strength" },
-];
+// Starts clean for Brophy — no sample announcements; coaches post real ones.
+const seedAnnouncements = [];
+const seedEvents = [];
 const VIDEO_CATS = ["Film", "Breathing", "Stretching", "Mobility", "Strength", "Cooldown"];
 const CAT_ICON = { Film: Video, Breathing: Wind, Stretching: StretchHorizontal, Mobility: Activity, Strength: Dumbbell, Cooldown: Snowflake };
 
-// Drill library categories — Anthony's 15 tactical topics (Phoenix College system).
+// Drill library categories — Brophy's 15 tactical topics.
 const DRILL_CATS = ["Playing from back", "Transitions to the middle third", "Possession in the middle third", "Transitions to the final third", "Possession in the final third", "Switching the point of attack", "Crossing", "Finishing", "Passing patterns", "Passing patterns to finish", "Warm up games", "Pressing when losing the ball", "Getting into shapes", "Line of confrontation", "Set pieces"];
 const DRILL_CAT_ICON = {
   "Playing from back": Shield, "Transitions to the middle third": ArrowRight, "Possession in the middle third": Repeat,
@@ -309,7 +303,6 @@ const DRILL_CAT_ICON = {
 // Session phases — suggested tags on the drill form (how Anthony runs practices).
 const DRILL_PHASES = ["Warmup", "Team game", "Small rondo", "Bigger rondo / passing pattern", "Possession game", "Play / structured play", "Finishing pattern", "Passing pattern"];
 const seedVideos = [
-  { id: "v1", title: "Central State — Scouting Breakdown", cat: "Film", type: "video", dur: "12:10", diff: "Medium", desc: "Saturday's opponent. Watch the back line spacing before film session.", url: "https://youtube.com/..." },
   { id: "v2", title: "4-7-8 Breathing Technique", cat: "Breathing", type: "video", dur: "5 min", diff: "Easy", desc: "Inhale 4, hold 7, exhale 8. Drops your heart rate before lights out.", url: "https://youtube.com/..." },
   { id: "v3", title: "Box Breathing Reset", cat: "Breathing", type: "audio", dur: "8 min", diff: "Easy", desc: "Navy SEAL go-to. Use before games and high-pressure moments.", url: "" },
   { id: "v4", title: "Full-Body Static Stretch", cat: "Stretching", type: "video", dur: "15 min", diff: "Easy", desc: "End-of-day flow. Hold each position 45 seconds.", url: "https://youtube.com/..." },
@@ -327,7 +320,7 @@ const workoutPlans = [
 const seedMessages = [
   { id: "m1", sender: "Coach Cameron", initials: "CC", text: "Film session moved to 6 PM in Team Room A.", time: "9:14 AM", isCoach: true },
   { id: "m2", sender: "Maya Patel", initials: "MP", text: "Got it — bringing the clips from Saturday.", time: "9:16 AM" },
-  { id: "m3", sender: "Coach Cameron", initials: "CC", text: "Scouting report attached — read before film.", time: "11:48 AM", isCoach: true, attachment: { type: "pdf", name: "Central_State_Scout.pdf" } },
+  { id: "m3", sender: "Coach Cameron", initials: "CC", text: "Scouting report attached — read before film.", time: "11:48 AM", isCoach: true, attachment: { type: "pdf", name: "Scouting_Report.pdf" } },
   { id: "m4", sender: "Devin Wallace", initials: "DW", text: "This set play is clean: https://youtube.com/watch?v=abc", time: "12:15 PM" },
   { id: "m5", sender: "Coach Cameron", initials: "CC", text: "Proud of this group.", time: "1:02 PM", isCoach: true, attachment: { type: "image", name: "team_huddle.jpg" } },
 ];
@@ -1443,7 +1436,7 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
 
 /* ─── CALENDAR ─── */
 const EVENT_CSV_TEMPLATE = `date,start,end,title,location,type
-2026-08-15,19:30,21:30,vs ACU,Phoenix College,Game
+2026-08-15,19:30,21:30,vs Opponent,Field 1,Game
 2026-09-01,16:30,18:30,@ Yavapai,Yavapai,Game`;
 
 // Local-date helpers (avoids UTC drift from new Date("2026-06-08") parsing).
@@ -4137,7 +4130,7 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
         <button onClick={() => setDraft(null)} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> Line-ups</button>
         <button onClick={save} className="text-[11px] font-bold uppercase tracking-wider px-4 py-1.5 rounded-full text-white" style={{ backgroundColor: COLORS.primary }}>Save</button>
       </div>
-      <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Name this line-up (e.g. vs Central State)" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-semibold" />
+      <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Name this line-up" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-semibold" />
       <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
         {Object.keys(FORMATIONS).map((f) => (
           <button key={f} onClick={() => changeFormation(f)} className="text-[11px] font-bold px-3 py-1.5 rounded-full flex-shrink-0 border" style={draft.formation === f ? { backgroundColor: COLORS.primary, color: "white", borderColor: COLORS.primary } : { backgroundColor: "white", color: COLORS.textSecondary, borderColor: COLORS.border }}>{f}</button>
@@ -5956,7 +5949,7 @@ const PushNotificationModal = ({ pushNotifications = [], onAdd, onDelete, onSend
           </div>
 
           <div className="space-y-2">
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (e.g. Practice moved to 5pm)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (e.g. Practice time change)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
             <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message" rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
             <div>
               <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Send to</p>
@@ -7601,7 +7594,7 @@ const initialsOf = (name) =>
 // outright (decision 2026-11-08, §10) — no feedback form exists anywhere.
 const ROLE_LABELS = { player: "Player", admin: "Team Coach", orgAdmin: "Org Admin" };
 
-const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, onWhatsNew, isOrgAdmin = false, orgUsers = [], setUserRoleAndTeams }) => {
+const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdmin = false, orgUsers = [], setUserRoleAndTeams }) => {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(user.name || "");
   const [savingName, setSavingName] = useState(false);
@@ -7960,22 +7953,14 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, onWhatsNew, isO
           </section>
 
           {/* ABOUT */}
-          {(onReplayTour || onWhatsNew) && (
+          {onReplayTour && (
             <section>
               <h4 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 mb-2 px-1">Help</h4>
               <div className="space-y-2">
-                {onWhatsNew && (
-                  <button onClick={onWhatsNew} className="w-full bg-slate-50 rounded-2xl p-4 text-left flex items-center justify-between hover:bg-slate-100">
-                    <span className="text-sm font-semibold text-slate-900">What&apos;s new</span>
-                    <span className="text-lg" aria-hidden="true">✨</span>
-                  </button>
-                )}
-                {onReplayTour && (
-                  <button onClick={onReplayTour} className="w-full bg-slate-50 rounded-2xl p-4 text-left flex items-center justify-between hover:bg-slate-100">
-                    <span className="text-sm font-semibold text-slate-900">Replay the welcome tour</span>
-                    <span className="text-lg" aria-hidden="true">🎟️</span>
-                  </button>
-                )}
+                <button onClick={onReplayTour} className="w-full bg-slate-50 rounded-2xl p-4 text-left flex items-center justify-between hover:bg-slate-100">
+                  <span className="text-sm font-semibold text-slate-900">Replay the welcome tour</span>
+                  <span className="text-lg" aria-hidden="true">🎟️</span>
+                </button>
               </div>
             </section>
           )}
@@ -7984,7 +7969,7 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, onWhatsNew, isO
             <h4 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 mb-2 px-1">About</h4>
             <div className="bg-slate-50 rounded-2xl p-4 text-[11px] space-y-1.5">
               <div className="flex justify-between"><span className="text-slate-500">App</span><span className="font-semibold text-slate-900">Brophy Soccer</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Version</span><span className="font-mono text-[10px] text-slate-700">{APP_VERSION}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Version</span><span className="font-mono text-[10px] text-slate-700">{BUILD_ID}</span></div>
             </div>
           </section>
 
@@ -8104,23 +8089,8 @@ export default function TeamHubRolesApp() {
   const [previewAsPlayer, setPreviewAsPlayer] = useState(false);
   const [trainView, setTrainView] = useState(null); // player Train sub-page: gym | nutrition | videos
   const [showTour, setShowTour] = useState(false);
-  // Pop "What's New" once after an update: if a returning user's last-seen
-  // version differs from the current one, show it. First-ever users (last-seen
-  // null) don't get a changelog. Computed at mount so we never setState in an
-  // effect; the seen version is recorded write-only in the effect below.
-  const [whatsNewOpen, setWhatsNewOpen] = useState(() => {
-    try {
-      const last = localStorage.getItem("lastSeenVersion");
-      return !!(last && last !== APP_VERSION);
-    } catch { return false; }
-  });
-
   // Offer a refresh when a newer build is deployed while the app is open.
   const { updateReady, reload } = useAppUpdate();
-
-  useEffect(() => {
-    try { localStorage.setItem("lastSeenVersion", APP_VERSION); } catch { /* private mode */ }
-  }, []);
 
   // First-login welcome tour. "Seen" is tracked per-device in localStorage, so
   // it auto-runs once and never nags again (no backend/rules change needed).
@@ -9053,8 +9023,7 @@ export default function TeamHubRolesApp() {
         {updateReady && <UpdateBanner onReload={reload} color={COLORS.primary} />}
         <Header title={title} user={effUser} onAvatarClick={() => setSettingsOpen(true)} onPreview={() => { setPreviewAsPlayer(true); setTab("home"); }} />
         {canSeeMultipleTeams && <TeamSwitcher teams={visibleTeams} activeTeamId={activeTeamId} onSelect={setPreferredTeamId} />}
-        {settingsOpen && <SettingsModal user={user} onClose={() => setSettingsOpen(false)} onSignOut={() => signOut(auth)} onReplayTour={() => { setSettingsOpen(false); setShowTour(true); }} onWhatsNew={() => { setSettingsOpen(false); setWhatsNewOpen(true); }} isOrgAdmin={user.role === "orgAdmin"} orgUsers={orgUsers} setUserRoleAndTeams={setUserRoleAndTeams} />}
-        {whatsNewOpen && <WhatsNewModal onClose={() => setWhatsNewOpen(false)} accent={COLORS.accent} soft={COLORS.accentSoft} />}
+        {settingsOpen && <SettingsModal user={user} onClose={() => setSettingsOpen(false)} onSignOut={() => signOut(auth)} onReplayTour={() => { setSettingsOpen(false); setShowTour(true); }} isOrgAdmin={user.role === "orgAdmin"} orgUsers={orgUsers} setUserRoleAndTeams={setUserRoleAndTeams} />}
         <WelcomeTour open={showTour} role={effUser.role} onClose={closeTour} />
         {previewAsPlayer && realIsAdmin && (
           <button onClick={() => setPreviewAsPlayer(false)} className="w-full flex items-center justify-center gap-2 py-2 text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: COLORS.primary }}>

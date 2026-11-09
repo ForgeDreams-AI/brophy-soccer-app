@@ -233,15 +233,6 @@ service cloud.firestore {
       allow update, delete: if coachUpdate() || coachDelete();
     }
 
-    // Assignments: coach creates/deletes; any member of the team may mark
-    // themselves done (only the `completedBy` map), like message readBy.
-    match /assignments/{id} {
-      allow read:   if isMemberOf(rTeam());
-      allow create: if coachCreate();
-      allow delete: if coachDelete();
-      allow update: if coachUpdate()
-        || (isMemberOf(rTeam()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completedBy']));
-    }
     match /recipes/{id}       { allow read: if signedIn(); allow write: if isAdmin(); }
     match /categories/{id}    { allow read: if signedIn(); allow write: if isAdmin(); }
     // Quote of the Day: one per team; coach of the team posts, members read.
