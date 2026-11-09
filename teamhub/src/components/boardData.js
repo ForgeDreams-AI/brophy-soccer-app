@@ -13,10 +13,10 @@
 //     color = one of ARROW_COLORS; absent = white.
 //   zone:  { id, shape: 'rect'|'circle', x, y, w, h }   (x,y,w,h normalized 0..1)
 //
-// The bend / freehand / color / rot / pole / ladder fields come from the
-// Drill Library's full-screen studio; this board's editor doesn't create
-// them, but BoardSvg renders them and normalizeBoardState preserves them,
-// so opening a library drill here never flattens its diagram.
+// The bend / freehand / color / rot / pole / ladder fields come from this
+// board's full-screen studio (shared with the Drill Library); BoardSvg
+// renders them and normalizeBoardState preserves them, so opening a library
+// drill here never flattens its diagram.
 //
 // Arrow legend (fixed everywhere — printed on every diagram export):
 //   pass = solid line, OPEN arrowhead · run = dashed · dribble = wavy
@@ -147,4 +147,24 @@ export function arrowGeom(a, px, py) {
     return { d: polylineD(offsetAlong(pts, 4)), d2: polylineD(offsetAlong(pts, -4)), mid, pts };
   }
   return { d: polylineD(pts), d2: null, mid, pts };
+}
+
+// Pitch-line snap targets in normalized board coords (penalty-box edges,
+// six-yard box, halfway line, penalty spots, goal lines). The editor's
+// smart guides snap live to these while dragging.
+export function pitchSnapLines(state) {
+  const { preset, wYd, dYd } = boardDims(state);
+  const xs = [], ys = [];
+  if (preset.orient === "portrait") {
+    const mid = wYd / 2;
+    xs.push(0, (mid - 22) / wYd, 0.5, (mid + 22) / wYd, (mid - 10) / wYd, (mid + 10) / wYd, 1);
+    ys.push(0, 6 / dYd, 12 / dYd, 18 / dYd, 1);
+  } else if (preset.id === "full") {
+    xs.push(0, 6 / wYd, 12 / wYd, 18 / wYd, 0.5, 1 - 18 / wYd, 1 - 12 / wYd, 1 - 6 / wYd, 1);
+    ys.push(0, (dYd - 44) / 2 / dYd, (dYd - 20) / 2 / dYd, 0.5, (dYd + 20) / 2 / dYd, (dYd + 44) / 2 / dYd, 1);
+  } else {
+    xs.push(0, 0.5, 1);
+    ys.push(0, 0.5, 1);
+  }
+  return { xs: xs.filter((v) => v >= 0 && v <= 1), ys: ys.filter((v) => v >= 0 && v <= 1) };
 }
