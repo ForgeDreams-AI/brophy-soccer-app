@@ -34,6 +34,11 @@ service cloud.firestore {
     // Any coach-level role (a per-team coach or the org admin). Used for
     // shared (non-team) collections only; team-scoped writes use isCoachOf.
     function isAdmin() { return signedIn() && (myRole() == 'admin' || myRole() == 'orgAdmin'); }
+    // Who can BUILD drills in the shared drillLibrary collection: coaches
+    // plus the drillBuilder role — a drill-library-only builder with no team
+    // assignment. Every team-scoped rule below still denies them team data
+    // (no team membership), so this is used ONLY for the drillLibrary block.
+    function canBuildDrills() { return signedIn() && (myRole() == 'admin' || myRole() == 'orgAdmin' || myRole() == 'drillBuilder'); }
     // The caller belongs to this team (org admin belongs to all three).
     function isMemberOf(teamId) { return signedIn() && (isOrgAdmin() || myTeamIds().hasAny([teamId])); }
     // The caller coaches this team (org admin coaches all three).
@@ -150,17 +155,20 @@ service cloud.firestore {
     // collection is no longer read or written by either app (its real
     // drills were migrated into `drillLibrary`; kind === "point"
     // coaching-point items were NOT migrated and stay in `drills`, unread).
-    // Public read, coach-only write; create requires createdByUid == the
-    // caller and a non-empty name. Merged from the drill-library repo's
-    // firestore.rules — deploy once with the app's rules, never deploy the
-    // library's file on its own (it would overwrite the app's rules).
+    // Public read; coaches and drill builders write (canBuildDrills) —
+    // a drillBuilder builds drills in the library but has no team
+    // assignment and no team-app access. Create requires createdByUid ==
+    // the caller and a non-empty name. Merged from the drill-library
+    // repo's firestore.rules — deploy once with the app's rules, never
+    // deploy the library's file on its own (it would overwrite the app's
+    // rules).
     match /drillLibrary/{drillId} {
       allow read: if true;
-      allow create: if isAdmin()
+      allow create: if canBuildDrills()
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0;
-      allow update, delete: if isAdmin();
+      allow update, delete: if canBuildDrills();
     }
     // Drill suggestions (the review queue / limbo for the standalone Drill
     // Library site): anyone signed in can suggest a video from the Soccer
