@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   Home, Calendar as CalendarIcon, Video, Apple, MessageCircle,
   Pin, Clock, MapPin, Plus, X, Trash2, Send, Paperclip,
-  ShoppingCart, Check, Droplet, Flame, User, Shield, Lock, Play,
+  ShoppingCart, Check, Droplet, Flame, Shield, Lock, Play,
   Link as LinkIcon, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Wind, Activity, Dumbbell, Snowflake, StretchHorizontal, FileText,
   Image as ImageIcon, Mail, ArrowRight, Layers, Reply, BarChart3, ScanLine, Camera,
@@ -27,7 +27,7 @@ import { auth, db, storage } from "./firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { useAuth } from "./hooks/useAuth";
-import { useCollection, useAudienceCollection } from "./hooks/useCollection";
+import { useCollection, useAudienceCollection, useDoc } from "./hooks/useCollection";
 
 // Turn a `visibleTo` audience ({ groupIds, uids|emails }) into the flat
 // `audienceKeys` array we store on each doc so security rules can enforce
@@ -185,8 +185,10 @@ const formatHourTime = (hhmm) => {
   return `${hour12}:${(mStr || "00").padStart(2, "0")} ${period}`;
 };
 
-// Default team-wide fueling targets (collegiate men's soccer ballpark).
-const TEAM_TARGETS = { cal: 3200, p: 180, water: 10 };
+// Daily water guide shown in the nutrition hero (cups). There is no
+// team-wide calorie/protein target — each player sets their own daily goal
+// if they want one (see MyNutritionGoalSection).
+const WATER_CUPS_GOAL = 8;
 
 const mealBucket = (ts) => {
   if (!ts) return "Today";
@@ -2750,7 +2752,7 @@ const VideoModal = ({ item, onClose }) => {
 };
 
 /* ─── NUTRITION (log presets + custom food + post-meal rating) ─── */
-const NutritionHero = ({ totals, streak, waterCups, setWaterCups }) => {
+const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups }) => {
   const Bar = ({ value, target, color }) => {
     const pct = Math.min(100, target ? (value / target) * 100 : 0);
     return (
@@ -2759,7 +2761,7 @@ const NutritionHero = ({ totals, streak, waterCups, setWaterCups }) => {
       </div>
     );
   };
-  const waterDots = Array.from({ length: TEAM_TARGETS.water }, (_, i) => i < waterCups);
+  const waterDots = Array.from({ length: WATER_CUPS_GOAL }, (_, i) => i < waterCups);
   return (
     <div className="rounded-2xl p-4 text-white shadow-md" style={{ background: `linear-gradient(135deg, ${COLORS.primary}, #003B77)` }}>
       <div className="flex items-center justify-between mb-3">
@@ -2775,21 +2777,31 @@ const NutritionHero = ({ totals, streak, waterCups, setWaterCups }) => {
           <div className="flex items-baseline justify-between mb-1">
             <div className="flex items-baseline gap-1">
               <span className="text-2xl font-bold">{totals.cal.toLocaleString()}</span>
-              <span className="text-xs opacity-70">/ {TEAM_TARGETS.cal.toLocaleString()} kcal</span>
+              <span className="text-xs opacity-70">{goal?.cal > 0 ? `/ ${goal.cal.toLocaleString()} kcal` : "kcal"}</span>
             </div>
-            <span className="text-[10px] font-semibold opacity-70">{Math.round((totals.cal / TEAM_TARGETS.cal) * 100)}%</span>
+            {goal?.cal > 0 && <span className="text-[10px] font-semibold opacity-70">{Math.round((totals.cal / goal.cal) * 100)}%</span>}
           </div>
-          <Bar value={totals.cal} target={TEAM_TARGETS.cal} color={COLORS.accent} />
+          {goal?.cal > 0 && <Bar value={totals.cal} target={goal.cal} color={COLORS.accent} />}
         </div>
         <div>
           <div className="flex items-baseline justify-between mb-1">
             <div className="flex items-baseline gap-1">
               <span className="text-2xl font-bold">{totals.p}g</span>
-              <span className="text-xs opacity-70">/ {TEAM_TARGETS.p}g protein</span>
+              <span className="text-xs opacity-70">{goal?.protein > 0 ? `/ ${goal.protein}g protein` : "protein"}</span>
             </div>
-            <span className="text-[10px] font-semibold opacity-70">{Math.round((totals.p / TEAM_TARGETS.p) * 100)}%</span>
+            {goal?.protein > 0 && <span className="text-[10px] font-semibold opacity-70">{Math.round((totals.p / goal.protein) * 100)}%</span>}
           </div>
-          <Bar value={totals.p} target={TEAM_TARGETS.p} color={COLORS.success} />
+          {goal?.protein > 0 && <Bar value={totals.p} target={goal.protein} color={COLORS.success} />}
+        </div>
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <div className="rounded-xl px-3 py-2" style={{ backgroundColor: "rgba(255,255,255,0.10)" }}>
+            <div className="text-[9px] uppercase tracking-wider font-bold opacity-70">Carbs</div>
+            <div className="text-base font-bold">{totals.c}g</div>
+          </div>
+          <div className="rounded-xl px-3 py-2" style={{ backgroundColor: "rgba(255,255,255,0.10)" }}>
+            <div className="text-[9px] uppercase tracking-wider font-bold opacity-70">Fat</div>
+            <div className="text-base font-bold">{totals.f}g</div>
+          </div>
         </div>
       </div>
       <div className="mt-3 pt-3 border-t border-white/20 flex items-center justify-between">
@@ -2800,7 +2812,7 @@ const NutritionHero = ({ totals, streak, waterCups, setWaterCups }) => {
               <div key={i} className="w-2 h-3 rounded-sm" style={{ backgroundColor: on ? "#7DD3FC" : "rgba(255,255,255,0.18)" }} />
             ))}
           </div>
-          <span className="text-xs font-semibold ml-2">{waterCups} / {TEAM_TARGETS.water}</span>
+          <span className="text-xs font-semibold ml-2">{waterCups} / {WATER_CUPS_GOAL}</span>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <button onClick={() => setWaterCups(Math.max(0, waterCups - 1))} disabled={waterCups === 0} aria-label="One less cup" className="w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-sm font-bold disabled:opacity-30">−</button>
@@ -4744,85 +4756,81 @@ const TargetBar = ({ label, value, goal, unit }) => {
   );
 };
 
-// Coach sets daily kcal/protein targets (everyone or specific people); players
-// see their applicable target with live progress from today's food log.
-const NutritionTargetsSection = ({ isAdmin, targets = [], myTarget, myTotals = { cal: 0, protein: 0 }, groups = [], roster = [], onAdd, onDelete }) => {
+// The player's OWN daily goal (calories + protein, optional). No coach sets
+// it — the player sets it for themselves if they want to, and it lives in
+// their private food-log area (logs/{uid}/goal). The hero bars and the
+// Today checklist show progress against this goal when one is set.
+const MyNutritionGoalSection = ({ goal, totals = { cal: 0, protein: 0 }, onSave, onClear }) => {
   const [open, setOpen] = useState(false);
   const [cal, setCal] = useState("");
   const [protein, setProtein] = useState("");
-  const [mode, setMode] = useState("everyone");
-  const [groupIds, setGroupIds] = useState([]);
-  const [emails, setEmails] = useState([]);
   const [busy, setBusy] = useState(false);
-  const players = roster.filter((r) => r.role !== "admin");
-  const toggle = (arr, set, v) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+  const hasGoal = goal && (goal.cal > 0 || goal.protein > 0);
 
-  if (!isAdmin) {
-    if (!myTarget || (!myTarget.cal && !myTarget.protein)) return null;
-    return (
-      <div className="px-5">
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2.5">
-          <h3 className="text-sm font-bold text-slate-900">Today's target</h3>
-          {myTarget.cal > 0 && <TargetBar label="Calories" value={myTotals.cal} goal={myTarget.cal} unit="kcal" />}
-          {myTarget.protein > 0 && <TargetBar label="Protein" value={myTotals.protein} goal={myTarget.protein} unit="g" />}
-        </div>
-      </div>
-    );
-  }
-
-  const add = async () => {
+  const startEdit = () => {
+    setCal(goal?.cal ? String(goal.cal) : "");
+    setProtein(goal?.protein ? String(goal.protein) : "");
+    setOpen(true);
+  };
+  const save = async () => {
     if (!cal && !protein) return;
     setBusy(true);
-    const visibleTo = mode === "custom" ? { groupIds, emails } : { groupIds: [], emails: [] };
-    try { await onAdd({ cal, protein, visibleTo }); setCal(""); setProtein(""); setMode("everyone"); setGroupIds([]); setEmails([]); setOpen(false); }
-    catch (e) { toast("Couldn't save target — " + (e.message || "")); }
-    finally { setBusy(false); }
+    try {
+      await onSave({ cal, protein });
+      setOpen(false);
+    } catch (e) {
+      toast("Couldn't save goal — " + (e.message || ""));
+    } finally {
+      setBusy(false);
+    }
   };
-  const audienceLabel = (t) => {
-    const v = t.visibleTo || {}; const n = (v.emails?.length || 0) + (v.groupIds?.length || 0);
-    return n ? `${n} selected` : "Everyone";
+  const clear = async () => {
+    if (!confirm("Clear your daily goal?")) return;
+    try { await onClear(); setOpen(false); } catch (e) { toast("Couldn't clear — " + (e.message || "")); }
   };
 
   return (
-    <div className="px-5 space-y-2">
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold text-slate-900">Daily Targets</h3>
-        <button onClick={() => setOpen(!open)} className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full text-white flex items-center gap-1" style={{ backgroundColor: COLORS.primary }}><Plus className="w-3 h-3" /> Target</button>
-      </div>
-      {open && (
-        <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <input type="number" value={cal} onChange={(e) => setCal(e.target.value)} placeholder="Calories" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-            <input type="number" value={protein} onChange={(e) => setProtein(e.target.value)} placeholder="Protein g" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setMode("everyone")} className={`flex-1 py-2 rounded-full text-xs font-bold ${mode === "everyone" ? "text-white" : "bg-slate-100 text-slate-600"}`} style={mode === "everyone" ? { backgroundColor: COLORS.primary } : {}}>Everyone</button>
-            <button onClick={() => setMode("custom")} className={`flex-1 py-2 rounded-full text-xs font-bold ${mode === "custom" ? "text-white" : "bg-slate-100 text-slate-600"}`} style={mode === "custom" ? { backgroundColor: COLORS.primary } : {}}>Specific</button>
-          </div>
-          {mode === "custom" && (
-            <div className="space-y-2">
-              {groups.length > 0 && <div className="flex flex-wrap gap-1.5">{groups.map((g) => { const on = groupIds.includes(g.id); return <button key={g.id} onClick={() => toggle(groupIds, setGroupIds, g.id)} className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${on ? "text-white" : "bg-white text-slate-600 border-slate-200"}`} style={on ? { backgroundColor: COLORS.primary, borderColor: COLORS.primary } : {}}>{g.name}</button>; })}</div>}
-              {players.length > 0 && <div className="max-h-32 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">{players.map((p) => { const on = emails.includes(p.email); return <button key={p.email} onClick={() => toggle(emails, setEmails, p.email)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-50 text-left"><span className="text-xs font-mono text-slate-700 truncate">{p.email}</span>{on ? <Check className="w-4 h-4" style={{ color: COLORS.success }} /> : <span className="w-4 h-4 rounded border border-slate-300" />}</button>; })}</div>}
+    <div className="px-5">
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-900">My daily goal</h3>
+          {hasGoal && !open && (
+            <div className="flex gap-1.5">
+              <button onClick={startEdit} className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">Edit</button>
+              <button onClick={clear} className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">Clear</button>
             </div>
           )}
-          <button onClick={add} disabled={busy || (!cal && !protein)} className="w-full py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{busy ? "Saving…" : "Save target"}</button>
         </div>
-      )}
-      {targets.length > 0 && (
-        <ul className="space-y-1.5">
-          {targets.map((t) => (
-            <li key={t.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-slate-100">
-              <div className="min-w-0"><div className="text-xs font-semibold text-slate-800">{t.cal ? `${t.cal} kcal` : ""}{t.cal && t.protein ? " · " : ""}{t.protein ? `${t.protein}g protein` : ""}</div><div className="text-[10px] text-slate-400">{audienceLabel(t)}</div></div>
-              <button onClick={async () => { if (confirm("Delete this target?")) { try { await onDelete(t.id); } catch (e) { toast("Couldn't delete — " + (e.message || "")); } } }} className="text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-            </li>
-          ))}
-        </ul>
-      )}
+        {hasGoal && !open ? (
+          <div className="space-y-2">
+            {goal.cal > 0 && <TargetBar label="Calories" value={totals.cal} goal={goal.cal} unit="kcal" />}
+            {goal.protein > 0 && <TargetBar label="Protein" value={totals.protein} goal={goal.protein} unit="g" />}
+            <p className="text-[10px] text-slate-400">Your goal is just for you — coaches don't set it.</p>
+          </div>
+        ) : open ? (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <input type="number" value={cal} onChange={(e) => setCal(e.target.value)} placeholder="Calories" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              <input type="number" value={protein} onChange={(e) => setProtein(e.target.value)} placeholder="Protein g" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={save} disabled={busy || (!cal && !protein)} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{busy ? "Saving…" : "Save goal"}</button>
+              <button onClick={() => setOpen(false)} className="px-4 py-2 rounded-full text-xs font-bold bg-slate-100 text-slate-600">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p className="text-xs text-slate-500">No goal set — totally optional. Set your own daily calories and protein if you want something to aim at.</p>
+            <button onClick={startEdit} className="mt-2 w-full py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white" style={{ backgroundColor: COLORS.primary }}>Set my goal</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
-const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, importRecipes, seedRecipes, categories, addCategory, logged, addLog, updateLog, deleteLog, waterCups, setWaterCups, nutritionTargets = [], myNutritionTarget, myNutritionTotals, addNutritionTarget, deleteNutritionTarget, groups = [], roster = [], savedFoods = [], addSavedFood, deleteSavedFood }) => {
+
+const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, importRecipes, seedRecipes, categories, addCategory, logged, addLog, updateLog, deleteLog, waterCups, setWaterCups, myNutritionGoal, myNutritionTotals, saveMyNutritionGoal, clearMyNutritionGoal, savedFoods = [], addSavedFood, deleteSavedFood }) => {
   const isAdmin = user.role === "admin";
   // Union of premade defaults + admin's custom categories. Defaults are
   // always available so the UI is never empty and players have a sane set
@@ -4849,18 +4857,18 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchErr, setSearchErr] = useState("");
-  // AI photo logging — POSTs to the Cloudflare Worker /api/food-photo endpoint.
-  const [photoState, setPhotoState] = useState("idle"); // idle | uploading | done | error
-  const [photoNote, setPhotoNote] = useState("");
-  const photoInputRef = useRef(null);
+  // Status note for the log form (barcode lookups) — shown as a banner above
+  // the manual entry fields. (Food photo AI was removed — no photo flow.)
+  const [formState, setFormState] = useState("idle"); // idle | uploading | done | error
+  const [formNote, setFormNote] = useState("");
   // Barcode scanner — uses browser BarcodeDetector + Open Food Facts lookup.
   const [scannerOpen, setScannerOpen] = useState(false);
 
   const handleBarcode = async (code) => {
     setScannerOpen(false);
     setShowManual(true);
-    setPhotoState("uploading");
-    setPhotoNote(`Looking up ${code}…`);
+    setFormState("uploading");
+    setFormNote(`Looking up ${code}…`);
     try {
       const data = await lookupBarcode(code);
       setManual({
@@ -4870,65 +4878,14 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
         c: data.c != null ? String(data.c) : "",
         f: data.f != null ? String(data.f) : "",
       });
-      setPhotoNote(`Open Food Facts · per 100g — adjust if your portion was different.`);
-      setPhotoState("done");
+      setFormNote(`Open Food Facts · per 100g — adjust if your portion was different.`);
+      setFormState("done");
     } catch (e) {
-      setPhotoState("error");
-      setPhotoNote(e.message || "Barcode lookup failed");
+      setFormState("error");
+      setFormNote(e.message || "Barcode lookup failed");
     }
   };
 
-  const downscaleToBase64 = (file, maxDim = 1024, quality = 0.85) =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
-        const canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        canvas.toBlob((blob) => {
-          if (!blob) return reject(new Error("canvas toBlob failed"));
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result).split(",")[1]);
-          reader.onerror = () => reject(reader.error || new Error("read failed"));
-          reader.readAsDataURL(blob);
-        }, "image/jpeg", quality);
-      };
-      img.onerror = () => reject(new Error("Could not read image"));
-      img.src = URL.createObjectURL(file);
-    });
-
-  const analyzePhoto = async (file) => {
-    if (!file) return;
-    setShowManual(true);
-    setPhotoState("uploading");
-    setPhotoNote("Analyzing photo…");
-    try {
-      const imageBase64 = await downscaleToBase64(file);
-      const res = await fetch("/api/food-photo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64, mimeType: "image/jpeg" }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      setManual({
-        name: data.name || "",
-        cal: data.cal != null ? String(data.cal) : "",
-        p: data.p != null ? String(data.p) : "",
-        c: data.c != null ? String(data.c) : "",
-        f: data.f != null ? String(data.f) : "",
-      });
-      const conf = data.confidence ? `${data.confidence} confidence` : "AI estimate";
-      setPhotoNote(`${conf}${data.notes ? " · " + data.notes : ""} — review and adjust before logging.`);
-      setPhotoState("done");
-    } catch (e) {
-      setPhotoState("error");
-      setPhotoNote(e.message || "Photo analysis failed");
-    }
-  };
   useEffect(() => {
     if (!showManual) { setSearchResults([]); return; }
     const q = manual.name.trim();
@@ -4970,7 +4927,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
   };
   // admin recipe management
   const [mode, setMode] = useState("single");
-  const [single, setSingle] = useState({ name: "", cat: categories[0] || "Breakfast", sub: "", cal: "", p: "", c: "", f: "", prep: "" });
+  const [single, setSingle] = useState({ name: "", cat: categories[0] || "Breakfast", sub: "", cal: "", p: "", c: "", f: "", prep: "", ingredients: "" });
   const [seeding, setSeeding] = useState(false);
   const runSeedRecipes = async () => {
     if (!seedRecipes || seeding) return;
@@ -5004,7 +4961,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
   const filtered = activeSub ? inCat.filter((m) => (m.sub || "Other") === activeSub) : inCat;
   const todayKey = formatDayKey(new Date());
   const todayLogs = logged.filter((l) => formatDayKey(l.createdAt) === todayKey);
-  const totals = todayLogs.reduce((a, l) => ({ cal: a.cal + (l.cal || 0), p: a.p + (l.p || 0) }), { cal: 0, p: 0 });
+  const totals = todayLogs.reduce((a, l) => ({ cal: a.cal + (l.cal || 0), p: a.p + (l.p || 0), c: a.c + (l.c || 0), f: a.f + (l.f || 0) }), { cal: 0, p: 0, c: 0, f: 0 });
   const streak = computeStreak(logged);
   // Group today's log by the categorical bucket the user (or recipe) picked
   // when logging. Falls back to the time-of-day bucket for older entries
@@ -5075,8 +5032,8 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
       });
       setManual({ name: "", cat: timeOfDayCategory(), cal: "", p: "", c: "", f: "" });
       setSearchResults([]);
-      setPhotoState("idle");
-      setPhotoNote("");
+      setFormState("idle");
+      setFormNote("");
       setShowManual(false);
     } catch (e) {
       toast("Couldn't add — " + e.message);
@@ -5099,6 +5056,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
         c: Number(single.c) || 0,
         f: Number(single.f) || 0,
         prep: single.prep || "—",
+        ingredients: single.ingredients.split(",").map((x) => x.trim()).filter(Boolean),
       };
       if (editingRecipeId) {
         await updateRecipe(editingRecipeId, data);
@@ -5108,7 +5066,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
         await addRecipe(data);
         setImportMsg(`Added "${name}" to ${targetCat}.`);
       }
-      setSingle({ name: "", cat: targetCat, sub: single.sub, cal: "", p: "", c: "", f: "", prep: "" });
+      setSingle({ name: "", cat: targetCat, sub: single.sub, cal: "", p: "", c: "", f: "", prep: "", ingredients: "" });
     } catch (e) {
       setImportMsg("Couldn't save recipe — " + (e.message || "check Firestore rules."));
     }
@@ -5124,6 +5082,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
       c: String(r.c || ""),
       f: String(r.f || ""),
       prep: r.prep || "",
+      ingredients: (r.ingredients || []).join(", "),
     });
     setSub("manage");
     setMode("single");
@@ -5177,7 +5136,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft }}><Apple className="w-4 h-4" style={{ color: COLORS.accent }} /></div>
             <div className="flex-1 min-w-0">
               <div className="text-xs font-bold text-slate-900">Add starter recipes</div>
-              <div className="text-[10px] text-slate-500">120 whole-food recipes across every meal, by food type. Skips ones you already have.</div>
+              <div className="text-[10px] text-slate-500">132 recipes across every meal, by food type — including simple school-lunch picks (5 ingredients or less). Skips ones you already have.</div>
             </div>
             <button onClick={runSeedRecipes} disabled={seeding} className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-full text-white disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>{seeding ? "Adding…" : "Add"}</button>
           </div>
@@ -5197,9 +5156,10 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
               ))}
             </div>
             <input value={single.prep} onChange={(e) => setSingle({ ...single, prep: e.target.value })} placeholder="Prep time (e.g. 15 min)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+            <input value={single.ingredients} onChange={(e) => setSingle({ ...single, ingredients: e.target.value })} placeholder="Main ingredients, comma-separated (e.g. chicken, rice, beans)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
             <button onClick={addSingle} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white" style={{ backgroundColor: COLORS.primary }}>{editingRecipeId ? "Save Changes" : "Add Recipe"}</button>
             {editingRecipeId && (
-              <button onClick={() => { setEditingRecipeId(null); setSingle({ name: "", cat: single.cat, cal: "", p: "", c: "", f: "", prep: "" }); setImportMsg(""); }} className="w-full mt-1 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100">Cancel Edit</button>
+              <button onClick={() => { setEditingRecipeId(null); setSingle({ name: "", cat: single.cat, cal: "", p: "", c: "", f: "", prep: "", ingredients: "" }); setImportMsg(""); }} className="w-full mt-1 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100">Cancel Edit</button>
             )}
           </div>
         )}
@@ -5241,27 +5201,14 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
     return (
       <div className="px-5 pt-5 pb-4 space-y-5">
         <button onClick={() => setSub(null)} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> Back to Meals</button>
-        <NutritionHero totals={totals} streak={streak} waterCups={waterCups} setWaterCups={setWaterCups} />
+        <NutritionHero totals={totals} goal={myNutritionGoal} streak={streak} waterCups={waterCups} setWaterCups={setWaterCups} />
 
         <button onClick={() => setShowManual(!showManual)} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white flex items-center justify-center gap-1.5" style={{ backgroundColor: COLORS.primary }}>
           <Plus className="w-3.5 h-3.5" /> Log Something
         </button>
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => photoInputRef.current?.click()} className="py-2 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border-2 bg-white" style={{ borderColor: COLORS.primary, color: COLORS.primary }}>
-            <ImageIcon className="w-3.5 h-3.5" /> Photo
-          </button>
-          <button onClick={() => setScannerOpen(true)} className="py-2 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border-2 bg-white" style={{ borderColor: COLORS.primary, color: COLORS.primary }}>
-            <ScanLine className="w-3.5 h-3.5" /> Barcode
-          </button>
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) analyzePhoto(f); e.target.value = ""; }}
-          />
-        </div>
+        <button onClick={() => setScannerOpen(true)} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border-2 bg-white" style={{ borderColor: COLORS.primary, color: COLORS.primary }}>
+          <ScanLine className="w-3.5 h-3.5" /> Scan a Barcode
+        </button>
         {scannerOpen && <BarcodeScannerModal onClose={() => setScannerOpen(false)} onScan={handleBarcode} />}
 
         {/* Quick add — one tap re-logs a saved or recent food. */}
@@ -5304,17 +5251,17 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
         )}
         {showManual && (
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2">
-            {photoState !== "idle" && (
+            {formState !== "idle" && (
               <div className="rounded-lg px-3 py-2 text-[11px] font-semibold flex items-start gap-2" style={{
-                backgroundColor: photoState === "error" ? "#FEE2E2" : photoState === "done" ? COLORS.accentSoft : "#E0F2FE",
-                color: photoState === "error" ? "#991B1B" : photoState === "done" ? COLORS.primary : "#075985",
+                backgroundColor: formState === "error" ? "#FEE2E2" : formState === "done" ? COLORS.accentSoft : "#E0F2FE",
+                color: formState === "error" ? "#991B1B" : formState === "done" ? COLORS.primary : "#075985",
               }}>
-                {photoState === "uploading" && <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin flex-shrink-0 mt-0.5" />}
-                {photoState === "done" && <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />}
-                {photoState === "error" && <X className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />}
-                <span className="leading-snug">{photoNote}</span>
-                {photoState !== "uploading" && (
-                  <button onClick={() => { setPhotoState("idle"); setPhotoNote(""); }} className="ml-auto opacity-60 hover:opacity-100 flex-shrink-0" aria-label="Dismiss"><X className="w-3 h-3" /></button>
+                {formState === "uploading" && <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin flex-shrink-0 mt-0.5" />}
+                {formState === "done" && <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />}
+                {formState === "error" && <X className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />}
+                <span className="leading-snug">{formNote}</span>
+                {formState !== "uploading" && (
+                  <button onClick={() => { setFormState("idle"); setFormNote(""); }} className="ml-auto opacity-60 hover:opacity-100 flex-shrink-0" aria-label="Dismiss"><X className="w-3 h-3" /></button>
                 )}
               </div>
             )}
@@ -5389,20 +5336,16 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
 
   return (
     <div className="pt-5 pb-4 space-y-5">
-      {!isAdmin && (
-        <div className="px-5">
-          <NutritionHero totals={totals} streak={streak} waterCups={waterCups} setWaterCups={setWaterCups} />
-        </div>
-      )}
-      <NutritionTargetsSection isAdmin={isAdmin} targets={nutritionTargets} myTarget={myNutritionTarget} myTotals={myNutritionTotals} groups={groups} roster={roster} onAdd={addNutritionTarget} onDelete={deleteNutritionTarget} />
+      {/* Today's totals up front — calories, protein, carbs, fat, water — with
+          progress against the player's OWN goal when they set one. */}
+      <div className="px-5">
+        <NutritionHero totals={totals} goal={myNutritionGoal} streak={streak} waterCups={waterCups} setWaterCups={setWaterCups} />
+      </div>
+      <MyNutritionGoalSection goal={myNutritionGoal} totals={myNutritionTotals} onSave={saveMyNutritionGoal} onClear={clearMyNutritionGoal} />
       <div className="px-5 space-y-2">
-        {!isAdmin && (
-          <button onClick={() => setSub("log")} className="w-full bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: "#E0F2FE" }}><User className="w-4 h-4" style={{ color: "#0284c7" }} /></div>
-            <div className="text-left flex-1"><div className="text-xs font-bold text-slate-900">My Food Log</div><div className="text-[10px] text-slate-500">{todayLogs.length} logged today · tap to view & rate</div></div>
-            <ChevronRight className="w-4 h-4 text-slate-300" />
-          </button>
-        )}
+        <button onClick={() => setSub("log")} className="w-full py-3 rounded-full text-sm font-bold uppercase tracking-wider text-white flex items-center justify-center gap-2 shadow-sm" style={{ backgroundColor: COLORS.primary }}>
+          <Plus className="w-4 h-4" /> Log Food · {todayLogs.length} logged today
+        </button>
         {isAdmin && (
           <button onClick={() => setSub("manage")} className="w-full bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: COLORS.accentSoft }}><Plus className="w-4 h-4" style={{ color: COLORS.accent }} /></div>
@@ -5432,10 +5375,13 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
               <div className="flex-1">
                 <h4 className="font-bold text-sm text-slate-900">{m.name}</h4>
                 {m.sub && <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>{m.sub}</span>}
-                <div className="flex items-center gap-3 mt-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide"><span className="flex items-center gap-1"><Clock className="w-3 h-3" />{m.prep}</span><span className="flex items-center gap-1"><Flame className="w-3 h-3" />{m.cal} kcal</span><span>P {m.p}g</span></div>
+                {m.ingredients && m.ingredients.length > 0 && (
+                  <div className="mt-1.5 text-[11px] text-slate-500 leading-snug">{m.ingredients.join(" · ")}</div>
+                )}
+                <div className="flex items-center gap-3 mt-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide"><span className="flex items-center gap-1"><Clock className="w-3 h-3" />{m.prep}</span><span className="flex items-center gap-1"><Flame className="w-3 h-3" />{m.cal} kcal</span><span>P {m.p}g</span><span>C {m.c}g</span><span>F {m.f}g</span></div>
               </div>
               {!isAdmin ? (
-                <button onClick={() => log(m)} className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-full text-white" style={{ backgroundColor: COLORS.primary }}>Log</button>
+                <button onClick={() => log(m)} className="flex-shrink-0 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-full text-white" style={{ backgroundColor: COLORS.primary }}>Log</button>
               ) : (
                 <div className="flex gap-1.5 flex-shrink-0">
                   <button onClick={() => startEditRecipe(m)} title="Edit" className="text-slate-300 hover:text-slate-600"><Pencil className="w-4 h-4" /></button>
@@ -8388,36 +8334,27 @@ export default function TeamHubRolesApp() {
       updatedAt: serverTimestamp(),
     }, { merge: true });
 
-  // Nutrition targets — coach sets a daily kcal/protein goal for everyone or
-  // specific players; the player's Today shows progress from their food log.
-  const nutritionTargets = useCollection("nutritionTargets", where("teamId", "==", activeTeamId), orderBy("createdAt"));
-  const addNutritionTarget = ({ cal, protein, visibleTo }) =>
-    addDoc(collection(db, "nutritionTargets"), {
-      teamId: activeTeamId,
+  // The player's OWN daily nutrition goal (calories + protein, optional).
+  // No coach sets it — the player sets it for themselves if they want to,
+  // and it lives in their private food-log area (logs/{uid}/goal). The Today
+  // page and the nutrition hero only ever show the player their own goal.
+  const myNutritionGoal = useDoc(user ? `logs/${user.uid}/goal` : null);
+  const saveMyNutritionGoal = ({ cal, protein }) =>
+    setDoc(doc(db, "logs", user.uid, "goal"), {
       cal: Number(cal) || 0,
       protein: Number(protein) || 0,
-      visibleTo: visibleTo || { groupIds: [], emails: [] },
-      createdByName: user.name,
-      createdAt: serverTimestamp(),
-    });
-  const deleteNutritionTarget = (id) => deleteDoc(doc(db, "nutritionTargets", id));
-  // The player's applicable target — prefer one that names them/their group
-  // over a team-wide ("everyone") target.
-  const myNutritionTarget = useMemo(() => {
-    const myGroups = new Set(groupsList.filter((g) => (g.memberUids || []).includes(user?.uid) || (g.memberUids || []).includes(user?.email)).map((g) => g.id));
-    const visible = nutritionTargets.filter((t) => {
-      const v = t.visibleTo || {}; const emails = v.emails || []; const gids = v.groupIds || [];
-      if (!emails.length && !gids.length) return true;
-      if (emails.includes(user?.email)) return true;
-      return gids.some((id) => myGroups.has(id));
-    });
-    const specific = visible.find((t) => (t.visibleTo?.emails?.length || t.visibleTo?.groupIds?.length));
-    return specific || visible[0] || null;
-  }, [nutritionTargets, user, groupsList]);
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+  const clearMyNutritionGoal = () => deleteDoc(doc(db, "logs", user.uid, "goal"));
   const myNutritionTotals = useMemo(() => {
     const k = formatDayKey(new Date());
     return logged.filter((l) => formatDayKey(l.createdAt) === k)
-      .reduce((a, l) => ({ cal: a.cal + (Number(l.cal) || 0), protein: a.protein + (Number(l.p) || 0) }), { cal: 0, protein: 0 });
+      .reduce((a, l) => ({
+        cal: a.cal + (Number(l.cal) || 0),
+        protein: a.protein + (Number(l.p) || 0),
+        c: a.c + (Number(l.c) || 0),
+        f: a.f + (Number(l.f) || 0),
+      }), { cal: 0, protein: 0, c: 0, f: 0 });
   }, [logged]);
 
   // Coach-only compliance view — players' read rule would deny these.
@@ -8905,13 +8842,13 @@ export default function TeamHubRolesApp() {
         )}
         <main className="flex-1 min-h-0 overflow-y-auto pb-4">
           {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} isOrgAdmin={user.role === "orgAdmin"} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} checkin={checkin} setCheckin={setCheckin} wellness={wellness} submitWellness={submitWellness} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} inviteLinks={inviteLinks} addInviteLink={addInviteLink} removeInviteLink={removeInviteLink} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
-          {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} practices={practices} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} nutritionTarget={myNutritionTarget} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} />}
+          {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} practices={practices} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} nutritionTarget={myNutritionGoal} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} />}
           {activeTab === "train" && (
             trainView ? (
               <div>
                 <div className="px-5 pt-4 pb-1"><button onClick={() => setTrainView(null)} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> Train</button></div>
                 {trainView === "gym" && <GymPage user={effUser} myWorkouts={myWorkouts} addMyWorkout={addMyWorkout} updateMyWorkout={updateMyWorkout} deleteMyWorkout={deleteMyWorkout} teamWorkouts={teamWorkouts} addTeamWorkout={addTeamWorkout} updateTeamWorkout={updateTeamWorkout} deleteTeamWorkout={deleteTeamWorkout} customExercises={customExercises} addCustomExercise={addCustomExercise} updateCustomExercise={updateCustomExercise} deleteCustomExercise={deleteCustomExercise} seedLifts={seedLifts} seedTeamWorkouts={seedTeamWorkouts} />}
-                {trainView === "nutrition" && <NutritionPage user={effUser} recipes={recipes} addRecipe={addRecipe} updateRecipe={updateRecipe} deleteRecipe={deleteRecipe} importRecipes={importRecipes} seedRecipes={seedRecipes} categories={categories} addCategory={addCategory} logged={logged} addLog={addLog} updateLog={updateLog} deleteLog={deleteLog} waterCups={waterCups} setWaterCups={setWaterCups} nutritionTargets={nutritionTargets} myNutritionTarget={myNutritionTarget} myNutritionTotals={myNutritionTotals} addNutritionTarget={addNutritionTarget} deleteNutritionTarget={deleteNutritionTarget} groups={groupsList} roster={invites} savedFoods={savedFoods} addSavedFood={addSavedFood} deleteSavedFood={deleteSavedFood} />}
+                {trainView === "nutrition" && <NutritionPage user={effUser} recipes={recipes} addRecipe={addRecipe} updateRecipe={updateRecipe} deleteRecipe={deleteRecipe} importRecipes={importRecipes} seedRecipes={seedRecipes} categories={categories} addCategory={addCategory} logged={logged} addLog={addLog} updateLog={updateLog} deleteLog={deleteLog} waterCups={waterCups} setWaterCups={setWaterCups} myNutritionGoal={myNutritionGoal} myNutritionTotals={myNutritionTotals} saveMyNutritionGoal={saveMyNutritionGoal} clearMyNutritionGoal={clearMyNutritionGoal} savedFoods={savedFoods} addSavedFood={addSavedFood} deleteSavedFood={deleteSavedFood} />}
                 {trainView === "videos" && <VideosPage user={effUser} videos={videos} addVideo={addVideo} updateVideo={updateVideo} deleteVideo={deleteVideo} importVideos={importVideos} />}
               </div>
             ) : <TrainHub onPick={setTrainView} />

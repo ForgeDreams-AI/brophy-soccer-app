@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, where, orderBy } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
 import { db } from "../firebase";
 
 // Stable fingerprint of a Firestore query constraint, so the subscription
@@ -95,4 +95,23 @@ export function useAudienceCollection(name, user, orderField, teamId) {
   }, [name, uid, email, role, orderField, teamId]);
 
   return items;
+}
+
+// Single-document subscription. `path` is a Firestore doc path
+// ("collection/doc" or "collection/doc/subcollection/doc"). Returns the
+// doc data (with `id`) or null when the path is empty / the doc is missing.
+// Used for per-player private docs (e.g. the player's own nutrition goal).
+export function useDoc(path) {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    if (!path) return;
+    return onSnapshot(
+      doc(db, path),
+      (snap) => setData(snap.exists() ? { id: snap.id, ...snap.data() } : null),
+      (err) => console.warn("useDoc listen failed:", path, err?.code || err),
+    );
+  }, [path]);
+
+  return data;
 }

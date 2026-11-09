@@ -1,10 +1,14 @@
-// Starter recipe library — 20 healthy, whole-food recipes for each of the six
-// meal categories (120 total), each filed under a food-type sub-category so the
+// Starter recipe library — healthy, whole-food recipes for each of the six
+// meal categories, each filed under a food-type sub-category so the
 // Nutrition tab can browse Breakfast → "Eggs & Dairy", Lunch → "Fish & Seafood",
 // and so on.
 //
-// Recipe shape matches the `recipes` collection exactly, plus a new `sub` field:
+// Recipe shape matches the `recipes` collection exactly, plus a `sub` field:
 //   { name, cat, sub, cal, p, c, f, prep }   // p/c/f in grams, cal in kcal
+// Newer "School Lunch" recipes also carry an `ingredients` array of their
+// MAIN ingredients (5 or fewer — seasonings/oil/water don't count), shown on
+// the recipe card so a player can see at a glance what goes in it. Older
+// seeds predate that field and simply don't show an ingredient list.
 //
 // Macros are sensible per-serving templates for an athlete — a coach can tune
 // them. Seeding is additive and de-dupes by name+category, so it never disturbs
@@ -17,13 +21,11 @@ export const RECIPE_SEED = [
   { cat: "Breakfast", sub: "Eggs & Dairy", name: "Three-Egg Spinach & Feta Omelette", cal: 380, p: 28, c: 8, f: 26, prep: "12 min" },
   { cat: "Breakfast", sub: "Eggs & Dairy", name: "Cottage Cheese & Berry Bowl", cal: 290, p: 28, c: 30, f: 6, prep: "5 min" },
   { cat: "Breakfast", sub: "Eggs & Dairy", name: "Greek Yogurt Protein Parfait", cal: 340, p: 26, c: 42, f: 7, prep: "5 min" },
-  { cat: "Breakfast", sub: "Eggs & Dairy", name: "Shakshuka with Peppers", cal: 360, p: 22, c: 24, f: 20, prep: "20 min" },
   // Oats & Grains
   { cat: "Breakfast", sub: "Oats & Grains", name: "Overnight Oats with Chia", cal: 400, p: 20, c: 58, f: 11, prep: "overnight" },
   { cat: "Breakfast", sub: "Oats & Grains", name: "Steel-Cut Oats & Banana", cal: 380, p: 14, c: 68, f: 8, prep: "15 min" },
   { cat: "Breakfast", sub: "Oats & Grains", name: "Protein Oatmeal with Peanut Butter", cal: 450, p: 30, c: 55, f: 14, prep: "10 min" },
   { cat: "Breakfast", sub: "Oats & Grains", name: "Quinoa Breakfast Bowl", cal: 410, p: 18, c: 60, f: 12, prep: "15 min" },
-  { cat: "Breakfast", sub: "Oats & Grains", name: "Buckwheat Blueberry Porridge", cal: 370, p: 14, c: 64, f: 9, prep: "15 min" },
   // Fruit & Smoothies
   { cat: "Breakfast", sub: "Fruit & Smoothies", name: "Green Protein Smoothie", cal: 330, p: 30, c: 40, f: 6, prep: "5 min" },
   { cat: "Breakfast", sub: "Fruit & Smoothies", name: "Berry Banana Protein Shake", cal: 350, p: 32, c: 46, f: 5, prep: "5 min" },
@@ -73,7 +75,6 @@ export const RECIPE_SEED = [
   { cat: "Dinner", sub: "Beef & Pork", name: "Lean Steak, Broccoli & Quinoa", cal: 560, p: 46, c: 40, f: 24, prep: "25 min" },
   { cat: "Dinner", sub: "Beef & Pork", name: "Beef & Veg Stir-Fry", cal: 540, p: 42, c: 48, f: 20, prep: "22 min" },
   { cat: "Dinner", sub: "Beef & Pork", name: "Pork Tenderloin & Sweet Potato", cal: 520, p: 44, c: 46, f: 17, prep: "30 min" },
-  { cat: "Dinner", sub: "Beef & Pork", name: "Bison Chili with Beans", cal: 490, p: 40, c: 44, f: 16, prep: "35 min" },
   // Fish & Seafood
   { cat: "Dinner", sub: "Fish & Seafood", name: "Baked Salmon & Asparagus", cal: 520, p: 42, c: 24, f: 28, prep: "25 min" },
   { cat: "Dinner", sub: "Fish & Seafood", name: "Garlic Shrimp & Brown Rice", cal: 480, p: 38, c: 56, f: 12, prep: "20 min" },
@@ -81,14 +82,11 @@ export const RECIPE_SEED = [
   { cat: "Dinner", sub: "Fish & Seafood", name: "Seared Tuna Rice Bowl", cal: 500, p: 44, c: 52, f: 13, prep: "18 min" },
   // Plant-Based
   { cat: "Dinner", sub: "Plant-Based", name: "Tofu & Veggie Buddha Bowl", cal: 470, p: 24, c: 58, f: 16, prep: "25 min" },
-  { cat: "Dinner", sub: "Plant-Based", name: "Chickpea Coconut Curry", cal: 500, p: 20, c: 66, f: 18, prep: "30 min" },
   { cat: "Dinner", sub: "Plant-Based", name: "Lentil Bolognese & Whole-Wheat Pasta", cal: 520, p: 26, c: 78, f: 11, prep: "30 min" },
-  { cat: "Dinner", sub: "Plant-Based", name: "Stuffed Bell Peppers & Quinoa", cal: 440, p: 20, c: 60, f: 14, prep: "35 min" },
   // Pasta & Grains
   { cat: "Dinner", sub: "Pasta & Grains", name: "Whole-Wheat Pasta & Chicken", cal: 620, p: 44, c: 78, f: 14, prep: "25 min" },
   { cat: "Dinner", sub: "Pasta & Grains", name: "Turkey & Brown-Rice Casserole", cal: 560, p: 42, c: 62, f: 15, prep: "35 min" },
   { cat: "Dinner", sub: "Pasta & Grains", name: "Shrimp & Whole-Wheat Linguine", cal: 580, p: 38, c: 74, f: 15, prep: "25 min" },
-  { cat: "Dinner", sub: "Pasta & Grains", name: "Barley Risotto with Mushrooms", cal: 480, p: 18, c: 72, f: 12, prep: "35 min" },
 
   // ══════════════════ SNACKS ══════════════════
   // Dairy & Protein
@@ -167,6 +165,32 @@ export const RECIPE_SEED = [
   { cat: "Post-Game", sub: "Poultry", name: "Chicken Pasta Recovery Plate", cal: 620, p: 46, c: 76, f: 14, prep: "25 min" },
   { cat: "Post-Game", sub: "Rice Bowls", name: "Egg & Rice Scramble Bowl", cal: 460, p: 28, c: 58, f: 12, prep: "15 min" },
   { cat: "Post-Game", sub: "Dairy", name: "Ricotta Toast with Honey", cal: 340, p: 18, c: 44, f: 10, prep: "6 min" },
+
+  // ══════════════════ SCHOOL LUNCH — simple, 5 main ingredients or less ══════════════════
+  // What the players actually eat at school lunch: cheap, fast, high-protein
+  // where possible, and every one fits in a lunchbox. `ingredients` lists the
+  // MAIN ingredients only (5 or fewer — seasonings, oil, and water don't count).
+  // Lunch
+  { cat: "Lunch", sub: "School Lunch", name: "Chicken & Rice Bowl", cal: 560, p: 46, c: 58, f: 14, prep: "15 min", ingredients: ["chicken breast", "white rice", "black beans", "salsa", "shredded cheese"] },
+  { cat: "Lunch", sub: "School Lunch", name: "Turkey & Cheese Wrap", cal: 480, p: 34, c: 42, f: 18, prep: "5 min", ingredients: ["flour tortilla", "sliced turkey", "cheddar", "lettuce", "ranch"] },
+  { cat: "Lunch", sub: "School Lunch", name: "PB&J + Banana", cal: 520, p: 16, c: 74, f: 18, prep: "3 min", ingredients: ["bread", "peanut butter", "jam", "banana"] },
+  { cat: "Lunch", sub: "School Lunch", name: "Tuna Sandwich", cal: 420, p: 38, c: 40, f: 12, prep: "5 min", ingredients: ["canned tuna", "bread", "mayo", "lettuce", "tomato"] },
+  { cat: "Lunch", sub: "School Lunch", name: "Chicken Quesadilla", cal: 540, p: 40, c: 44, f: 20, prep: "10 min", ingredients: ["flour tortilla", "chicken", "cheese", "salsa"] },
+  { cat: "Lunch", sub: "School Lunch", name: "Pasta & Meat Sauce", cal: 620, p: 38, c: 72, f: 18, prep: "20 min", ingredients: ["pasta", "ground beef", "marinara", "parmesan"] },
+  { cat: "Lunch", sub: "School Lunch", name: "Bean & Cheese Burrito", cal: 520, p: 22, c: 68, f: 16, prep: "8 min", ingredients: ["flour tortilla", "refried beans", "cheese", "salsa", "rice"] },
+  { cat: "Lunch", sub: "School Lunch", name: "Ham & Cheese Sandwich", cal: 450, p: 28, c: 42, f: 18, prep: "3 min", ingredients: ["bread", "ham", "cheese", "lettuce", "mayo"] },
+  { cat: "Lunch", sub: "School Lunch", name: "Chicken Caesar Wrap", cal: 500, p: 38, c: 36, f: 22, prep: "8 min", ingredients: ["flour tortilla", "chicken", "romaine", "parmesan", "Caesar dressing"] },
+  { cat: "Lunch", sub: "School Lunch", name: "Mac & Cheese + Chicken", cal: 600, p: 36, c: 62, f: 20, prep: "15 min", ingredients: ["macaroni", "cheese sauce", "chicken"] },
+  { cat: "Lunch", sub: "School Lunch", name: "Breakfast Burrito", cal: 520, p: 30, c: 40, f: 26, prep: "10 min", ingredients: ["flour tortilla", "eggs", "cheese", "sausage", "salsa"] },
+  { cat: "Lunch", sub: "School Lunch", name: "Beef & Bean Chili Cup", cal: 480, p: 36, c: 40, f: 18, prep: "20 min", ingredients: ["ground beef", "kidney beans", "tomato sauce", "cheese"] },
+  // Breakfast
+  { cat: "Breakfast", sub: "School Lunch", name: "Egg & Cheese Muffin", cal: 380, p: 26, c: 34, f: 16, prep: "8 min", ingredients: ["English muffin", "egg", "cheese", "ham"] },
+  { cat: "Breakfast", sub: "School Lunch", name: "Bagel & Fruit", cal: 380, p: 12, c: 62, f: 8, prep: "3 min", ingredients: ["bagel", "cream cheese", "apple"] },
+  { cat: "Breakfast", sub: "School Lunch", name: "Overnight Oats", cal: 400, p: 18, c: 62, f: 9, prep: "overnight", ingredients: ["oats", "milk", "Greek yogurt", "berries", "honey"] },
+  // Snacks
+  { cat: "Snacks", sub: "School Lunch", name: "Greek Yogurt Parfait", cal: 340, p: 24, c: 44, f: 6, prep: "3 min", ingredients: ["Greek yogurt", "granola", "berries", "honey"] },
+  { cat: "Snacks", sub: "School Lunch", name: "Cottage Cheese & Fruit", cal: 300, p: 26, c: 36, f: 5, prep: "3 min", ingredients: ["cottage cheese", "pineapple", "granola"] },
+  { cat: "Snacks", sub: "School Lunch", name: "Chicken Nuggets & Apple", cal: 460, p: 30, c: 44, f: 16, prep: "12 min", ingredients: ["chicken nuggets", "apple", "yogurt dip"] },
 ];
 
 // Sub-categories present per meal category, in a sensible display order (derived

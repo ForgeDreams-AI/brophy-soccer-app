@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Local secrets — .env holds real API keys (e.g. VITE_USDA_API_KEY).
+# NEVER commit it. Deploys set the same vars as build secrets instead.
+.env
+
 # Firebase CLI cache
 .firebase/
 firebase-debug.log

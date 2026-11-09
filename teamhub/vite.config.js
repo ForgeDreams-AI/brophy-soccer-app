@@ -18,14 +18,4 @@ const emitVersion = () => ({
 export default defineConfig({
   define: { __BUILD_ID__: JSON.stringify(buildId) },
   plugins: [react(), emitVersion()],
-  server: {
-    // /api/* hits the production Worker so dev can exercise food-photo too.
-    proxy: {
-      '/api': {
-        target: 'https://team.phoenixmensoccer.com',
-        changeOrigin: true,
-        secure: true,
-      },
-    },
-  },
 })

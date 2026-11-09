@@ -39,9 +39,9 @@ npm run dev     # → http://localhost:5173
 The "Log Something Else" form has built-in auto-fill search powered by USDA's free API.
 
 1. Get a key (instant, no card): <https://fdc.nal.usda.gov/api-key-signup.html>
-2. Paste it into `.env.local`: `VITE_USDA_API_KEY=...`
+2. Paste it into `.env` (gitignored — never commit a real key): `VITE_USDA_API_KEY=...`
 3. Restart `npm run dev`.
-4. For Cloudflare Pages: add the same variable in **Pages project → Settings → Environment variables**.
+4. For Cloudflare Pages: add the same variable in **Pages project → Settings → Environment variables** (a build secret — the deploy needs it or food search falls back to Open Food Facts only).
 
 Values are per 100g — adjust calories/protein after autofill if your portion was different.
 
