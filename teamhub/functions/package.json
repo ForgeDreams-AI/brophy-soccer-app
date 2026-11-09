@@ -1,7 +1,7 @@
 {
   "name": "functions",
   "description": "Brophy Soccer push-notification fan-out functions",
-  "engines": { "node": "20" },
+  "engines": { "node": "22" },
   "main": "index.js",
   "scripts": {
     "deploy": "firebase deploy --only functions",

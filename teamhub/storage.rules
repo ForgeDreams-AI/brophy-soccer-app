@@ -29,12 +29,15 @@ service firebase.storage {
     }
     // The caller shares at least one team with the user who owns `uid`'s
     // profile (used for avatars). Returns false when either doc is missing.
+    // NOTE: Storage rules functions are single expressions — `if` statements
+    // are not allowed here (the compiler rejects them), so this is a ternary
+    // chain with a `let` binding, same semantics as the Firestore version.
     function sharesTeamWith(uid) {
-      if (request.auth == null) return false;
-      if (isOrgAdminUser() || request.auth.uid == uid) return true;
-      let other = firestore.get(/databases/(default)/documents/users/$(uid)).data;
-      if (other == null) return false;
-      return myTeamIds().hasAny(other.get('teamIds', []));
+      let other = request.auth == null ? null : firestore.get(/databases/(default)/documents/users/$(uid)).data;
+      return request.auth == null ? false
+        : isOrgAdminUser() || request.auth.uid == uid ? true
+        : other == null ? false
+        : myTeamIds().hasAny(other.get('teamIds', []));
     }
 
     // Chat images. Path shape: chat/{teamId}/{channel}/{uid}/{filename},

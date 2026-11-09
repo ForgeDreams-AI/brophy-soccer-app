@@ -43,6 +43,7 @@ service cloud.firestore {
     // player and their own team's coach only — a player never DMs the org
     // admin, and the org admin never reads or replies in a DM thread
     // (decision 2026-11-08).
+    function isTeamCoachOf(teamId) { return signedIn() && myRole() == 'admin' && myTeamIds().hasAny([teamId]); }
     // The caller shares at least one team with the given teamIds list.
     function sharesTeam(teamIds) { return signedIn() && (isOrgAdmin() || myTeamIds().hasAny(teamIds)); }
     // Team-scoped write helpers.
