@@ -65,7 +65,7 @@ import {
 import { recipeSeedDocs } from "./data/recipeSeed";
 import { liftSeedDocs } from "./data/liftSeed";
 import { workoutSeedDocs, AREA_ORDER } from "./data/workoutSeed";
-import { TEAMS, TEAM_IDS, DEFAULT_TEAM_ID, isValidTeamId, teamDocFields } from "./data/teams";
+import { TEAMS, TEAM_IDS, DEFAULT_TEAM_ID, isValidTeamId, teamDocFields, getTeam } from "./data/teams";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { APP_VERSION } from "./data/whatsNew";
 import { UpdateBanner, WhatsNewModal } from "./components/UpdateUI";
@@ -86,7 +86,7 @@ import QuoteOfDay from "./components/QuoteOfDay";
      AUTH + TIME HELPERS ....... login/error + date utilities
      THEME / COLORS ............ COLORS, DEFAULT_NUTRITION_CATEGORIES, seeds
      HOME ...................... coach dashboard + player "Today" + wellness,
-                                 push notifications, documents/e-sign, assignments
+                                 push notifications, documents/e-sign
      CALENDAR .................. events
      VIDEOS .................... categorized video library
      NUTRITION ................. recipes (meal category → food-type sub), food
@@ -742,131 +742,8 @@ const DocumentsSection = ({ user, documents, isAdmin, rosterCount = 0, onUpload,
   );
 };
 
-/* ─── COACH: assignments (assign a task/workout, see who completed it) ─── */
-const niceDate = (ymd) => new Date(ymd + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+/* Assignments were removed in the Home redo (Option A) — coaches no longer assign tasks; the assignments collection is unused. */
 
-const AssignModal = ({ teamWorkouts = [], groups = [], roster = [], onCreate, onClose }) => {
-  const [title, setTitle] = useState("");
-  const [workoutId, setWorkoutId] = useState("");
-  const [body, setBody] = useState("");
-  const [link, setLink] = useState("");
-  const [date, setDate] = useState(fmtLocalDate(new Date()));
-  const [mode, setMode] = useState("everyone");
-  const [groupIds, setGroupIds] = useState([]);
-  const [emails, setEmails] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const players = roster.filter((r) => r.role !== "admin");
-  const toggle = (arr, set, v) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
-  const wo = teamWorkouts.find((w) => w.id === workoutId);
-
-  const create = async () => {
-    const finalTitle = title.trim() || wo?.name || "";
-    if (!finalTitle || !date) return;
-    setBusy(true);
-    const visibleTo = mode === "custom" ? { groupIds, emails } : { groupIds: [], emails: [] };
-    try { await onCreate({ title: finalTitle, workoutId, workoutName: wo?.name || "", body: body.trim(), link: link.trim(), date, visibleTo }); onClose(); }
-    catch (e) { toast("Couldn't assign — " + (e.message || "")); }
-    finally { setBusy(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[88vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-slate-100 px-5 py-3 flex items-center justify-between z-10">
-          <h3 className="text-base font-bold text-slate-900">New assignment</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
-        </div>
-        <div className="p-5 space-y-3">
-          <select value={workoutId} onChange={(e) => setWorkoutId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
-            <option value="">No linked workout</option>
-            {teamWorkouts.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={wo ? wo.name : "Title (e.g. Watch film, Read pp. 10–15)"} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} placeholder="Instructions (optional) — what should they do? e.g. watch this clip and note 3 takeaways, read chapter 4." className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Link (optional) — video, article, doc URL" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <div>
-            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Due date</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setMode("everyone")} className={`flex-1 py-2 rounded-full text-xs font-bold ${mode === "everyone" ? "text-white" : "bg-slate-100 text-slate-600"}`} style={mode === "everyone" ? { backgroundColor: COLORS.primary } : {}}>Everyone</button>
-            <button onClick={() => setMode("custom")} className={`flex-1 py-2 rounded-full text-xs font-bold ${mode === "custom" ? "text-white" : "bg-slate-100 text-slate-600"}`} style={mode === "custom" ? { backgroundColor: COLORS.primary } : {}}>Specific people</button>
-          </div>
-          {mode === "custom" && (
-            <div className="space-y-2">
-              {groups.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {groups.map((g) => { const on = groupIds.includes(g.id); return <button key={g.id} onClick={() => toggle(groupIds, setGroupIds, g.id)} className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${on ? "text-white" : "bg-white text-slate-600 border-slate-200"}`} style={on ? { backgroundColor: COLORS.primary, borderColor: COLORS.primary } : {}}>{g.name}</button>; })}
-                </div>
-              )}
-              {players.length > 0 && (
-                <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
-                  {players.map((p) => { const on = emails.includes(p.email); return (
-                    <button key={p.email} onClick={() => toggle(emails, setEmails, p.email)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-50 text-left">
-                      <span className="text-xs font-mono text-slate-700 truncate">{p.email}</span>
-                      {on ? <Check className="w-4 h-4" style={{ color: COLORS.success }} /> : <span className="w-4 h-4 rounded border border-slate-300" />}
-                    </button>
-                  ); })}
-                </div>
-              )}
-            </div>
-          )}
-          <button onClick={create} disabled={busy || (!title.trim() && !wo) || !date} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{busy ? "Assigning…" : "Assign"}</button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const AssignmentsSection = ({ assignments = [], teamWorkouts = [], groups = [], roster = [], addAssignment, deleteAssignment }) => {
-  const [open, setOpen] = useState(false);
-  const [listOpen, setListOpen] = useState(false);
-  const [expandId, setExpandId] = useState(null);
-  const todayStr = fmtLocalDate(new Date());
-  const rosterCount = roster.filter((r) => r.role !== "admin").length;
-  const upcoming = [...assignments].filter((a) => a.date >= todayStr).sort((a, b) => a.date.localeCompare(b.date));
-  return (
-    <section>
-      <div className="flex items-center justify-between mb-3">
-        <button onClick={() => setListOpen(!listOpen)} className="flex items-center gap-1.5">
-          <h3 className="text-base font-bold text-slate-900">Assignments <span className="text-[11px] font-semibold text-slate-400">· {upcoming.length} upcoming</span></h3>
-          {listOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-        </button>
-        <button onClick={() => setOpen(true)} className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full text-white flex items-center gap-1" style={{ backgroundColor: COLORS.primary }}><Plus className="w-3 h-3" /> Assign</button>
-      </div>
-      {listOpen && (upcoming.length === 0 ? (
-        <p className="text-sm text-slate-400 italic">Nothing assigned yet.</p>
-      ) : (
-        <ul className="space-y-2">
-          {upcoming.map((a) => {
-            const doneNames = Object.values(a.completedBy || {}).map((c) => c.name);
-            const ex = expandId === a.id;
-            return (
-              <li key={a.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-3 flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft }}><Dumbbell className="w-4 h-4" style={{ color: COLORS.accent }} /></div>
-                  <button onClick={() => setExpandId(ex ? null : a.id)} className="flex-1 min-w-0 text-left">
-                    <div className="text-sm font-semibold text-slate-900 truncate">{a.title}</div>
-                    <div className="text-[10px] text-slate-500">{niceDate(a.date)} · {doneNames.length}{rosterCount ? `/${rosterCount}` : ""} done</div>
-                  </button>
-                  <button onClick={async () => { if (confirm(`Delete assignment "${a.title}"?`)) { try { await deleteAssignment(a.id); } catch (e) { toast("Couldn't delete — " + (e.message || "")); } } }} className="text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-                </div>
-                {ex && (
-                  <div className="px-3 pb-3 border-t border-slate-100 pt-2">
-                    {doneNames.length === 0 ? <p className="text-[11px] text-slate-400 italic">No one has marked this done yet.</p> : (
-                      <ul className="flex flex-wrap gap-1.5">{doneNames.map((n, i) => <li key={i} className="text-[11px] font-semibold text-slate-600 bg-slate-100 rounded-full px-2 py-0.5 flex items-center gap-1"><Check className="w-3 h-3" style={{ color: COLORS.success }} />{n}</li>)}</ul>
-                    )}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      ))}
-      {open && <AssignModal teamWorkouts={teamWorkouts} groups={groups} roster={roster} onCreate={addAssignment} onClose={() => setOpen(false)} />}
-    </section>
-  );
-};
 
 /* ─── PLAYER "TODAY" HOME + TRAIN HUB ─── */
 const ChecklistRow = ({ done, icon: Icon, label, sub, onClick, accent }) => (
@@ -888,19 +765,18 @@ const ChecklistRow = ({ done, icon: Icon, label, sub, onClick, accent }) => (
 // main daily action here (attendance / practice check-in were removed):
 // three quick 1–5 taps (Energy / Soreness / Tiredness, high = ready) and the
 // player gets a decisive readiness verdict back.
-const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCheckin, submitWellness, wellnessLoggedToday, myWellness = null, loggedToday, waterCups = 0, setWaterCups, documents = [], signDocument, onOpenTrain, onOpenSchedule, assignments = [], teamWorkouts = [], onToggleAssignment, nutritionTarget, nutritionTotals = { cal: 0, protein: 0 }, profilePrompt, onOpenProfile }) => {
+const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCheckin, submitWellness, wellnessLoggedToday, myWellness = null, loggedToday, waterCups = 0, setWaterCups, documents = [], signDocument, onOpenTrain, onOpenSchedule, practices = [], activeTeamId, todayQuote, addQuote, nutritionTarget, nutritionTotals = { cal: 0, protein: 0 }, profilePrompt, onOpenProfile }) => {
   const promptTs = profilePrompt?.requestedAt;
   const [profileDismissed, setProfileDismissed] = useState(() => { try { return localStorage.getItem("profilePromptSeen") === promptTs; } catch { return false; } });
   const showProfilePrompt = promptTs && !profileDismissed;
   const dismissProfile = () => { try { localStorage.setItem("profilePromptSeen", promptTs); } catch { /* ignore */ } setProfileDismissed(true); };
   const [wellnessOpen, setWellnessOpen] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [openA, setOpenA] = useState(null);
   const todayStr = fmtLocalDate(new Date());
   const todays = events.filter((e) => e.date === todayStr).sort((a, b) => (a.start || "").localeCompare(b.start || ""));
   const hero = todays[0];
   const upcoming = !hero ? [...events].filter((e) => e.date > todayStr).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))[0] : null;
-  const topAnnounce = [...announcements].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))[0];
+  const sortedAnnouncements = [...announcements].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
   const WATER_GOAL = 8;
   const setMetric = (k, v) => { setCheckin({ ...checkin, [k]: v }); setSaved(false); };
   const submit = async () => {
@@ -912,12 +788,15 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
   const myVerdict = myWellness ? (myWellness.verdict || readinessFor(myWellness)) : null;
   const myVerdictStyle = myVerdict ? VERDICTS[myVerdict] : null;
   const firstName = (user.name || "").split(" ")[0];
+  const teamName = getTeam(activeTeamId).name;
+  const heroPlan = hero?.practiceId ? practices.find((p) => p.id === hero.practiceId) : null;
 
   return (
     <div className="px-5 pt-5 pb-4 space-y-5">
       <div>
         <p className="text-xs font-medium uppercase tracking-wider text-slate-400">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
         <h2 className="text-2xl font-bold text-slate-900 mt-1">Hey,<br /><span style={{ color: COLORS.primary }}>{firstName}.</span></h2>
+        <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>{teamName}</span>
       </div>
 
       {showProfilePrompt && (
@@ -942,6 +821,7 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
               {hero.start && <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{formatHourTime(hero.start)}{hero.end ? `–${formatHourTime(hero.end)}` : ""}</span>}
               {hero.location && <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{hero.location}</span>}
             </div>
+            {heroPlan && <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "white" }}><ClipboardList className="w-3.5 h-3.5" />{heroPlan.name || "Practice plan"}{(heroPlan.blocks || []).length ? ` · ${(heroPlan.blocks || []).length} drills` : ""}</div>}
           </button>
         ) : (
           <div className="rounded-3xl p-5 border border-dashed border-slate-200 bg-white text-center">
@@ -950,42 +830,6 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
           </div>
         )}
       </div>
-
-      {/* ASSIGNED TODAY — coach assignments, expand to see + mark done */}
-      {assignments.length > 0 && (
-        <div>
-          <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Assigned today</h3>
-          <div className="space-y-2">
-            {assignments.map((a) => {
-              const done = !!a.completedBy?.[user.uid];
-              const wo = teamWorkouts.find((w) => w.id === a.workoutId);
-              const ex = openA === a.id;
-              return (
-                <div key={a.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                  <button onClick={() => setOpenA(ex ? null : a.id)} className="w-full p-3.5 flex items-center gap-3 text-left">
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: done ? COLORS.success : COLORS.accentSoft, color: done ? "white" : COLORS.accent }}>{done ? <Check className="w-4 h-4" /> : (wo ? <Dumbbell className="w-4 h-4" /> : <ClipboardList className="w-4 h-4" />)}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-semibold ${done ? "text-slate-400 line-through" : "text-slate-900"}`}>{a.title}</div>
-                      <div className="text-[11px] text-slate-500 truncate">{wo ? `${wo.exercises?.length || 0} exercise${(wo.exercises?.length || 0) === 1 ? "" : "s"}` : (a.body || "Tap for details")}</div>
-                    </div>
-                    {ex ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                  </button>
-                  {ex && (
-                    <div className="px-3 pb-3 border-t border-slate-100 pt-2 space-y-2">
-                      {a.body && <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">{a.body}</p>}
-                      {a.link && <a href={a.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: COLORS.primary }}><ExternalLink className="w-3.5 h-3.5" /> Open link</a>}
-                      {wo && (wo.exercises || []).map((e, i) => (
-                        <div key={i} className="text-xs flex items-center justify-between gap-2"><span className="font-medium text-slate-800 truncate">{e.name}</span><span className="text-slate-500 flex-shrink-0">{e.sets || "—"}×{e.reps || "—"}{e.weight ? ` @ ${e.weight}` : ""}</span></div>
-                      ))}
-                      <button onClick={() => onToggleAssignment(a.id, !done)} className={`w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider ${done ? "bg-slate-100 text-slate-600" : "text-white"}`} style={done ? {} : { backgroundColor: COLORS.success }}>{done ? "✓ Completed — tap to undo" : "Mark complete"}</button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* WELLNESS CHECK-IN — the main daily action. Three quick 1–5 taps
           (high = ready to go) and a decisive verdict back: Ready / Modified /
@@ -1022,7 +866,34 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
         )}
       </div>
 
-      {/* CHECKLIST — daily habits with completion ticks */}
+      {/* NEWS — coach announcements, pinned first */}
+      <div>
+        <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">News</h3>
+        {sortedAnnouncements.length === 0 ? (
+          <p className="text-sm text-slate-400 italic">No news from your coach yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {sortedAnnouncements.map((a) => (
+              <div key={a.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft }}>{a.pinned ? <Pin className="w-4 h-4" style={{ color: COLORS.accent }} /> : <Bell className="w-4 h-4" style={{ color: COLORS.accent }} />}</div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-900 leading-tight">{a.title}</div>
+                  {a.body && <div className="text-xs text-slate-500 leading-snug mt-0.5">{a.body}</div>}
+                  <div className="text-[10px] text-slate-400 font-medium mt-1">{formatAgo(a.createdAt)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Quote of the day — kept small and unobtrusive below News */}
+      <QuoteOfDay quote={todayQuote} isAdmin={false} addQuote={addQuote} colors={COLORS} />
+
+      {/* Documents to sign */}
+      <DocumentsSection user={user} documents={documents} isAdmin={false} onSign={signDocument} />
+
+      {/* CHECKLIST — daily habits with completion ticks (secondary, kept low) */}
       <div>
         <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Your day</h3>
         <div className="space-y-2">
@@ -1040,21 +911,6 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
           <ChecklistRow done={waterCups >= WATER_GOAL} icon={Droplet} accent="#0ea5e9" label={`Water · ${waterCups}/${WATER_GOAL} cups`} sub={waterCups >= WATER_GOAL ? "Hydrated!" : "Tap to add a cup"} onClick={() => setWaterCups(Math.min(WATER_GOAL, waterCups + 1))} />
         </div>
       </div>
-
-      {/* One-line coach note */}
-      {topAnnounce && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-start gap-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft }}>{topAnnounce.pinned ? <Pin className="w-4 h-4" style={{ color: COLORS.accent }} /> : <Bell className="w-4 h-4" style={{ color: COLORS.accent }} />}</div>
-          <div className="min-w-0">
-            <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: COLORS.accent }}>Coach</div>
-            <div className="text-sm font-semibold text-slate-900 leading-tight">{topAnnounce.title}</div>
-            {topAnnounce.body && <div className="text-xs text-slate-500 line-clamp-2 mt-0.5">{topAnnounce.body}</div>}
-          </div>
-        </div>
-      )}
-
-      {/* Documents to sign */}
-      <DocumentsSection user={user} documents={documents} isAdmin={false} onSign={signDocument} />
     </div>
   );
 };
@@ -1080,7 +936,7 @@ const TrainHub = ({ onPick }) => {
 };
 
 /* ─── HOME ─── */
-const HomePage = ({ user, practices = [], announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement, events, checkin, setCheckin, wellness, submitWellness, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, mealLogActivityToday = [], groups = [], addGroup, updateGroupMembers, deleteGroup, documents = [], addDocument, deleteDocument, signDocument, assignments = [], teamWorkouts = [], addAssignment, deleteAssignment, allUsers = [], requestProfileUpdate, pushNotifications = [], addPushNotification, deletePushNotification, sendPushNotificationNow }) => {
+const HomePage = ({ user, practices = [], announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement, events, checkin, setCheckin, wellness, submitWellness, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, mealLogActivityToday = [], groups = [], addGroup, updateGroupMembers, deleteGroup, documents = [], addDocument, deleteDocument, signDocument, allUsers = [], requestProfileUpdate, pushNotifications = [], addPushNotification, deletePushNotification, sendPushNotificationNow, activeTeamId, todayQuote, addQuote }) => {
   const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email, u.name])), [allUsers]);
   const [adding, setAdding] = useState(false);
   const [editingAnnouncementId, setEditingAnnouncementId] = useState(null);
@@ -1209,16 +1065,36 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
     <div>
       <p className="text-xs font-medium uppercase tracking-wider text-slate-400">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
       <h2 className="text-2xl font-bold text-slate-900 mt-1">Welcome,<br /><span style={{ color: COLORS.primary }}>{user.name.split(" ")[0]}.</span></h2>
+      <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>{getTeam(activeTeamId).name}</span>
     </div>
   );
 
-  const nextUpSection = (
+  // Today first: today's session (with its practice plan + drill count) —
+  // otherwise the next upcoming event. This is the big card at the top.
+  const todayStr = fmtLocalDate(new Date());
+  const todays = [...events].filter((e) => e.date === todayStr).sort((a, b) => (a.start || "").localeCompare(b.start || ""));
+  const hero = todays[0] || null;
+  const heroPlan = hero?.practiceId ? practices.find((pl) => pl.id === hero.practiceId) : null;
+  const todaySection = (
     <section>
-      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Next Up</h3>
-      {nextEvent ? (
+      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Today</h3>
+      {hero ? (
+        <div className="rounded-3xl p-5 text-white shadow-md" style={{ background: `linear-gradient(135deg, ${COLORS.primary}, #003B77)` }}>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20">{hero.type || "Session"}</span>
+            <span className="text-xs font-semibold opacity-90">{new Date(hero.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
+          </div>
+          <h4 className="text-xl font-bold leading-tight">{hero.title}</h4>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs opacity-90">
+            {hero.start && <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{formatHourTime(hero.start)}{hero.end ? `–${formatHourTime(hero.end)}` : ""}</span>}
+            {hero.location && <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{hero.location}</span>}
+          </div>
+          {heroPlan && <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white/15"><ClipboardList className="w-3.5 h-3.5" />{heroPlan.name || "Practice plan"}{(heroPlan.blocks || []).length ? ` · ${(heroPlan.blocks || []).length} drills` : ""}</div>}
+        </div>
+      ) : nextEvent ? (
         <div className="rounded-2xl p-4 text-white shadow-md" style={{ background: `linear-gradient(135deg, ${COLORS.primary}, #003B77)` }}>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20">{nextEvent.type}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20">Next up</span>
             <span className="text-xs font-semibold opacity-90">{new Date(nextEvent.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
           </div>
           <h4 className="text-lg font-bold leading-tight">{nextEvent.title}</h4>
@@ -1590,7 +1466,6 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
     );
   })();
 
-  const assignmentsSection = <AssignmentsSection assignments={assignments} teamWorkouts={teamWorkouts} groups={groups} roster={invites} addAssignment={addAssignment} deleteAssignment={deleteAssignment} />;
   const documentsSection = <DocumentsSection user={user} documents={documents} isAdmin={isAdmin} rosterCount={(invites || []).filter((i) => i.role !== "admin").length} onUpload={addDocument} onDelete={deleteDocument} onSign={signDocument} defaultCollapsed />;
 
   // Custom push notifications — the coach's way to reach the team directly
@@ -1618,16 +1493,14 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
   // Compact at-a-glance dashboard so the coach gets the key numbers without
   // scrolling; the full management sections sit collapsed below.
   const playersTotal = invites.filter((i) => i.role !== "admin").length;
-  const assignUpcoming = assignments.filter((a) => a.date >= fmtLocalDate(new Date())).length;
   const dashStats = [
     ["Readiness", wellness.length ? avg("energy").toFixed(1) : "—", "/5"],
     ["Logged", wellness.length, `/${playersTotal}`],
     ["Meals", mealLogActivityToday.length, `/${playersTotal}`],
-    ["Assigned", assignUpcoming, "due"],
     ["Roster", invites.length, ""],
   ];
   const coachDashboard = (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-2 gap-2">
       {dashStats.map(([label, value, sub]) => (
         <div key={label} className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 text-center">
           <div className="text-xl font-bold text-slate-900">{value}<span className="text-[10px] text-slate-400 font-medium ml-0.5">{sub}</span></div>
@@ -1684,10 +1557,10 @@ const HomePage = ({ user, practices = [], announcements, addAnnouncement, update
     <div className="px-5 pt-5 pb-4 space-y-5">
       {greeting}
       {notificationsSection}
-      {nextUpSection}
+      {todaySection}
       {isAdmin
-        ? (<>{youRunningSection}{coachDashboard}{assignmentsSection}{announcementsSection}{pushSection}{nutritionComplianceSection}{playersSection}{documentsSection}{rosterSection}</>)
-        : (<>{checkinSection}{announcementsSection}{documentsSection}</>)}
+        ? (<>{youRunningSection}{coachDashboard}{playersSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{pushSection}{rosterSection}{documentsSection}{groupsSection}{nutritionComplianceSection}{checkinSection}</>)
+        : (<>{checkinSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{documentsSection}</>)}
       {pushModalOpen && (
         <PushNotificationModal
           pushNotifications={pushNotifications}
@@ -8378,44 +8251,7 @@ export default function TeamHubRolesApp() {
   const signDocument = (id, name) =>
     updateDoc(doc(db, "documents", id), { signatures: arrayUnion({ uid: user.uid, name, ts: new Date().toISOString() }) });
 
-  // Assignments — coach gives a task (optionally a team workout) a due date +
-  // audience; players see it on Today and mark it done; coach sees completion.
-  const assignments = useCollection("assignments", where("teamId", "==", activeTeamId), orderBy("date"));
-  const addAssignment = ({ title, workoutId, workoutName, body, link, date, visibleTo }) =>
-    addDoc(collection(db, "assignments"), {
-      teamId: activeTeamId,
-      title: (title || workoutName || "Workout").trim(),
-      workoutId: workoutId || "",
-      workoutName: workoutName || "",
-      body: (body || "").trim(),
-      link: (link || "").trim(),
-      date: date || today,
-      visibleTo: visibleTo || { groupIds: [], emails: [] },
-      completedBy: {},
-      createdByUid: user.uid,
-      createdByName: user.name,
-      createdAt: serverTimestamp(),
-    });
-  const deleteAssignment = (id) => deleteDoc(doc(db, "assignments", id));
-  const setAssignmentDone = (id, done) =>
-    updateDoc(doc(db, "assignments", id), {
-      [`completedBy.${user.uid}`]: done ? { name: user.name, ts: new Date().toISOString() } : deleteField(),
-    });
-  // Today's assignments visible to the current player (empty audience = everyone).
-  const myAssignmentGroupIds = useMemo(() => new Set(
-    groupsList.filter((g) => (g.memberUids || []).includes(user?.uid) || (g.memberUids || []).includes(user?.email)).map((g) => g.id),
-  ), [groupsList, user]);
-  const myTodaysAssignments = useMemo(() => {
-    const localToday = fmtLocalDate(new Date());
-    return assignments.filter((a) => {
-      if (a.date !== localToday) return false;
-      const v = a.visibleTo || {};
-      const emails = v.emails || []; const gids = v.groupIds || [];
-      if (!emails.length && !gids.length) return true;
-      if (emails.includes(user?.email)) return true;
-      return gids.some((id) => myAssignmentGroupIds.has(id));
-    });
-  }, [assignments, user, myAssignmentGroupIds]);
+
 
   // Roster (invite gate) — admin manages, useAuth reads on first signup
   // TODO (invite links, follow-up fix): team-specific invite LINKS live in
@@ -8812,9 +8648,8 @@ export default function TeamHubRolesApp() {
           </button>
         )}
         <main className="flex-1 min-h-0 overflow-y-auto pb-4">
-          {activeTab === "home" && <QuoteOfDay quote={todayQuote} isAdmin={effUser.role === "admin"} addQuote={addQuote} colors={COLORS} />}
-          {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} checkin={checkin} setCheckin={setCheckin} wellness={wellness} submitWellness={submitWellness} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} assignments={assignments} teamWorkouts={teamWorkouts} addAssignment={addAssignment} deleteAssignment={deleteAssignment} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} />}
-          {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} assignments={myTodaysAssignments} teamWorkouts={teamWorkouts} onToggleAssignment={setAssignmentDone} nutritionTarget={myNutritionTarget} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} />}
+          {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} checkin={checkin} setCheckin={setCheckin} wellness={wellness} submitWellness={submitWellness} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
+          {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} practices={practices} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} nutritionTarget={myNutritionTarget} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} />}
           {activeTab === "train" && (
             trainView ? (
               <div>
