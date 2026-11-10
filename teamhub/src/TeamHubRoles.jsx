@@ -71,6 +71,7 @@ import { BUILD_ID } from "./lib/appVersion";
 import { UpdateBanner } from "./components/UpdateUI";
 import TacticsBoard, { BoardSvg, BoardPlayer } from "./components/TacticsBoard";
 import DrillPrintSheet from "./components/DrillPrintSheet";
+import PracticePrintSheet from "./components/PracticePrintSheet";
 import { normalizeDrillDoc } from "./lib/drillDoc";
 import { isLockedOutRole } from "./lib/teamRoles";
 import { ARROW_LEGEND, wavyPath } from "./components/boardData";
@@ -3226,7 +3227,12 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
   const [picker, setPicker] = useState(false);
   const [pickForBlock, setPickForBlock] = useState(null);
   const [viewDrill, setViewDrill] = useState(null);
+  const [printOpen, setPrintOpen] = useState(false);
   const totalMin = blocks.reduce((s, b) => s + parseBlockMin(b.dur), 0);
+  // What prints: the practice as it looks right now, including any
+  // unsaved edits still in the editor.
+  const currentPractice = { ...practice, name, desc, cat, blocks, published, targetMin };
+  const teamName = practice.teamId ? getTeam(practice.teamId).name : "";
 
   useEffect(() => {
     if (!dirty || !canEdit) return;
@@ -3334,6 +3340,9 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
         </ul>
       )}
 
+      {/* Export / share: a printable PDF of every block in order. */}
+      <button onClick={() => setPrintOpen(true)} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200 text-slate-700 bg-white"><Printer className="w-3.5 h-3.5" /> Export / Share PDF</button>
+
       {canEdit && (
         <>
           <button onClick={() => setPicker(true)} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200 text-slate-700 bg-white"><Plus className="w-3.5 h-3.5" /> Add drill</button>
@@ -3348,6 +3357,7 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
       {picker && <DrillPicker drills={drills} onPick={addBlock} onClose={() => setPicker(false)} />}
       {pickForBlock !== null && <DrillPicker drills={drills} onPick={(d) => fillBlock(pickForBlock, d)} onClose={() => setPickForBlock(null)} />}
       {viewDrill && <DrillModal item={viewDrill} onClose={() => setViewDrill(null)} />}
+      {printOpen && <PracticePrintSheet practice={currentPractice} drills={drills} teamName={teamName} onClose={() => setPrintOpen(false)} />}
     </div>
   );
 };
