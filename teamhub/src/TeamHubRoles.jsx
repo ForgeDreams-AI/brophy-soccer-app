@@ -3786,7 +3786,7 @@ const PracticePage = ({ user, drills, addDrill, updateDrill, deleteDrill, practi
       </div>
       {nav.section === "drills" && <DrillsPage user={user} drills={drills} addDrill={addDrill} updateDrill={updateDrill} deleteDrill={deleteDrill} startCreating={nav.mode === "create"} />}
       {nav.section === "practices" && nav.mode === "create" && <NewPracticeChooser practices={practices} onCreate={createPracticeFrom} />}
-      {nav.section === "practices" && nav.mode === "library" && <PracticesView practices={practices} drills={drills} canEdit={isAdmin} add={addPractice} update={updatePractice} del={deletePractice} initialOpenId={nav.openId} hideCreate />}
+      {nav.section === "practices" && nav.mode === "library" && <PracticesView practices={practices} drills={drills} canEdit={isAdmin} add={addPractice} update={updatePractice} del={deletePractice} initialOpenId={nav.openId} />}
       {nav.section === "programs" && <ProgramsView user={user} programs={programs} practices={practices} canEdit={isAdmin} add={addProgram} update={updateProgram} del={deleteProgram} onAssign={openAssign} onCopy={copyProgram} startCreating={nav.mode === "create"} />}
       {assignTarget && <AssignProgramModal program={assignTarget} practices={practices} importEvents={importEvents} onClose={() => setAssignTarget(null)} />}
     </div>
