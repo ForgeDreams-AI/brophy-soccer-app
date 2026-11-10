@@ -4310,6 +4310,19 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
   const [inviteMsg, setInviteMsg] = useState("");
   // Invite-link generator state (team-specific links, see addInviteLink).
   const [linkTeamId, setLinkTeamId] = useState(activeTeamId);
+  // Follow the team switcher: when the active team changes (JVB / JVA /
+  // Varsity pills in the header), the invite and link dropdowns follow it.
+  // useState only reads activeTeamId once at mount, so without this the
+  // dropdowns stayed stuck on the team that was active when the page first
+  // opened — the page looked like tapping the switcher did nothing.
+  // Derived during render (not in an effect) to stay lint-clean; a manual
+  // pick in either dropdown still sticks until the switcher is tapped again.
+  const [prevActiveTeamId, setPrevActiveTeamId] = useState(activeTeamId);
+  if (prevActiveTeamId !== activeTeamId) {
+    setPrevActiveTeamId(activeTeamId);
+    setInviteTeamId(activeTeamId);
+    setLinkTeamId(activeTeamId);
+  }
   const [linkExpiry, setLinkExpiry] = useState("");
   const [linkMaxUses, setLinkMaxUses] = useState("");
   const [linkBusy, setLinkBusy] = useState(false);
@@ -4418,7 +4431,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
     <div className="pt-4 pb-6 px-5 space-y-4">
       <div>
         <h3 className="text-base font-bold text-slate-900">Roster &amp; Invites</h3>
-        <p className="text-xs text-slate-500 mt-0.5">{invites?.length || 0} on the roster{pendingCount > 0 ? ` · ${pendingCount} invite${pendingCount === 1 ? "" : "s"} still pending` : ""}</p>
+        <p className="text-xs text-slate-500 mt-0.5">{getTeam(activeTeamId).name} · {invites?.length || 0} on the roster{pendingCount > 0 ? ` · ${pendingCount} invite${pendingCount === 1 ? "" : "s"} still pending` : ""}</p>
       </div>
       {requestProfileUpdate && (
         <button onClick={async () => { try { await requestProfileUpdate(); toast("Sent — everyone will be asked to add their name."); } catch (e) { toast("Couldn't send — " + (e.message || "")); } }} className="w-full py-2 rounded-full text-[11px] font-bold uppercase tracking-wider border border-slate-200 bg-white text-slate-700 flex items-center justify-center gap-1.5">
