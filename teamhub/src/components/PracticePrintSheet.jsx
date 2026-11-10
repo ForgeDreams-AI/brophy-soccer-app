@@ -1,18 +1,24 @@
 // ─── Printable practice sheet ──────────────────────────────────────────────
 // A clean session plan a coach can hand out or share: name, description,
 // session total, and every drill block in order, numbered, with its
-// duration, phase and notes. Opened from the practice editor's
-// "Export / Share PDF" button; the sheet's Print button calls
+// duration, phase, notes AND its diagram. Opened from the practice
+// editor's "Export / Share PDF" button; the sheet's Print button calls
 // window.print() and the user picks "Save as PDF" (or a printer) in the
 // system dialog — no PDF library, no new dependency. Print CSS in
 // index.css hides the whole app (.app-shell) and prints only #print-sheet.
 // The sheet is rendered through a portal to document.body (outside
 // .app-shell) so the print CSS can't hide it. Anyone who can view a
 // practice can print it — printing is read-only.
+// Diagram priority matches the drill detail view: photo → drawn board
+// (BoardSvg) → raster PNG → placeholder. An animated drill prints as its
+// static board (arrows + tokens show the movement); the playback itself
+// is not in the PDF. The Print button waits for every diagram photo to
+// finish loading so the PDF never has a half-loaded image.
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Printer, X } from "lucide-react";
+import { Printer, X, LayoutGrid } from "lucide-react";
+import { BoardSvg } from "./TacticsBoard";
 
 const RED = "#980000";
 const durLabel = (d) => {
@@ -21,11 +27,78 @@ const durLabel = (d) => {
   return /min/i.test(s) ? s : `${s} min`;
 };
 
+// One drill's diagram inside a practice block. Reports ready once (via
+// onReady) when its image has loaded, or immediately when it is a drawn
+// board / has no diagram, so the Print button can wait for all of them.
+function BlockDiagram({ drill, onReady }) {
+  const done = useRef(false);
+  const markReady = () => {
+    if (!done.current) {
+      done.current = true;
+      onReady();
+    }
+  };
+  const [imgOk, setImgOk] = useState(true);
+  const showPhoto = Boolean(drill.diagramImage) && imgOk;
+  const showBoard = !showPhoto && Boolean(drill.diagramData);
+  const showRaster = !showPhoto && !showBoard && Boolean(drill.diagram);
+  const needsImg = showPhoto || showRaster;
+
+  useEffect(() => {
+    if (!needsImg) markReady();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsImg]);
+
+  if (showPhoto) {
+    return (
+      <img
+        src={drill.diagramImage}
+        alt="Drill diagram"
+        className="w-full rounded-xl border border-slate-300 mt-3"
+        onLoad={markReady}
+        onError={() => { setImgOk(false); markReady(); }}
+      />
+    );
+  }
+  if (showBoard) {
+    return (
+      <div className="rounded-xl border border-slate-300 overflow-hidden mt-3">
+        <BoardSvg state={drill.diagramData} showLegend className="w-full" />
+      </div>
+    );
+  }
+  if (showRaster) {
+    return (
+      <img
+        src={drill.diagram}
+        alt="Drill diagram"
+        className="w-full rounded-xl border border-slate-300 mt-3"
+        onLoad={markReady}
+        onError={markReady}
+      />
+    );
+  }
+  return (
+    <div className="rounded-xl border border-dashed border-slate-300 py-4 mt-3 flex flex-col items-center gap-1.5 text-slate-400">
+      <LayoutGrid className="w-6 h-6" />
+      <span className="text-xs font-semibold">No diagram for this drill yet</span>
+    </div>
+  );
+}
+
 export default function PracticePrintSheet({ practice, drills = [], teamName = "", onClose }) {
   const blocks = practice.blocks || [];
   const totalMin = blocks.reduce((s, b) => s + (parseInt(b.dur, 10) || 0), 0);
   const targetMin = practice.targetMin || 90;
   const drillById = (id) => (drills || []).find((d) => d.id === id);
+  // How many blocks have reported their diagram ready. The Print button
+  // stays disabled until every block is ready, so no PDF has a
+  // half-loaded diagram image.
+  const [readyCount, setReadyCount] = useState(0);
+  // Only blocks that actually have a drill render a diagram (and report
+  // ready); blocks that are just a name have nothing to wait for.
+  const diagramCount = blocks.filter((b) => drillById(b.drillId)).length;
+  const allReady = readyCount >= diagramCount;
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -42,7 +115,8 @@ export default function PracticePrintSheet({ practice, drills = [], teamName = "
           <div className="flex gap-2 flex-shrink-0">
             <button
               onClick={() => window.print()}
-              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white text-slate-900 min-h-11"
+              disabled={!allReady}
+              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white text-slate-900 min-h-11 disabled:opacity-50"
             >
               <Printer className="w-4 h-4" /> Print / Save PDF
             </button>
@@ -91,7 +165,8 @@ export default function PracticePrintSheet({ practice, drills = [], teamName = "
                           {[b.phase, b.cat].filter(Boolean).join(" · ")}
                         </div>
                       ) : null}
-                      {desc ? <p className="text-sm text-slate-600 leading-relaxed mt-1">{desc}</p> : null}
+                      {d ? <BlockDiagram drill={d} onReady={() => setReadyCount((c) => c + 1)} /> : null}
+                      {desc ? <p className="text-sm text-slate-600 leading-relaxed mt-3">{desc}</p> : null}
                       {b.notes ? <p className="text-sm text-slate-700 leading-relaxed mt-1"><span className="font-bold">Notes: </span>{b.notes}</p> : null}
                     </div>
                   </li>
