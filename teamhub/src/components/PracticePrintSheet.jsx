@@ -2,9 +2,10 @@
 // A clean session plan a coach can hand out or share: name, description,
 // session total, and every drill block in order, numbered, with its
 // duration, phase, notes AND its diagram. Opened from the practice
-// editor's "Export / Share PDF" button; the sheet's Print button calls
-// window.print() and the user picks "Save as PDF" (or a printer) in the
-// system dialog — no PDF library, no new dependency. Print CSS in
+// editor's "Export / Share PDF" button; the sheet's Save button renders
+// the sheet to a real PDF file (html2pdf.js) and opens the native share
+// sheet (or a new tab) — window.print() silently does nothing in iOS
+// in-app browsers, so a real PDF is generated instead. Print CSS in
 // index.css hides the whole app (.app-shell) and prints only #print-sheet.
 // The sheet is rendered through a portal to document.body (outside
 // .app-shell) so the print CSS can't hide it. Anyone who can view a
@@ -19,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Printer, X, LayoutGrid } from "lucide-react";
 import { BoardSvg } from "./TacticsBoard";
+import { shareSheetPdf } from "../lib/sharePdf";
 
 const RED = "#980000";
 const durLabel = (d) => {
@@ -95,10 +97,23 @@ export default function PracticePrintSheet({ practice, drills = [], teamName = "
   // stays disabled until every block is ready, so no PDF has a
   // half-loaded diagram image.
   const [readyCount, setReadyCount] = useState(0);
+  // While the PDF is being rendered, the button shows a busy label.
+  const [busy, setBusy] = useState(false);
   // Only blocks that actually have a drill render a diagram (and report
   // ready); blocks that are just a name have nothing to wait for.
   const diagramCount = blocks.filter((b) => drillById(b.drillId)).length;
   const allReady = readyCount >= diagramCount;
+
+  const handleSavePdf = async () => {
+    if (busy || !allReady) return;
+    setBusy(true);
+    try {
+      const safe = (practice.name || "practice").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "practice";
+      await shareSheetPdf(`${safe}.pdf`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -114,11 +129,11 @@ export default function PracticePrintSheet({ practice, drills = [], teamName = "
           <p className="text-white text-sm font-bold">Print preview — this is exactly what prints</p>
           <div className="flex gap-2 flex-shrink-0">
             <button
-              onClick={() => window.print()}
-              disabled={!allReady}
+              onClick={handleSavePdf}
+              disabled={!allReady || busy}
               className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white text-slate-900 min-h-11 disabled:opacity-50"
             >
-              <Printer className="w-4 h-4" /> Print / Save PDF
+              <Printer className="w-4 h-4" /> {busy ? "Making PDF…" : "Save / Share PDF"}
             </button>
             <button onClick={onClose} className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white/15 text-white min-h-11" aria-label="Close preview">
               <X className="w-4 h-4" /> Close

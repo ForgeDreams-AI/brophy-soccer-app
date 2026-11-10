@@ -2,17 +2,19 @@
 // One PDF for a whole set of practices: each practice gets its own section
 // (name, description, session total, then every drill block in order,
 // numbered, with duration, phase and notes). Opened from the Practices
-// library's "Export all" button; the sheet's Print button calls
-// window.print() and the user picks "Save as PDF" (or a printer) in the
-// system dialog — no PDF library, no new dependency. Print CSS in
+// library's "Export all" button; the sheet's Save button renders the
+// sheet to a real PDF file (html2pdf.js) and opens the native share sheet
+// (or a new tab) — window.print() silently does nothing in iOS in-app
+// browsers, so a real PDF is generated instead. Print CSS in
 // index.css hides the whole app (.app-shell) and prints only #print-sheet.
 // The sheet is rendered through a portal to document.body (outside
 // .app-shell) so the print CSS can't hide it. Anyone who can view the
 // practices can print them — printing is read-only.
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
+import { shareSheetPdf } from "../lib/sharePdf";
 
 const RED = "#980000";
 const durLabel = (d) => {
@@ -23,6 +25,18 @@ const durLabel = (d) => {
 
 export default function PracticesPrintSheet({ practices = [], drills = [], teamName = "", onClose }) {
   const drillById = (id) => (drills || []).find((d) => d.id === id);
+  const [busy, setBusy] = useState(false);
+
+  const handleSavePdf = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const safe = (teamName || "practices").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "practices";
+      await shareSheetPdf(`${safe}-practices.pdf`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -38,10 +52,11 @@ export default function PracticesPrintSheet({ practices = [], drills = [], teamN
           <p className="text-white text-sm font-bold">Print preview — {practices.length} practice{practices.length === 1 ? "" : "s"}</p>
           <div className="flex gap-2 flex-shrink-0">
             <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white text-slate-900 min-h-11"
+              onClick={handleSavePdf}
+              disabled={busy}
+              className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white text-slate-900 min-h-11 disabled:opacity-50"
             >
-              <Printer className="w-4 h-4" /> Print / Save PDF
+              <Printer className="w-4 h-4" /> {busy ? "Making PDF…" : "Save / Share PDF"}
             </button>
             <button onClick={onClose} className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white/15 text-white min-h-11" aria-label="Close preview">
               <X className="w-4 h-4" /> Close
