@@ -72,6 +72,7 @@ import { UpdateBanner } from "./components/UpdateUI";
 import TacticsBoard, { BoardSvg, BoardPlayer } from "./components/TacticsBoard";
 import DrillPrintSheet from "./components/DrillPrintSheet";
 import PracticePrintSheet from "./components/PracticePrintSheet";
+import PracticesPrintSheet from "./components/PracticesPrintSheet";
 import { normalizeDrillDoc } from "./lib/drillDoc";
 import { isLockedOutRole } from "./lib/teamRoles";
 import { ARROW_LEGEND, wavyPath } from "./components/boardData";
@@ -3367,6 +3368,8 @@ const PracticesView = ({ practices, drills, canEdit, add, update, del, initialOp
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [cat, setCat] = useState("All");
+  const [printAllOpen, setPrintAllOpen] = useState(false);
+  const teamName = practices.length > 0 && practices[0].teamId ? getTeam(practices[0].teamId).name : "";
   const catOptions = useMemo(() => [...new Set(practices.map((p) => p.cat).filter(Boolean))].sort(), [practices]);
   const cats = ["All", ...catOptions];
   const open = practices.find((p) => p.id === openId);
@@ -3403,11 +3406,16 @@ const PracticesView = ({ practices, drills, canEdit, add, update, del, initialOp
         </div>
       )}
 
+      {filtered.length > 0 && (
+        <button onClick={() => setPrintAllOpen(true)} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200 text-slate-700 bg-white"><Printer className="w-3.5 h-3.5" /> Export all practices</button>
+      )}
+
       {filtered.length === 0 ? (
         <p className="text-sm text-slate-400 italic text-center py-6">No practices{cat !== "All" ? ` in ${cat}` : ""} yet.</p>
       ) : (
         <ul className="space-y-2">{filtered.map((p) => <li key={p.id}><PracticeCard practice={p} onOpen={() => setOpenId(p.id)} /></li>)}</ul>
       )}
+      {printAllOpen && <PracticesPrintSheet practices={filtered} drills={drills} teamName={teamName} onClose={() => setPrintAllOpen(false)} />}
     </div>
   );
 };
