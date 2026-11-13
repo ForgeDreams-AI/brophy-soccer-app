@@ -77,6 +77,16 @@ export function normalizeAnimation(raw, tokens, arrows) {
   return { steps };
 }
 
+// Firestore rejects `undefined` anywhere in a doc, and the editor used to
+// write `bend: undefined` onto straightened arrows — an own property with
+// an undefined value that survives every spread. Drop undefined-valued keys
+// here so a loaded board can never carry one back into a save.
+const dropUndefined = (o) => {
+  const out = {};
+  for (const [k, v] of Object.entries(o || {})) if (v !== undefined) out[k] = v;
+  return out;
+};
+
 // Back-compat: map the old board state (field/tokens/arrows only) to v2.
 export function normalizeBoardState(initial) {
   const raw = initial || {};
@@ -85,8 +95,8 @@ export function normalizeBoardState(initial) {
   const preset = BOARD_PRESETS.find((p) => p.id === field);
   const tokenMap = { home: "focus", away: "opp", neutral: "gk" };
   const arrowMap = { run: "run", pass: "pass", dribble: "dribble", line: "direction" };
-  const tokens = (raw.tokens || []).map((t) => ({ ...t, kind: tokenMap[t.kind] || t.kind || "focus" }));
-  const arrows = (raw.arrows || []).map((a) => ({ ...a, kind: arrowMap[a.kind] || a.kind || "run" }));
+  const tokens = (raw.tokens || []).map((t) => dropUndefined({ ...t, kind: tokenMap[t.kind] || t.kind || "focus" }));
+  const arrows = (raw.arrows || []).map((a) => dropUndefined({ ...a, kind: arrowMap[a.kind] || a.kind || "run" }));
   const zones = (raw.zones || []).filter((z) => z && (z.shape === "rect" || z.shape === "circle"));
   return {
     field,

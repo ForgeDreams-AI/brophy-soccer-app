@@ -73,7 +73,7 @@ import TacticsBoard, { BoardSvg, BoardPlayer } from "./components/TacticsBoard";
 import DrillPrintSheet from "./components/DrillPrintSheet";
 import PracticePrintSheet from "./components/PracticePrintSheet";
 import PracticesPrintSheet from "./components/PracticesPrintSheet";
-import { normalizeDrillDoc } from "./lib/drillDoc";
+import { normalizeDrillDoc, stripUndefined } from "./lib/drillDoc";
 import { isLockedOutRole } from "./lib/teamRoles";
 import { ARROW_LEGEND, wavyPath } from "./components/boardData";
 import QuoteOfDay from "./components/QuoteOfDay";
@@ -2890,7 +2890,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
       howTo: form.howTo.trim(),
       objectives: form.objectives.split("\n").map((t) => t.trim()).filter(Boolean),
       desc: form.desc.trim(), info: form.info.trim(), videoUrl: form.videoUrl.trim(),
-      photos: form.photos, diagram: form.diagram, diagramData: form.diagramData || null,
+      photos: form.photos, diagram: form.diagram, diagramData: form.diagramData ? stripUndefined(form.diagramData) : null,
       diagramImage: form.diagramImage || null,
       scenario: form.scenario.trim(),
       cues: form.cues.split("\n").map((t) => t.trim()).filter(Boolean),
