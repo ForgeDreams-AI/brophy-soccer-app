@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
 import { db } from "../firebase";
-import { reportSnapshot } from "../lib/firestoreHealth";
+import {
+  reportSnapshot,
+  getResyncGeneration,
+  subscribeResyncGeneration,
+} from "../lib/firestoreHealth";
 
 // Stable fingerprint of a Firestore query constraint, so the subscription
 // re-runs only when the query actually changes (e.g. the active teamId
@@ -29,8 +33,9 @@ const constraintFingerprint = (c) => {
 // until a full reload. Now transient errors schedule a re-subscribe with
 // backoff instead. Genuine permission errors are never retried — a locked-out
 // role stays locked out, and the corrected subscription (e.g. after a team
-// switch) repopulates the list on its own. Retries are capped so a
-// permanently broken listener stops trying on its own.
+// switch) repopulates the list on its own. Retries never give up: the
+// delays cap at 60s and keep coming, because a stream that stays dead for
+// two minutes is still worth recovering without a full restart.
 const RETRY_DELAYS_MS = [1000, 5000, 15000, 30000, 60000];
 const TRANSIENT_CODES = new Set(["unauthenticated", "unavailable"]);
 
@@ -52,8 +57,7 @@ function useListenerRetry(label) {
   const noteError = useCallback((err) => {
     console.warn(label + " listen failed:", err?.code || err);
     if (!TRANSIENT_CODES.has(err?.code)) return;
-    if (attemptsRef.current >= RETRY_DELAYS_MS.length) return;
-    const delay = RETRY_DELAYS_MS[attemptsRef.current];
+    const delay = RETRY_DELAYS_MS[Math.min(attemptsRef.current, RETRY_DELAYS_MS.length - 1)];
     attemptsRef.current += 1;
     timerRef.current = setTimeout(() => setRetryKey((k) => k + 1), delay);
   }, [label]);
@@ -64,6 +68,10 @@ export function useCollection(name, ...constraints) {
   const [items, setItems] = useState([]);
   const fingerprint = constraints.map(constraintFingerprint).join("|");
   const { retryKey, noteSnapshot, noteError, cancelRetry } = useListenerRetry("useCollection " + name);
+  // A foreground re-sync bumps this generation, which tears down and
+  // re-creates this subscription from scratch. That is the only way to bring
+  // back a listener the SDK already terminated with an error.
+  const resyncGen = useSyncExternalStore(subscribeResyncGeneration, getResyncGeneration);
 
   useEffect(() => {
     if (!name) {
@@ -85,7 +93,7 @@ export function useCollection(name, ...constraints) {
     );
     return () => { cancelRetry(); unsub(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, fingerprint, retryKey]);
+  }, [name, fingerprint, retryKey, resyncGen]);
 
   return items;
 }
@@ -107,6 +115,7 @@ export function useAudienceCollection(name, user, orderField, teamId) {
   const email = user?.email || null;
   const role = user?.role;
   const { retryKey, noteSnapshot, noteError, cancelRetry } = useListenerRetry("useAudienceCollection " + name);
+  const resyncGen = useSyncExternalStore(subscribeResyncGeneration, getResyncGeneration);
 
   useEffect(() => {
     if (!name || !uid) {
@@ -141,7 +150,7 @@ export function useAudienceCollection(name, user, orderField, teamId) {
     );
     return () => { cancelRetry(); unsub(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, uid, email, role, orderField, teamId, retryKey]);
+  }, [name, uid, email, role, orderField, teamId, retryKey, resyncGen]);
 
   return items;
 }
@@ -153,6 +162,7 @@ export function useAudienceCollection(name, user, orderField, teamId) {
 export function useDoc(path) {
   const [data, setData] = useState(null);
   const { retryKey, noteSnapshot, noteError, cancelRetry } = useListenerRetry("useDoc " + path);
+  const resyncGen = useSyncExternalStore(subscribeResyncGeneration, getResyncGeneration);
 
   useEffect(() => {
     if (!path) return;
@@ -167,7 +177,7 @@ export function useDoc(path) {
     );
     return () => { cancelRetry(); unsub(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, retryKey]);
+  }, [path, retryKey, resyncGen]);
 
   return data;
 }
