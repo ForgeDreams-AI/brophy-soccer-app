@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 // Brand palette (mirrors COLORS in TeamHubRoles so the tour matches the app).
 const RED = "#980000";
@@ -13,7 +13,7 @@ const COACH_STEPS = [
   { icon: "👋", title: "Welcome, Coach!", body: "Here's a quick 30-second tour of everything you can do. You can replay it anytime from Settings." },
   { icon: "🏠", title: "Home", body: "Post announcements the whole team sees instantly, and get a snapshot of what's coming up." },
   { icon: "⚽", title: "Practice", body: "Build and share practice plans and your drill library so everyone knows the session." },
-  { icon: "📅", title: "Schedule", body: "Create games, practices, and events — and choose exactly who sees each one (everyone, a group, or specific players)." },
+  { icon: "📅", title: "Schedule", body: "Create games, practices, and events. Choose exactly who sees each one (everyone, a group, or specific players)." },
   { icon: "💪", title: "Train", body: "Your hub for workouts, nutrition, and the video library. Create and assign training content here." },
   { icon: "💬", title: "Chat", body: "Team channels plus private messages. You can make a channel visible to just one group, and pin important posts." },
   { icon: "🧑‍🤝‍🧑", title: "Roster & documents", body: "Invite players by email, manage the roster, share documents for e-signing, and see each player's daily wellness check-in." },
@@ -23,7 +23,8 @@ const COACH_STEPS = [
 
 const PLAYER_STEPS = [
   { icon: "👋", title: "Welcome to the team app!", body: "Here's a quick 30-second tour. You can replay it anytime from Settings." },
-  { icon: "🏠", title: "Today", body: "Your home base — announcements from your coach and what's happening today." },
+  { icon: "📸", title: "Add your face photo", body: "Add a photo of your face so your coach can put you on the game day roster. It only takes a second.", photo: true },
+  { icon: "🏠", title: "Today", body: "Your home base. Announcements from your coach and what is happening today." },
   { icon: "💪", title: "Train", body: "Your workouts, nutrition, and video library. Log your meals and water right here." },
   { icon: "📅", title: "Schedule", body: "All your games, practices, and events. Tap any one for the details." },
   { icon: "💬", title: "Chat", body: "Team channels plus a private line straight to your coach." },
@@ -32,16 +33,39 @@ const PLAYER_STEPS = [
   { icon: "✅", title: "All set!", body: "That's everything. You can replay this tour anytime from Settings." },
 ];
 
-export default function WelcomeTour({ open, role, onClose }) {
+export default function WelcomeTour({ open, role, onClose, user, onUploadPhoto }) {
   const steps = role === "admin" ? COACH_STEPS : PLAYER_STEPS;
   const [i, setI] = useState(0);
+  // Face photo for this player (local state: the parent's user object is only
+  // loaded once at sign-in, so it does not refresh after an upload).
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const cameraInputRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Always start at the beginning each time it opens.
-  useEffect(() => { if (open) setI(0); }, [open]);
+  useEffect(() => {
+    if (open) {
+      setI(0);
+      setPhotoUrl(user?.photoURL || "");
+      setPhotoBusy(false);
+    }
+  }, [open]);
 
   if (!open) return null;
   const step = steps[i];
   const last = i === steps.length - 1;
+
+  const handlePhotoFile = async (file) => {
+    if (!file || !onUploadPhoto) return;
+    setPhotoBusy(true);
+    try {
+      const url = await onUploadPhoto(file);
+      if (url) setPhotoUrl(url);
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4"
@@ -57,6 +81,46 @@ export default function WelcomeTour({ open, role, onClose }) {
         {/* Body */}
         <div className="px-6 py-5 text-center">
           <p className="text-sm text-slate-600 leading-relaxed min-h-[64px]">{step.body}</p>
+
+          {/* Face photo upload (player tour only). Never blocks the tour:
+              Next and Skip stay available whether or not a photo is added. */}
+          {step.photo && (
+            <div className="mb-4">
+              {photoUrl ? (
+                <div>
+                  <img src={photoUrl} alt="Your face photo" className="w-24 h-24 rounded-full object-cover mx-auto border-4" style={{ borderColor: ACCENT }} />
+                  <p className="text-xs font-bold mt-2" style={{ color: RED }}>Photo added. You are set for the game day roster.</p>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={photoBusy}
+                    className="mt-2 text-[11px] font-bold text-slate-500 underline disabled:opacity-50">
+                    {photoBusy ? "Adding photo..." : "Change photo"}
+                  </button>
+                </div>
+              ) : onUploadPhoto ? (
+                <div className="flex gap-2 justify-center">
+                  <button
+                    onClick={() => cameraInputRef.current?.click()}
+                    disabled={photoBusy}
+                    className="px-4 py-2.5 rounded-full text-xs font-bold text-white disabled:opacity-50"
+                    style={{ backgroundColor: RED }}>
+                    {photoBusy ? "Adding..." : "Take photo"}
+                  </button>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={photoBusy}
+                    className="px-4 py-2.5 rounded-full text-xs font-bold disabled:opacity-50"
+                    style={{ backgroundColor: "#F1F5F9", color: "#334155" }}>
+                    {photoBusy ? "Adding..." : "Upload photo"}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">You can add your photo later from Settings.</p>
+              )}
+              <input ref={cameraInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; handlePhotoFile(f); }} />
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; handlePhotoFile(f); }} />
+            </div>
+          )}
 
           {/* Progress dots */}
           <div className="flex justify-center gap-1.5 my-4" aria-hidden="true">

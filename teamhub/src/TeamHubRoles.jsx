@@ -9,6 +9,7 @@ import {
   Bell, BellOff, Pencil, Copy, Download, Printer, Megaphone,
   Users, Tag, Target, Footprints, Repeat, Flag, Zap, ImagePlus, Goal, Hash, Eye,
   ClipboardList, ExternalLink, Star, Shuffle, CornerDownRight, Crosshair, Swords, LayoutGrid, SquareDashed,
+  RefreshCw,
 } from "lucide-react";
 import {
   sendSignInLinkToEmail,
@@ -67,6 +68,7 @@ import { liftSeedDocs } from "./data/liftSeed";
 import { workoutSeedDocs, AREA_ORDER } from "./data/workoutSeed";
 import { TEAMS, TEAM_IDS, DEFAULT_TEAM_ID, isValidTeamId, teamDocFields, getTeam, getTeamShortName } from "./data/teams";
 import { useAppUpdate } from "./hooks/useAppUpdate";
+import { useFirestoreResync, useFirestoreStale } from "./hooks/useFirestoreResync";
 import { BUILD_ID } from "./lib/appVersion";
 import { UpdateBanner } from "./components/UpdateUI";
 import TacticsBoard, { BoardSvg, BoardPlayer } from "./components/TacticsBoard";
@@ -577,7 +579,7 @@ const Avatar = ({ photoURL, initials = "", size = 36, bg = COLORS.primary, color
     <div className={`rounded-full flex items-center justify-center font-bold leading-none ${className}`} style={{ width: size, height: size, backgroundColor: bg, color, fontSize: Math.round(size * 0.36) }}>{initials}</div>
   );
 
-const Header = ({ title, user, onAvatarClick, onPreview }) => (
+const Header = ({ title, user, onAvatarClick, onPreview, onRefresh, refreshing = false, stale = false }) => (
   <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between">
     <div className="flex items-center gap-2">
       <img src="/brand/logo.png" alt="" className="w-9 h-9 object-contain lg:hidden" />
@@ -587,6 +589,16 @@ const Header = ({ title, user, onAvatarClick, onPreview }) => (
       </div>
     </div>
     <div className="flex items-center gap-2">
+      {stale && (
+        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-1 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> Reconnecting...
+        </span>
+      )}
+      {onRefresh && (
+        <button onClick={onRefresh} aria-label="Refresh" title="Refresh" disabled={refreshing} className="w-8 h-8 rounded-full flex items-center justify-center disabled:opacity-50" style={{ backgroundColor: COLORS.bg, color: COLORS.primary }}>
+          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+        </button>
+      )}
       {user.role === "admin" && onPreview && (
         <button onClick={onPreview} aria-label="View as player" title="View as player" className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: COLORS.bg, color: COLORS.primary }}>
           <Eye className="w-4 h-4" />
@@ -870,11 +882,25 @@ const ChecklistRow = ({ done, icon: Icon, label, sub, onClick, accent }) => (
 // main daily action here (attendance / practice check-in were removed):
 // three quick 1–5 taps (Energy / Soreness / Tiredness, high = ready) and the
 // player gets a decisive readiness verdict back.
-const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCheckin, submitWellness, wellnessLoggedToday, myWellness = null, loggedToday, waterCups = 0, setWaterCups, documents = [], signDocument, onOpenTrain, onOpenSchedule, practices = [], activeTeamId, todayQuote, addQuote, nutritionTarget, nutritionTotals = { cal: 0, protein: 0 }, profilePrompt, onOpenProfile }) => {
+const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCheckin, submitWellness, wellnessLoggedToday, myWellness = null, loggedToday, waterCups = 0, setWaterCups, documents = [], signDocument, onOpenTrain, onOpenSchedule, practices = [], activeTeamId, todayQuote, addQuote, nutritionTarget, nutritionTotals = { cal: 0, protein: 0 }, profilePrompt, onOpenProfile, onUploadPhoto }) => {
   const promptTs = profilePrompt?.requestedAt;
   const [profileDismissed, setProfileDismissed] = useState(() => { try { return localStorage.getItem("profilePromptSeen") === promptTs; } catch { return false; } });
   const showProfilePrompt = promptTs && !profileDismissed;
   const dismissProfile = () => { try { localStorage.setItem("profilePromptSeen", promptTs); } catch { /* ignore */ } setProfileDismissed(true); };
+  // Face-photo nudge: players only, until a photo exists. Dismiss hides it
+  // for this visit only (plain state, no localStorage), so it comes back on
+  // the next visit until the player adds a photo.
+  const [photoDismissed, setPhotoDismissed] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoAdded, setPhotoAdded] = useState("");
+  const photoInputRef = useRef(null);
+  const showPhotoNudge = user.role === "player" && !user.photoURL && !photoAdded && !photoDismissed;
+  const handlePhotoFile = async (file) => {
+    if (!file || !onUploadPhoto) return;
+    setPhotoBusy(true);
+    try { const url = await onUploadPhoto(file); if (url) setPhotoAdded(url); }
+    finally { setPhotoBusy(false); }
+  };
   const [wellnessOpen, setWellnessOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const todayStr = fmtLocalDate(new Date());
@@ -903,6 +929,21 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
         <h2 className="text-2xl font-bold text-slate-900 mt-1">Hey,<br /><span style={{ color: COLORS.primary }}>{firstName}.</span></h2>
         <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>{teamName}</span>
       </div>
+
+      {showPhotoNudge && (
+        <div className="rounded-2xl p-3.5 shadow-sm flex items-center gap-3" style={{ backgroundColor: COLORS.accentSoft, border: `1px solid ${COLORS.accent}` }}>
+          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accent }}>
+            <Camera className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-bold text-slate-900">Add your face photo</div>
+            <div className="text-[11px] text-slate-600">So your coach can put you on the game day roster.</div>
+          </div>
+          <button onClick={() => photoInputRef.current?.click()} disabled={photoBusy} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider text-white flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>{photoBusy ? "Adding..." : "Add photo"}</button>
+          <button onClick={() => setPhotoDismissed(true)} className="text-slate-400 flex-shrink-0" aria-label="Dismiss"><X className="w-4 h-4" /></button>
+          <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; handlePhotoFile(f); }} />
+        </div>
+      )}
 
       {showProfilePrompt && (
         <div className="rounded-2xl p-3.5 shadow-sm flex items-center gap-3" style={{ backgroundColor: COLORS.accentSoft, border: `1px solid ${COLORS.accent}` }}>
@@ -7980,6 +8021,9 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdmin = fa
                                 <span className="text-[9px] font-black uppercase tracking-[0.12em] px-2 py-0.5 rounded-md" style={roleBadgeStyle(u.role)}>
                                   {ROLE_LABELS[u.role] || "Player"}
                                 </span>
+                                {u.role === "player" && !u.photoURL && (
+                                  <span className="text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md bg-amber-100 text-amber-700">No photo</span>
+                                )}
                                 {teams.map((t) => (
                                   <span key={t} className="text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">{getTeamShortName(t)}</span>
                                 ))}
@@ -8250,6 +8294,12 @@ export default function TeamHubRolesApp() {
   const [showTour, setShowTour] = useState(false);
   // Offer a refresh when a newer build is deployed while the app is open.
   const { updateReady, reload } = useAppUpdate();
+  // Automatic live-data recovery: re-sync Firestore whenever the app comes
+  // back to the foreground, so a stream killed while the app was backgrounded
+  // never leaves chat and everything else frozen. Fully automatic — the
+  // header Refresh button is only a backup.
+  const { resync: resyncFirestore, syncing: firestoreSyncing } = useFirestoreResync();
+  const firestoreStale = useFirestoreStale();
 
   // First-login welcome tour. "Seen" is tracked per-device in localStorage, so
   // it auto-runs once and never nags again (no backend/rules change needed).
@@ -8258,6 +8308,25 @@ export default function TeamHubRolesApp() {
     if (user && !localStorage.getItem(TOUR_SEEN_KEY)) setShowTour(true);
   }, [user]);
   const closeTour = () => { setShowTour(false); localStorage.setItem(TOUR_SEEN_KEY, "1"); };
+
+  // Shared face-photo upload for the welcome tour and the Home nudge.
+  // Same flow as Settings: downscale, store under avatars/{uid}/{ts}.jpg,
+  // save photoURL + photoPath on the user's doc. Returns the URL (or null).
+  const uploadOwnPhoto = async (file) => {
+    if (!file || !user) return null;
+    try {
+      const blob = await downscaleToBlob(file, 640, 0.85);
+      const path = `avatars/${user.uid}/${Date.now()}.jpg`;
+      const snap = await uploadBytes(storageRef(storage, path), blob, { contentType: "image/jpeg" });
+      const url = await getDownloadURL(snap.ref);
+      await updateDoc(doc(db, "users", user.uid), { photoURL: url, photoPath: path });
+      toast("Photo added.");
+      return url;
+    } catch (e) {
+      toast("Couldn't add photo. " + (e.message || "Check Storage rules."));
+      return null;
+    }
+  };
 
   // If we're returning from a magic-link email, finish the sign-in.
   useEffect(() => {
@@ -9255,10 +9324,10 @@ export default function TeamHubRolesApp() {
         {/* Content column — the phone/tablet column and the desktop content area. */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {updateReady && <UpdateBanner onReload={reload} color={COLORS.primary} />}
-        <Header title={title} user={effUser} onAvatarClick={() => setSettingsOpen(true)} onPreview={() => { setPreviewAsPlayer(true); setTab("home"); }} />
+        <Header title={title} user={effUser} onAvatarClick={() => setSettingsOpen(true)} onPreview={() => { setPreviewAsPlayer(true); setTab("home"); }} onRefresh={resyncFirestore} refreshing={firestoreSyncing} stale={firestoreStale} />
         {canSeeMultipleTeams && <TeamSwitcher teams={visibleTeams} activeTeamId={activeTeamId} onSelect={setPreferredTeamId} />}
         {settingsOpen && <SettingsModal user={user} onClose={() => setSettingsOpen(false)} onSignOut={() => signOut(auth)} onReplayTour={() => { setSettingsOpen(false); setShowTour(true); }} isOrgAdmin={user.role === "orgAdmin"} orgUsers={orgUsers} setUserRoleAndTeams={setUserRoleAndTeams} />}
-        <WelcomeTour open={showTour} role={effUser.role} onClose={closeTour} />
+        <WelcomeTour open={showTour} role={effUser.role} onClose={closeTour} user={user} onUploadPhoto={uploadOwnPhoto} />
         {previewAsPlayer && realIsAdmin && (
           <button onClick={() => setPreviewAsPlayer(false)} className="w-full flex items-center justify-center gap-2 py-2 text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: COLORS.primary }}>
             <Eye className="w-3.5 h-3.5" /> Viewing as a player — tap to exit
@@ -9269,7 +9338,7 @@ export default function TeamHubRolesApp() {
               pages stay readable (and the pitch stays usable) at 72rem. */}
           <div className="w-full lg:max-w-6xl lg:mx-auto h-full flex flex-col">
           {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} isOrgAdmin={user.role === "orgAdmin"} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} checkin={checkin} setCheckin={setCheckin} wellness={wellness} submitWellness={submitWellness} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} inviteLinks={inviteLinks} addInviteLink={addInviteLink} removeInviteLink={removeInviteLink} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
-          {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} practices={practices} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} nutritionTarget={myNutritionGoal} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} />}
+          {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} practices={practices} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} nutritionTarget={myNutritionGoal} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} onUploadPhoto={uploadOwnPhoto} />}
           {activeTab === "train" && (
             trainView ? (
               <div>
