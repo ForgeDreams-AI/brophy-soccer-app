@@ -149,6 +149,11 @@ service cloud.firestore {
     }
     // Shared libraries (no teamId — one library for all three Brophy teams).
     match /videos/{id}        { allow read: if signedIn(); allow write: if isAdmin(); }
+    // Video folders (Videos & Links under Training): coach-created top-level
+    // folders and subfolders. Shared across all three teams, like the videos
+    // themselves. A folder doc is { name, parent, createdAt }. Parent is
+    // null for a top-level folder, or the parent folder's name for a subfolder.
+    match /videoFolders/{id}  { allow read: if signedIn(); allow write: if isAdmin(); }
     // ONE shared drill library (unified 2026-11-09): the team app AND the
     // standalone Drill Library site BOTH read and write `drillLibrary` —
     // a drill made in either app shows up in both. The old `drills`
