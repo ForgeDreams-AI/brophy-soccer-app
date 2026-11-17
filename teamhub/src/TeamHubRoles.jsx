@@ -1513,13 +1513,16 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
     </section>
   ) : null;
 
+  // Coaches only read the team's readiness (playersSection above). They
+  // never log wellness themselves, so the check-in card is players only.
+  // It stays in the non-admin branch below and in PlayerTodayPage.
   return (
     <div className="px-5 pt-5 pb-4 space-y-5">
       {greeting}
       {notificationsSection}
       {todaySection}
       {isAdmin
-        ? (<>{youRunningSection}{coachDashboard}{playersSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{pushSection}{groupsSection}{nutritionComplianceSection}{checkinSection}</>)
+        ? (<>{youRunningSection}{coachDashboard}{playersSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{pushSection}{groupsSection}{nutritionComplianceSection}</>)
         : (<>{checkinSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{documentsSection}</>)}
       {pushModalOpen && (
         <PushNotificationModal
