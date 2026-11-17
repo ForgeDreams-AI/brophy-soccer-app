@@ -2318,7 +2318,10 @@ const parseVideoCSV = (text) => {
   const first = lines[0].toLowerCase();
   const hasHeader = first.includes("title") && first.includes("url");
   const rows = hasHeader ? lines.slice(1) : lines;
-  const validCat = (c) => VIDEO_CATS.includes(c) ? c : "Film";
+  // Any non-empty folder name is kept: a folder that does not exist yet is
+  // created automatically on import (same as recipe categories). Blank falls
+  // back to Film.
+  const validCat = (c) => (c || "").trim() || "Film";
   const validDiff = (d) => ["Easy", "Medium", "Hard"].includes(d) ? d : "Easy";
   const validType = (t) => ["video", "audio", "external"].includes(t) ? t : "video";
   return rows.map((line) => {
@@ -2335,7 +2338,7 @@ const parseVideoCSV = (text) => {
   }).filter((r) => r.title && r.url);
 };
 
-const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVideos }) => {
+const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVideos, videoFolders = [], addVideoFolder, renameVideoFolder, deleteVideoFolder }) => {
   const [cat, setCat] = useState("Film");
   const [adding, setAdding] = useState(false);
   const [editingVideoId, setEditingVideoId] = useState(null);
@@ -2348,14 +2351,99 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
   const [subfolder, setSubfolder] = useState("All");
   const isAdmin = user.role === "admin";
 
-  // Subfolders derived from videos in the active category (so admin doesn't
-  // need a separate management step — just type a name in the upload form
-  // and that subfolder shows up as a pill for everyone else in that cat).
+  // Folder list: the six built-in folders plus any coach-created top-level
+  // folders from Firestore (same union pattern as recipe categories).
+  const customCats = useMemo(() => videoFolders.filter((f) => !f.parent).map((f) => f.name).filter(Boolean), [videoFolders]);
+  const effectiveCats = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    [...VIDEO_CATS, ...customCats].forEach((c) => { if (c && !seen.has(c)) { seen.add(c); out.push(c); } });
+    return out;
+  }, [customCats]);
+  // If the open folder was deleted elsewhere, fall back to the first folder.
+  useEffect(() => { if (!effectiveCats.includes(cat) && effectiveCats.length) setCat(effectiveCats[0]); }, [effectiveCats, cat]);
+
+  // Subfolders in the open folder: coach-created ones plus any typed on a
+  // video already (so old videos keep their subfolder pills).
+  const customSubs = useMemo(() => videoFolders.filter((f) => f.parent === cat).map((f) => f.name).filter(Boolean), [videoFolders, cat]);
   const subfolders = useMemo(() => {
     const set = new Set();
     videos.filter((v) => v.cat === cat).forEach((v) => v.subfolder && set.add(v.subfolder));
+    customSubs.forEach((s) => set.add(s));
     return ["All", ...[...set].sort()];
-  }, [videos, cat]);
+  }, [videos, cat, customSubs]);
+
+  // The folder the admin is looking at right now, when it is a custom one.
+  // Rename and delete act on the open subfolder when one is open, otherwise
+  // on the open folder. Built-in folders have no doc, so they cannot be
+  // renamed or deleted.
+  const activeCatDoc = videoFolders.find((f) => !f.parent && f.name === cat);
+  const activeSubDoc = subfolder !== "All" ? videoFolders.find((f) => f.parent === cat && f.name === subfolder) : null;
+  const managedFolder = activeSubDoc || activeCatDoc || null;
+
+  const [newFolderName, setNewFolderName] = useState("");
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newSubName, setNewSubName] = useState("");
+  const [showNewSub, setShowNewSub] = useState(false);
+  const [renameName, setRenameName] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [folderMsg, setFolderMsg] = useState("");
+  const submitNewFolder = async () => {
+    const name = newFolderName.trim();
+    setFolderMsg("");
+    if (!name) return;
+    if (effectiveCats.some((c) => c.toLowerCase() === name.toLowerCase())) { setFolderMsg(`A folder named "${name}" already exists.`); return; }
+    try {
+      await addVideoFolder(name, null);
+      setNewFolderName("");
+      setShowNewFolder(false);
+      setCat(name);
+      setSubfolder("All");
+      setFolderMsg(`Folder "${name}" added.`);
+    } catch (e) { setFolderMsg("Couldn't add folder. " + (e.message || "Check Firestore rules.")); }
+  };
+  const submitNewSubfolder = async () => {
+    const name = newSubName.trim();
+    setFolderMsg("");
+    if (!name) return;
+    if (subfolders.some((s) => s !== "All" && s.toLowerCase() === name.toLowerCase())) { setFolderMsg(`A subfolder named "${name}" already exists in ${cat}.`); return; }
+    try {
+      await addVideoFolder(name, cat);
+      setNewSubName("");
+      setShowNewSub(false);
+      setSubfolder(name);
+      setFolderMsg(`Subfolder "${name}" added to ${cat}.`);
+    } catch (e) { setFolderMsg("Couldn't add subfolder. " + (e.message || "Check Firestore rules.")); }
+  };
+  const submitRename = async () => {
+    if (!managedFolder) return;
+    const name = renameName.trim();
+    setFolderMsg("");
+    if (!name || name === managedFolder.name) { setRenaming(false); return; }
+    const siblings = managedFolder.parent ? subfolders.filter((s) => s !== "All") : effectiveCats;
+    if (siblings.some((s) => s.toLowerCase() === name.toLowerCase())) { setFolderMsg(`A folder named "${name}" already exists.`); return; }
+    try {
+      await renameVideoFolder(managedFolder, name);
+      if (!managedFolder.parent) setCat(name); else setSubfolder(name);
+      setRenaming(false);
+      setFolderMsg(`Renamed to "${name}".`);
+    } catch (e) { setFolderMsg("Couldn't rename folder. " + (e.message || "Check Firestore rules.")); }
+  };
+  const deleteManagedFolder = async () => {
+    if (!managedFolder) return;
+    const inUse = managedFolder.parent
+      ? videos.filter((v) => v.cat === managedFolder.parent && v.subfolder === managedFolder.name).length
+      : videos.filter((v) => v.cat === managedFolder.name).length;
+    const kidCount = !managedFolder.parent ? videoFolders.filter((f) => f.parent === managedFolder.name).length : 0;
+    if (inUse > 0) { setFolderMsg(`This folder still has ${inUse} video${inUse === 1 ? "" : "s"}. Move or delete them first.`); return; }
+    if (kidCount > 0) { setFolderMsg(`This folder still has ${kidCount} subfolder${kidCount === 1 ? "" : "s"}. Delete them first.`); return; }
+    if (!confirm(`Delete the folder "${managedFolder.name}"?`)) return;
+    try {
+      await deleteVideoFolder(managedFolder.id);
+      if (!managedFolder.parent) setCat("Film"); else setSubfolder("All");
+      setFolderMsg(`Folder "${managedFolder.name}" deleted.`);
+    } catch (e) { setFolderMsg("Couldn't delete folder. " + (e.message || "Check Firestore rules.")); }
+  };
 
   const startEditVideo = (v) => {
     setEditingVideoId(v.id);
@@ -2368,9 +2456,13 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
     setImportMsg("");
     const rows = parseVideoCSV(csvText);
     if (!rows.length) { setImportMsg("No valid rows — needs title,url,cat,dur,diff,desc,type."); return; }
+    // Folders named in the sheet that do not exist yet are created first,
+    // same as recipe categories on import.
+    const newCats = [...new Set(rows.map((r) => r.cat))].filter((c) => c && !effectiveCats.some((e) => e.toLowerCase() === c.toLowerCase()));
     try {
+      for (const c of newCats) await addVideoFolder(c, null);
       await importVideos(rows);
-      setImportMsg(`Imported ${rows.length} video${rows.length === 1 ? "" : "s"}.`);
+      setImportMsg(`Imported ${rows.length} video${rows.length === 1 ? "" : "s"}${newCats.length ? `, added ${newCats.length} new folder${newCats.length === 1 ? "" : "s"}` : ""}.`);
       setCsvText("");
     } catch (e) {
       setImportMsg("Couldn't import — " + (e.message || "check rules?"));
@@ -2418,7 +2510,7 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
           </div>
           {importMsg && <p className="text-[10px] font-semibold px-1" style={{ color: importMsg.startsWith("Imported") ? COLORS.success : "#dc2626" }}>{importMsg}</p>}
           <p className="text-[10px] text-slate-400 leading-relaxed px-1">
-            Columns: <span className="font-mono">title,url,cat,dur,diff,desc,type</span>. <span className="font-semibold">cat</span> is one of {VIDEO_CATS.join(", ")}. <span className="font-semibold">diff</span> Easy/Medium/Hard. <span className="font-semibold">type</span> video/audio/external. Wrap descriptions containing commas in "quotes".
+            Columns: <span className="font-mono">title,url,cat,dur,diff,desc,type</span>. <span className="font-semibold">cat</span> is a folder name. New folders are created automatically. <span className="font-semibold">diff</span> Easy/Medium/Hard. <span className="font-semibold">type</span> video/audio/external. Wrap descriptions containing commas in "quotes".
           </p>
         </div></div>
       )}
@@ -2428,7 +2520,7 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
           <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Title" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="YouTube / Vimeo / link URL" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <div className="grid grid-cols-3 gap-2">
-            <select value={form.cat} onChange={(e) => setForm({ ...form, cat: e.target.value })} className="border border-slate-200 rounded-lg px-2 py-2 text-xs">{VIDEO_CATS.map((c) => <option key={c}>{c}</option>)}</select>
+            <select value={form.cat} onChange={(e) => setForm({ ...form, cat: e.target.value })} className="border border-slate-200 rounded-lg px-2 py-2 text-xs">{effectiveCats.map((c) => <option key={c}>{c}</option>)}</select>
             <input value={form.dur} onChange={(e) => setForm({ ...form, dur: e.target.value })} placeholder="Duration" className="border border-slate-200 rounded-lg px-2 py-2 text-xs" />
             <select value={form.diff} onChange={(e) => setForm({ ...form, diff: e.target.value })} className="border border-slate-200 rounded-lg px-2 py-2 text-xs">{["Easy", "Medium", "Hard"].map((d) => <option key={d}>{d}</option>)}</select>
           </div>
@@ -2442,25 +2534,64 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
       {/* Category pills */}
       <div className="overflow-x-auto px-5">
         <div className="flex gap-2 w-max">
-          {VIDEO_CATS.map((c) => (
+          {effectiveCats.map((c) => (
             <button key={c} onClick={() => { setCat(c); setSubfolder("All"); }} className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap ${cat === c ? "text-white" : "bg-white text-slate-600 border border-slate-200"}`} style={cat === c ? { backgroundColor: COLORS.primary } : {}}>{c}</button>
           ))}
+          {isAdmin && (
+            <button onClick={() => { setShowNewFolder((s) => !s); setFolderMsg(""); }} className="px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap bg-white text-slate-600 border border-dashed border-slate-300 flex items-center gap-1"><Plus className="w-3 h-3" /> Folder</button>
+          )}
         </div>
       </div>
 
-      {/* Subfolder pills (only when subfolders exist for this category) */}
-      {subfolders.length > 1 && (
+      {isAdmin && showNewFolder && (
+        <div className="px-5 flex gap-2">
+          <input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="New folder name" className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <button onClick={submitNewFolder} className="px-4 py-2 rounded-full text-xs font-bold text-white flex-shrink-0" style={{ backgroundColor: COLORS.primary }}>Add folder</button>
+          <button onClick={() => { setShowNewFolder(false); setNewFolderName(""); }} className="px-3 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600 flex-shrink-0">Cancel</button>
+        </div>
+      )}
+
+      {/* Subfolder pills (only when subfolders exist for this category). Coaches
+          always see the New subfolder button, even before the first one. */}
+      {(subfolders.length > 1 || isAdmin) && (
         <div className="overflow-x-auto px-5">
           <div className="flex gap-1.5 w-max">
             {subfolders.map((s) => (
               <button key={s} onClick={() => setSubfolder(s)} className={`px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${subfolder === s ? "text-white" : "bg-white text-slate-600 border border-slate-200"}`} style={subfolder === s ? { backgroundColor: COLORS.accent, color: "#fff" } : {}}>{s}</button>
             ))}
+            {isAdmin && (
+              <button onClick={() => { setShowNewSub((s) => !s); setFolderMsg(""); }} className="px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap bg-white text-slate-600 border border-dashed border-slate-300 flex items-center gap-1"><Plus className="w-3 h-3" /> Subfolder</button>
+            )}
           </div>
         </div>
       )}
 
+      {isAdmin && showNewSub && (
+        <div className="px-5 flex gap-2">
+          <input value={newSubName} onChange={(e) => setNewSubName(e.target.value)} placeholder={`New subfolder in ${cat}`} className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <button onClick={submitNewSubfolder} className="px-4 py-2 rounded-full text-xs font-bold text-white flex-shrink-0" style={{ backgroundColor: COLORS.primary }}>Add subfolder</button>
+          <button onClick={() => { setShowNewSub(false); setNewSubName(""); }} className="px-3 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600 flex-shrink-0">Cancel</button>
+        </div>
+      )}
+
       <div className="px-5">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">{cat}{subfolder !== "All" ? ` · ${subfolder}` : ""}</h3>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">{cat}{subfolder !== "All" ? ` · ${subfolder}` : ""}</h3>
+          {isAdmin && managedFolder && !renaming && (
+            <div className="flex gap-1.5 flex-shrink-0">
+              <button onClick={() => { setRenameName(managedFolder.name); setRenaming(true); setFolderMsg(""); }} className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-slate-600 flex items-center gap-1"><Pencil className="w-3 h-3" /> Rename</button>
+              <button onClick={deleteManagedFolder} className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-red-500 flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</button>
+            </div>
+          )}
+        </div>
+        {isAdmin && renaming && managedFolder && (
+          <div className="flex gap-2 mb-3">
+            <input value={renameName} onChange={(e) => setRenameName(e.target.value)} placeholder="Folder name" className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+            <button onClick={submitRename} className="px-4 py-2 rounded-full text-xs font-bold text-white flex-shrink-0" style={{ backgroundColor: COLORS.primary }}>Save</button>
+            <button onClick={() => setRenaming(false)} className="px-3 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600 flex-shrink-0">Cancel</button>
+          </div>
+        )}
+        {folderMsg && <p className="text-[11px] font-semibold text-slate-600 mb-3">{folderMsg}</p>}
         {filtered.length === 0 ? <p className="text-sm text-slate-400 italic">Nothing here yet.</p> : (
           <div className="grid grid-cols-2 gap-3">
             {filtered.map((v) => {
@@ -8535,6 +8666,32 @@ export default function TeamHubRolesApp() {
     await batch.commit();
   };
 
+  // Video folders (Videos & Links under Training): coach-created top-level
+  // folders and subfolders. Shared across all three teams, like the videos
+  // themselves (no teamId). A folder doc is { name, parent, createdAt }.
+  // parent is null for a top-level folder, or the parent folder's name for
+  // a subfolder. The six built-in folders (VIDEO_CATS) always show; custom
+  // folders from here join them.
+  const videoFolderDocs = useCollection(lockedOut ? null : ("videoFolders"), orderBy("name"));
+  const addVideoFolder = (name, parent) =>
+    addDoc(collection(db, "videoFolders"), { name: name.trim(), parent: parent || null, createdAt: serverTimestamp() });
+  const deleteVideoFolder = (id) => deleteDoc(doc(db, "videoFolders", id));
+  // Renaming a folder moves everything filed under it: the videos in it and,
+  // for a top-level folder, its subfolders are re-filed under the new name
+  // in the same batch, so nothing is ever orphaned.
+  const renameVideoFolder = async (folder, newName) => {
+    const name = newName.trim();
+    const batch = writeBatch(db);
+    batch.update(doc(db, "videoFolders", folder.id), { name });
+    if (!folder.parent) {
+      videos.filter((v) => v.cat === folder.name).forEach((v) => batch.update(doc(db, "videos", v.id), { cat: name }));
+      videoFolderDocs.filter((f) => f.parent === folder.name).forEach((f) => batch.update(doc(db, "videoFolders", f.id), { parent: name }));
+    } else {
+      videos.filter((v) => v.cat === folder.parent && v.subfolder === folder.name).forEach((v) => batch.update(doc(db, "videos", v.id), { subfolder: name }));
+    }
+    await batch.commit();
+  };
+
   // Drill library — building blocks for the Practice page (same CRUD as videos).
   // ONE shared library: the `drillLibrary` collection is read and written by
   // this app AND the standalone Drill Library site — a drill made in either
@@ -9345,7 +9502,7 @@ export default function TeamHubRolesApp() {
                 <div className="px-5 pt-4 pb-1"><button onClick={() => setTrainView(null)} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> Train</button></div>
                 {trainView === "gym" && <GymPage user={effUser} myWorkouts={myWorkouts} addMyWorkout={addMyWorkout} updateMyWorkout={updateMyWorkout} deleteMyWorkout={deleteMyWorkout} teamWorkouts={teamWorkouts} addTeamWorkout={addTeamWorkout} updateTeamWorkout={updateTeamWorkout} deleteTeamWorkout={deleteTeamWorkout} customExercises={customExercises} addCustomExercise={addCustomExercise} updateCustomExercise={updateCustomExercise} deleteCustomExercise={deleteCustomExercise} seedLifts={seedLifts} seedTeamWorkouts={seedTeamWorkouts} />}
                 {trainView === "nutrition" && <NutritionPage user={effUser} recipes={recipes} addRecipe={addRecipe} updateRecipe={updateRecipe} deleteRecipe={deleteRecipe} importRecipes={importRecipes} seedRecipes={seedRecipes} categories={categories} addCategory={addCategory} logged={logged} addLog={addLog} updateLog={updateLog} deleteLog={deleteLog} waterCups={waterCups} setWaterCups={setWaterCups} myNutritionGoal={myNutritionGoal} myNutritionTotals={myNutritionTotals} saveMyNutritionGoal={saveMyNutritionGoal} clearMyNutritionGoal={clearMyNutritionGoal} savedFoods={savedFoods} addSavedFood={addSavedFood} deleteSavedFood={deleteSavedFood} />}
-                {trainView === "videos" && <VideosPage user={effUser} videos={videos} addVideo={addVideo} updateVideo={updateVideo} deleteVideo={deleteVideo} importVideos={importVideos} />}
+                {trainView === "videos" && <VideosPage user={effUser} videos={videos} addVideo={addVideo} updateVideo={updateVideo} deleteVideo={deleteVideo} importVideos={importVideos} videoFolders={videoFolderDocs} addVideoFolder={addVideoFolder} renameVideoFolder={renameVideoFolder} deleteVideoFolder={deleteVideoFolder} />}
               </div>
             ) : <TrainHub onPick={setTrainView} />
           )}
