@@ -2308,9 +2308,9 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
 };
 
 /* ─── VIDEOS (categorized library, original style) ─── */
-const VIDEO_CSV_TEMPLATE = `title,url,cat,dur,diff,desc,type
-10 Min Breathwork for Athletes,https://www.youtube.com/watch?v=n34DBL-dZNU,Breathing,10 min,Easy,"Focus + flow state breathwork",video
-Soccer Hip Mobility Routine,https://www.youtube.com/watch?v=5NN9SuYO2YU,Mobility,5 min,Easy,"Quick pre-game hip prep",video`;
+const VIDEO_CSV_TEMPLATE = `title,url,cat,dur,diff,desc,type,subfolder
+10 Min Breathwork for Athletes,https://www.youtube.com/watch?v=n34DBL-dZNU,Breathing,10 min,Easy,"Focus + flow state breathwork",video,
+Soccer Hip Mobility Routine,https://www.youtube.com/watch?v=5NN9SuYO2YU,Mobility,5 min,Easy,"Quick pre-game hip prep",video,`;
 
 const parseVideoCSV = (text) => {
   const lines = text.trim().split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith("#"));
@@ -2334,6 +2334,7 @@ const parseVideoCSV = (text) => {
       diff: validDiff((c[4] || "").trim()),
       desc: (c[5] || "").trim(),
       type: validType((c[6] || "video").trim()),
+      subfolder: (c[7] || "").trim(),
     };
   }).filter((r) => r.title && r.url);
 };
@@ -2455,7 +2456,7 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
   const doImport = async () => {
     setImportMsg("");
     const rows = parseVideoCSV(csvText);
-    if (!rows.length) { setImportMsg("No valid rows — needs title,url,cat,dur,diff,desc,type."); return; }
+    if (!rows.length) { setImportMsg("No valid rows. Needs title,url,cat,dur,diff,desc,type,subfolder."); return; }
     // Folders named in the sheet that do not exist yet are created first,
     // same as recipe categories on import.
     const newCats = [...new Set(rows.map((r) => r.cat))].filter((c) => c && !effectiveCats.some((e) => e.toLowerCase() === c.toLowerCase()));
@@ -2510,7 +2511,7 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
           </div>
           {importMsg && <p className="text-[10px] font-semibold px-1" style={{ color: importMsg.startsWith("Imported") ? COLORS.success : "#dc2626" }}>{importMsg}</p>}
           <p className="text-[10px] text-slate-400 leading-relaxed px-1">
-            Columns: <span className="font-mono">title,url,cat,dur,diff,desc,type</span>. <span className="font-semibold">cat</span> is a folder name. New folders are created automatically. <span className="font-semibold">diff</span> Easy/Medium/Hard. <span className="font-semibold">type</span> video/audio/external. Wrap descriptions containing commas in "quotes".
+            Columns: <span className="font-mono">title,url,cat,dur,diff,desc,type,subfolder</span>. <span className="font-semibold">cat</span> is a folder name. New folders are created automatically. <span className="font-semibold">subfolder</span> is optional, the name of a subfolder inside that folder, blank for none. <span className="font-semibold">diff</span> Easy/Medium/Hard. <span className="font-semibold">type</span> video/audio/external. Wrap descriptions containing commas in "quotes".
           </p>
         </div></div>
       )}
