@@ -40,13 +40,13 @@ service firebase.storage {
         : myTeamIds().hasAny(other.get('teamIds', []));
     }
 
-    // Chat images. Path shape: chat/{teamId}/{channel}/{uid}/{filename},
+    // Chat images, videos and files. Path shape: chat/{teamId}/{channel}/{uid}/{filename},
     // where channel is the chatGroup id ("team" = the team's main channel).
     // The team segment is what isolates the three Brophy teams: a caller can
-    // only read/write images under a team they're on. Reads are additionally
-    // gated to the channel's audience so images in a hidden channel stay
-    // private, matching the message rules. Uploader writes their own folder
-    // (image, max 10MB).
+    // only read/write under a team they're on. Reads are additionally
+    // gated to the channel's audience so files in a hidden channel stay
+    // private, matching the message rules. Uploader writes their own folder.
+    // Size caps: images 10 MB, videos 100 MB, documents 25 MB.
     match /chat/{teamId}/{channel}/{uid}/{filename} {
       allow read: if request.auth != null && isMemberOfTeam(teamId) && (
         channel == 'team'
@@ -57,8 +57,11 @@ service firebase.storage {
       allow write: if request.auth != null
         && isMemberOfTeam(teamId)
         && request.auth.uid == uid
-        && request.resource.size < 10 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && (
+          (request.resource.contentType.matches('image/.*') && request.resource.size < 10 * 1024 * 1024)
+          || (request.resource.contentType.matches('video/.*') && request.resource.size < 100 * 1024 * 1024)
+          || (request.resource.contentType.matches('application/(pdf|msword|vnd\\.ms-(excel|powerpoint)|vnd\\.openxmlformats-officedocument\\.(wordprocessingml\\.document|spreadsheetml\\.sheet|presentationml\\.presentation)|rtf)|text/(plain|csv|rtf)') && request.resource.size < 25 * 1024 * 1024)
+        );
     }
 
     // Legacy chat images uploaded before team-scoped paths existed
