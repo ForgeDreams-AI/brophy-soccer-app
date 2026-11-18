@@ -1,0 +1,1635 @@
+[
+ {
+  "title": "Preseason session #1: passing patterns, fitness, combination play to goal",
+  "drive_file": "Preseason session #1.pdf",
+  "local_file": "pdfs/Preseason_session_1.pdf",
+  "whole_name": "Preseason session #1: passing patterns, fitness, combination play to goal",
+  "screen_count": 5,
+  "surviving_screens": 5,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Dynamic Warm-Up and Static Stretch",
+    "tags": [
+     "Preseason",
+     "Session 1"
+    ],
+    "orig_index": 0,
+    "survives": true,
+    "apply_name": "Dynamic Warm-Up and Static Stretch"
+   },
+   {
+    "n": 2,
+    "name": "5v2 Rondo",
+    "tags": [
+     "Preseason",
+     "Session 1"
+    ],
+    "orig_index": 1,
+    "survives": true,
+    "apply_name": "5v2 Rondo"
+   },
+   {
+    "n": 3,
+    "name": "Fitness Load Dribbling and Running",
+    "tags": [
+     "Preseason",
+     "Session 1"
+    ],
+    "orig_index": 2,
+    "survives": true,
+    "apply_name": "Fitness Load Dribbling and Running"
+   },
+   {
+    "n": 4,
+    "name": "3rd Man Combination to Goal",
+    "tags": [
+     "Preseason",
+     "Session 1"
+    ],
+    "orig_index": 3,
+    "survives": true,
+    "apply_name": "3rd Man Combination to Goal"
+   },
+   {
+    "n": 5,
+    "name": "7v7 Game",
+    "tags": [
+     "Preseason",
+     "Session 1"
+    ],
+    "orig_index": 4,
+    "survives": true,
+    "apply_name": "7v7 Game"
+   }
+  ]
+ },
+ {
+  "title": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness base and feel for playing",
+  "drive_file": "Preseason session #2 Passing patterns, 3rd man runs, building a fitness base and feel for playing.pdf",
+  "local_file": "pdfs/Preseason_session_2_Passing_patterns_3rd_man_runs_building_a_fitness_base_and_feel_for_playing.pdf",
+  "whole_name": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness base and feel for playing",
+  "screen_count": 4,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Three-Player Passing Pattern",
+    "tags": [
+     "Preseason",
+     "Session 2"
+    ],
+    "orig_index": 6,
+    "survives": true,
+    "apply_name": "Three-Player Passing Pattern"
+   },
+   {
+    "n": 2,
+    "name": "4v2 Rondo",
+    "tags": [
+     "Preseason",
+     "Session 2"
+    ],
+    "orig_index": 7,
+    "survives": true,
+    "apply_name": "4v2 Rondo"
+   },
+   {
+    "n": 3,
+    "name": "3rd Man Combination to Goal",
+    "tags": [
+     "Preseason",
+     "Session 2"
+    ],
+    "orig_index": 8,
+    "survives": false,
+    "apply_name": null
+   },
+   {
+    "n": 4,
+    "name": "6v6+GK Transitional Game",
+    "tags": [
+     "Preseason",
+     "Session 2"
+    ],
+    "orig_index": 9,
+    "survives": true,
+    "apply_name": "6v6+GK Transitional Game"
+   }
+  ]
+ },
+ {
+  "title": "Preseason session #3: passing, transitional rondos, flying changes",
+  "drive_file": "Preseason_session__3__passing__transitional_rondos__flying_changes-2.pdf",
+  "local_file": "pdfs/Preseason_session__3__passing__transitional_rondos__flying_changes-2.pdf",
+  "whole_name": "Preseason session #3: passing, transitional rondos, flying changes",
+  "screen_count": 5,
+  "surviving_screens": 5,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Triangle Passing Pattern",
+    "tags": [
+     "Preseason",
+     "Session 3"
+    ],
+    "orig_index": 11,
+    "survives": true,
+    "apply_name": "Triangle Passing Pattern"
+   },
+   {
+    "n": 2,
+    "name": "5v2 Rondo with Pivot",
+    "tags": [
+     "Preseason",
+     "Session 3"
+    ],
+    "orig_index": 12,
+    "survives": true,
+    "apply_name": "5v2 Rondo with Pivot"
+   },
+   {
+    "n": 3,
+    "name": "Flying Changes",
+    "tags": [
+     "Preseason",
+     "Session 3"
+    ],
+    "orig_index": 13,
+    "survives": true,
+    "apply_name": "Flying Changes"
+   },
+   {
+    "n": 4,
+    "name": "4v4+4 Possession",
+    "tags": [
+     "Preseason",
+     "Session 3"
+    ],
+    "orig_index": 14,
+    "survives": true,
+    "apply_name": "4v4+4 Possession"
+   },
+   {
+    "n": 5,
+    "name": "6v6 Game",
+    "tags": [
+     "Preseason",
+     "Session 3"
+    ],
+    "orig_index": 15,
+    "survives": true,
+    "apply_name": "6v6 Game"
+   }
+  ]
+ },
+ {
+  "title": "Preseason session #4: Rondo, passing pattern, directional possession, and game",
+  "drive_file": "Preseason_session__4__Rondo__passing_pattern__directional_possession__and_game.pdf",
+  "local_file": "pdfs/Preseason_session__4__Rondo__passing_pattern__directional_possession__and_game.pdf",
+  "whole_name": "Preseason session #4: Rondo, passing pattern, directional possession, and game",
+  "screen_count": 4,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "3v1 Rondo",
+    "tags": [
+     "Preseason",
+     "Session 4"
+    ],
+    "orig_index": 17,
+    "survives": true,
+    "apply_name": "3v1 Rondo"
+   },
+   {
+    "n": 2,
+    "name": "Passing Pattern with Third Man - Play Where You Face",
+    "tags": [
+     "Preseason",
+     "Session 4"
+    ],
+    "orig_index": 18,
+    "survives": true,
+    "apply_name": "Passing Pattern with Third Man - Play Where You Face"
+   },
+   {
+    "n": 3,
+    "name": "4v4+4 Possession",
+    "tags": [
+     "Preseason",
+     "Session 4"
+    ],
+    "orig_index": 19,
+    "survives": false,
+    "apply_name": null
+   },
+   {
+    "n": 4,
+    "name": "11v11 Game",
+    "tags": [
+     "Preseason",
+     "Session 4"
+    ],
+    "orig_index": 20,
+    "survives": true,
+    "apply_name": "11v11 Game"
+   }
+  ]
+ },
+ {
+  "title": "Week 2: session #5 continue to build fitness base, while doing individual and small group activities",
+  "drive_file": "Week_2__session__5_continue_to_build_fitness_base__while_doing_individual_and_small_group_activities.pdf",
+  "local_file": "pdfs/Week_2__session__5_continue_to_build_fitness_base__while_doing_individual_and_small_group_activities.pdf",
+  "whole_name": "Week 2: session #5 continue to build fitness base, while doing individual and small group activities",
+  "screen_count": 4,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Three-Player Passing Pattern",
+    "tags": [
+     "Week 2",
+     "Session 5"
+    ],
+    "orig_index": 22,
+    "survives": false,
+    "apply_name": null
+   },
+   {
+    "n": 2,
+    "name": "3v3+2 Possession",
+    "tags": [
+     "Week 2",
+     "Session 5"
+    ],
+    "orig_index": 23,
+    "survives": true,
+    "apply_name": "3v3+2 Possession"
+   },
+   {
+    "n": 3,
+    "name": "3rd Man Combination",
+    "tags": [
+     "Week 2",
+     "Session 5"
+    ],
+    "orig_index": 24,
+    "survives": true,
+    "apply_name": "3rd Man Combination"
+   },
+   {
+    "n": 4,
+    "name": "5v5+GK Transitional Game",
+    "tags": [
+     "Week 2",
+     "Session 5"
+    ],
+    "orig_index": 25,
+    "survives": true,
+    "apply_name": "5v5+GK Transitional Game"
+   }
+  ]
+ },
+ {
+  "title": "Week 2: session #6 - continue to build fitness base, transitional possession games and play",
+  "drive_file": "Week_2__session__6___continue_to_build_fitness_base__transitional_possession_games_and_play.pdf",
+  "local_file": "pdfs/Week_2__session__6___continue_to_build_fitness_base__transitional_possession_games_and_play.pdf",
+  "whole_name": "Week 2: session #6 - continue to build fitness base, transitional possession games and play",
+  "screen_count": 4,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Passing Pattern Through the Midfield",
+    "tags": [
+     "Week 2",
+     "Session 6"
+    ],
+    "orig_index": 27,
+    "survives": true,
+    "apply_name": "Passing Pattern Through the Midfield"
+   },
+   {
+    "n": 2,
+    "name": "3v3+3 Transitional Possession",
+    "tags": [
+     "Week 2",
+     "Session 6"
+    ],
+    "orig_index": 28,
+    "survives": true,
+    "apply_name": "3v3+3 Transitional Possession"
+   },
+   {
+    "n": 3,
+    "name": "Flying Changes 1v0 to 4v3",
+    "tags": [
+     "Week 2",
+     "Session 6"
+    ],
+    "orig_index": 29,
+    "survives": true,
+    "apply_name": "Flying Changes 1v0 to 4v3"
+   },
+   {
+    "n": 4,
+    "name": "7v7 Game",
+    "tags": [
+     "Week 2",
+     "Session 6"
+    ],
+    "orig_index": 30,
+    "survives": false,
+    "apply_name": null
+   }
+  ]
+ },
+ {
+  "title": "Week 2: Session #7, dynamic warm up and SAQ, 5v2 rondo to 3v3+2, transitional game, and play 7v7",
+  "drive_file": "Week_2__Session__7__dynamic_warm_up_and_SAQ__5v2_rondo_to_3v3_2__transitional_game__and_play_7v7.pdf",
+  "local_file": "pdfs/Week_2__Session__7__dynamic_warm_up_and_SAQ__5v2_rondo_to_3v3_2__transitional_game__and_play_7v7.pdf",
+  "whole_name": "Week 2: Session #7, dynamic warm up and SAQ, 5v2 rondo to 3v3+2, transitional game, and play 7v7",
+  "screen_count": 4,
+  "surviving_screens": 2,
+  "screens": [
+   {
+    "n": 1,
+    "name": "5v2 Rondo Warm-Up",
+    "tags": [
+     "Week 2",
+     "Session 7"
+    ],
+    "orig_index": 32,
+    "survives": true,
+    "apply_name": "5v2 Rondo Warm-Up"
+   },
+   {
+    "n": 2,
+    "name": "3v3+3 Transitional Possession",
+    "tags": [
+     "Week 2",
+     "Session 7"
+    ],
+    "orig_index": 33,
+    "survives": false,
+    "apply_name": null
+   },
+   {
+    "n": 3,
+    "name": "Flying Changes 1v0 to 3v2",
+    "tags": [
+     "Week 2",
+     "Session 7"
+    ],
+    "orig_index": 34,
+    "survives": true,
+    "apply_name": "Flying Changes 1v0 to 3v2"
+   },
+   {
+    "n": 4,
+    "name": "7v7 Game",
+    "tags": [
+     "Week 2",
+     "Session 7"
+    ],
+    "orig_index": 35,
+    "survives": false,
+    "apply_name": null
+   }
+  ]
+ },
+ {
+  "title": "Week 2: Session #8 directional possession, combine to finish, pre season session",
+  "drive_file": "Week_2__Session__8_directional_possession__combine_to_finish__pre_season_session.pdf",
+  "local_file": "pdfs/Week_2__Session__8_directional_possession__combine_to_finish__pre_season_session.pdf",
+  "whole_name": "Week 2: Session #8 directional possession, combine to finish, pre season session",
+  "screen_count": 4,
+  "surviving_screens": 4,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Dynamic Warm-Up Rondo",
+    "tags": [
+     "Week 2",
+     "Session 8"
+    ],
+    "orig_index": 37,
+    "survives": true,
+    "apply_name": "Dynamic Warm-Up Rondo"
+   },
+   {
+    "n": 2,
+    "name": "5v5 + 3 Possession",
+    "tags": [
+     "Week 2",
+     "Session 8"
+    ],
+    "orig_index": 38,
+    "survives": true,
+    "apply_name": "5v5 + 3 Possession"
+   },
+   {
+    "n": 3,
+    "name": "3rd Man Combination to Finish",
+    "tags": [
+     "Week 2",
+     "Session 8"
+    ],
+    "orig_index": 39,
+    "survives": true,
+    "apply_name": "3rd Man Combination to Finish"
+   },
+   {
+    "n": 4,
+    "name": "11v11 Game (4-3-3)",
+    "tags": [
+     "Week 2",
+     "Session 8"
+    ],
+    "orig_index": 40,
+    "survives": true,
+    "apply_name": "11v11 Game (4-3-3)"
+   }
+  ]
+ },
+ {
+  "title": "Week 3: Session #12. Warm up then game. Emphasis on build up, breaking lines, and creating goals",
+  "drive_file": "Week_3__Session__12__Warm_up_then_game__Emphasis_on_build_up__breaking_lines__and_creating_goals.pdf",
+  "local_file": "pdfs/Week_3__Session__12__Warm_up_then_game__Emphasis_on_build_up__breaking_lines__and_creating_goals.pdf",
+  "whole_name": "Week 3: Session #12. Warm up then game. Emphasis on build up, breaking lines, and creating goals",
+  "screen_count": 2,
+  "surviving_screens": 1,
+  "screens": [
+   {
+    "n": 1,
+    "name": "4v4 + 3 Dynamic Warm-Up",
+    "tags": [
+     "Week 3",
+     "Session 12"
+    ],
+    "orig_index": 42,
+    "survives": true,
+    "apply_name": "4v4 + 3 Dynamic Warm-Up"
+   },
+   {
+    "n": 2,
+    "name": "11v11 Game (4-3-3)",
+    "tags": [
+     "Week 3",
+     "Session 12"
+    ],
+    "orig_index": 43,
+    "survives": false,
+    "apply_name": null
+   }
+  ]
+ },
+ {
+  "title": "Week 4: Session #13 - Counter pressing in the final third",
+  "drive_file": "Week_4__Session__13___Counter_pressing_in_the_final_third.pdf",
+  "local_file": "pdfs/Week_4__Session__13___Counter_pressing_in_the_final_third.pdf",
+  "whole_name": "Week 4: Session #13 - Counter pressing in the final third",
+  "screen_count": 4,
+  "surviving_screens": 4,
+  "screens": [
+   {
+    "n": 1,
+    "name": "4v2 Counter Press Rondo",
+    "tags": [
+     "Week 4",
+     "Session 13"
+    ],
+    "orig_index": 45,
+    "survives": true,
+    "apply_name": "4v2 Counter Press Rondo"
+   },
+   {
+    "n": 2,
+    "name": "4v4 + 3 Counter Press",
+    "tags": [
+     "Week 4",
+     "Session 13"
+    ],
+    "orig_index": 46,
+    "survives": true,
+    "apply_name": "4v4 + 3 Counter Press"
+   },
+   {
+    "n": 3,
+    "name": "6v6 + GK Transitional Fluid Game",
+    "tags": [
+     "Week 4",
+     "Session 13"
+    ],
+    "orig_index": 47,
+    "survives": true,
+    "apply_name": "6v6 + GK Transitional Fluid Game"
+   },
+   {
+    "n": 4,
+    "name": "11v11 Murder Ball",
+    "tags": [
+     "Week 4",
+     "Session 13"
+    ],
+    "orig_index": 48,
+    "survives": true,
+    "apply_name": "11v11 Murder Ball"
+   }
+  ]
+ },
+ {
+  "title": "Week 4: Session #14 Counter pressing in the middle third",
+  "drive_file": "Week_4__Session__14_Counter_pressing_in_the_middle_third.pdf",
+  "local_file": "pdfs/Week_4__Session__14_Counter_pressing_in_the_middle_third.pdf",
+  "whole_name": "Week 4: Session #14 Counter pressing in the middle third",
+  "screen_count": 3,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Team Handball Activation",
+    "tags": [
+     "Week 4",
+     "Session 14"
+    ],
+    "orig_index": 50,
+    "survives": true,
+    "apply_name": "Team Handball Activation"
+   },
+   {
+    "n": 2,
+    "name": "4v4 + 3 to 4 Counter Goals",
+    "tags": [
+     "Week 4",
+     "Session 14"
+    ],
+    "orig_index": 51,
+    "survives": true,
+    "apply_name": "4v4 + 3 to 4 Counter Goals"
+   },
+   {
+    "n": 3,
+    "name": "6v6 Round Robin Games",
+    "tags": [
+     "Week 4",
+     "Session 14"
+    ],
+    "orig_index": 52,
+    "survives": true,
+    "apply_name": "6v6 Round Robin Games"
+   }
+  ]
+ },
+ {
+  "title": "Week 4: Session #15 Counter pressing in the defensive third / building out",
+  "drive_file": "Week_4__Session_15_Counter_pressing_in_the_defensive_third___building_out.pdf",
+  "local_file": "pdfs/Week_4__Session_15_Counter_pressing_in_the_defensive_third___building_out.pdf",
+  "whole_name": "Week 4: Session #15 Counter pressing in the defensive third / building out",
+  "screen_count": 4,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "3v1 Warm-Up Rondo",
+    "tags": [
+     "Week 4",
+     "Session 15"
+    ],
+    "orig_index": 54,
+    "survives": true,
+    "apply_name": "3v1 Warm-Up Rondo"
+   },
+   {
+    "n": 2,
+    "name": "3v3 + 3 to 4 Counter Goals",
+    "tags": [
+     "Week 4",
+     "Session 15"
+    ],
+    "orig_index": 55,
+    "survives": true,
+    "apply_name": "3v3 + 3 to 4 Counter Goals"
+   },
+   {
+    "n": 3,
+    "name": "Building Out of the Back with Counter Press",
+    "tags": [
+     "Week 4",
+     "Session 15"
+    ],
+    "orig_index": 56,
+    "survives": true,
+    "apply_name": "Building Out of the Back with Counter Press"
+   },
+   {
+    "n": 4,
+    "name": "11v11 Game",
+    "tags": [
+     "Week 4",
+     "Session 15"
+    ],
+    "orig_index": 57,
+    "survives": false,
+    "apply_name": null
+   }
+  ]
+ },
+ {
+  "title": "Week 4: Session #16 Counter press in all three zones as a focus",
+  "drive_file": "Week_4__Session__16_Counter_press_in_all_three_zones_as_a_focus.pdf",
+  "local_file": "pdfs/Week_4__Session__16_Counter_press_in_all_three_zones_as_a_focus.pdf",
+  "whole_name": "Week 4: Session #16 Counter press in all three zones as a focus",
+  "screen_count": 2,
+  "surviving_screens": 0,
+  "screens": [
+   {
+    "n": 1,
+    "name": "4v4 + 3 Dynamic Warm-Up",
+    "tags": [
+     "Week 4",
+     "Session 16"
+    ],
+    "orig_index": 59,
+    "survives": false,
+    "apply_name": null
+   },
+   {
+    "n": 2,
+    "name": "11v11 Game (4-3-3)",
+    "tags": [
+     "Week 4",
+     "Session 16"
+    ],
+    "orig_index": 60,
+    "survives": false,
+    "apply_name": null
+   }
+  ]
+ },
+ {
+  "title": "Week 5: Session #17 high press organization off of opponent's goal kicks.",
+  "drive_file": "Week_5__Session__17_high_press_organization_off_of_opponent_s_goal_kicks_.pdf",
+  "local_file": "pdfs/Week_5__Session__17_high_press_organization_off_of_opponent_s_goal_kicks.pdf",
+  "whole_name": "Week 5: Session #17 high press organization off of opponent's goal kicks.",
+  "screen_count": 3,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "6v6 in Zones to 4 Goals",
+    "tags": [
+     "Week 5",
+     "Session 17"
+    ],
+    "orig_index": 62,
+    "survives": true,
+    "apply_name": "6v6 in Zones to 4 Goals"
+   },
+   {
+    "n": 2,
+    "name": "8v7 High Press in the Middle Third",
+    "tags": [
+     "Week 5",
+     "Session 17"
+    ],
+    "orig_index": 63,
+    "survives": true,
+    "apply_name": "8v7 High Press in the Middle Third"
+   },
+   {
+    "n": 3,
+    "name": "11v11 High Press off Goal Kicks",
+    "tags": [
+     "Week 5",
+     "Session 17"
+    ],
+    "orig_index": 64,
+    "survives": true,
+    "apply_name": "11v11 High Press off Goal Kicks"
+   }
+  ]
+ },
+ {
+  "title": "Week 5: Session 18. Defensive organization in the middle third to prevent penetration",
+  "drive_file": "Week_5__Session_18__Defensive_organization_in_the_middle_third_to_prevent_penetration.pdf",
+  "local_file": "pdfs/Week_5__Session_18__Defensive_organization_in_the_middle_third_to_prevent_penetration.pdf",
+  "whole_name": "Week 5: Session 18. Defensive organization in the middle third to prevent penetration",
+  "screen_count": 4,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Passing Pattern \u2014 3rd Man Involvement",
+    "tags": [
+     "Week 5",
+     "Session 18"
+    ],
+    "orig_index": 66,
+    "survives": true,
+    "apply_name": "Passing Pattern \u2014 3rd Man Involvement"
+   },
+   {
+    "n": 2,
+    "name": "6v6 in Zones to 4 Goals",
+    "tags": [
+     "Week 5",
+     "Session 18"
+    ],
+    "orig_index": 67,
+    "survives": false,
+    "apply_name": null
+   },
+   {
+    "n": 3,
+    "name": "8v7 in the Middle Third to Two Goals",
+    "tags": [
+     "Week 5",
+     "Session 18"
+    ],
+    "orig_index": 68,
+    "survives": true,
+    "apply_name": "8v7 in the Middle Third to Two Goals"
+   },
+   {
+    "n": 4,
+    "name": "11v11",
+    "tags": [
+     "Week 5",
+     "Session 18"
+    ],
+    "orig_index": 69,
+    "survives": true,
+    "apply_name": "11v11"
+   }
+  ]
+ },
+ {
+  "title": "Week 5: Session #19 - 3v3+2 and 4v4 tournament",
+  "drive_file": "Week_5__Session__19___3v3_2_and_4v4_tournament.pdf",
+  "local_file": "pdfs/Week_5__Session__19___3v3_2_and_4v4_tournament.pdf",
+  "whole_name": "Week 5: Session #19 - 3v3+2 and 4v4 tournament",
+  "screen_count": 2,
+  "surviving_screens": 1,
+  "screens": [
+   {
+    "n": 1,
+    "name": "3v3+2 (Week 5, Session 19)",
+    "tags": [
+     "Week 5",
+     "Session 19"
+    ],
+    "orig_index": 71,
+    "survives": false,
+    "apply_name": null
+   },
+   {
+    "n": 2,
+    "name": "4v4 Tournament",
+    "tags": [
+     "Week 5",
+     "Session 19"
+    ],
+    "orig_index": 72,
+    "survives": true,
+    "apply_name": "4v4 Tournament"
+   }
+  ]
+ },
+ {
+  "title": "Week 6: Session 20 - creating and finishing chances in the final 3rd",
+  "drive_file": "Week_6__Session_20___creating_and_finishing_chances_in_the_final_3rd.pdf",
+  "local_file": "pdfs/Week_6__Session_20___creating_and_finishing_chances_in_the_final_3rd.pdf",
+  "whole_name": "Week 6: Session 20 - creating and finishing chances in the final 3rd",
+  "screen_count": 3,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "3v3+2 to Two Counter Goals",
+    "tags": [
+     "Week 6",
+     "Session 20"
+    ],
+    "orig_index": 74,
+    "survives": true,
+    "apply_name": "3v3+2 to Two Counter Goals"
+   },
+   {
+    "n": 2,
+    "name": "7v7+1 Runs in Behind",
+    "tags": [
+     "Week 6",
+     "Session 20"
+    ],
+    "orig_index": 75,
+    "survives": true,
+    "apply_name": "7v7+1 Runs in Behind"
+   },
+   {
+    "n": 3,
+    "name": "7v7+1 Regular Game with Offsides",
+    "tags": [
+     "Week 6",
+     "Session 20"
+    ],
+    "orig_index": 76,
+    "survives": true,
+    "apply_name": "7v7+1 Regular Game with Offsides"
+   }
+  ]
+ },
+ {
+  "title": "Week 6: Session #21 - 4v4 + 3 and 6v6 tournament to big goals",
+  "drive_file": "Week_6__Session__21___4v4___3_and_6v6_tournament_to_big_goals.pdf",
+  "local_file": "pdfs/Week_6__Session__21___4v4___3_and_6v6_tournament_to_big_goals.pdf",
+  "whole_name": "Week 6: Session #21 - 4v4 + 3 and 6v6 tournament to big goals",
+  "screen_count": 2,
+  "surviving_screens": 2,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Activation and 4v4+3",
+    "tags": [
+     "Week 6",
+     "Session 21"
+    ],
+    "orig_index": 78,
+    "survives": true,
+    "apply_name": "Activation and 4v4+3"
+   },
+   {
+    "n": 2,
+    "name": "5v5+GKs Round Robin Tournament",
+    "tags": [
+     "Week 6",
+     "Session 21"
+    ],
+    "orig_index": 79,
+    "survives": true,
+    "apply_name": "5v5+GKs Round Robin Tournament"
+   }
+  ]
+ },
+ {
+  "title": "Week 6: Session #22 - exploit numerical advantage in the final third",
+  "drive_file": "Week_6__Session_22___exploit_numerical_advantage_in_the_final_third.pdf",
+  "local_file": "pdfs/Week_6__Session_22___exploit_numerical_advantage_in_the_final_third.pdf",
+  "whole_name": "Week 6: Session #22 - exploit numerical advantage in the final third",
+  "screen_count": 4,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Activation \u2014 Tag Games and Directional Sprinting",
+    "tags": [
+     "Week 6",
+     "Session 22"
+    ],
+    "orig_index": 81,
+    "survives": true,
+    "apply_name": "Activation \u2014 Tag Games and Directional Sprinting"
+   },
+   {
+    "n": 2,
+    "name": "4v2 Rondo",
+    "tags": [
+     "Week 6",
+     "Session 22"
+    ],
+    "orig_index": 82,
+    "survives": false,
+    "apply_name": null
+   },
+   {
+    "n": 3,
+    "name": "Flying Changes \u2014 3v2 in the Attacking Third",
+    "tags": [
+     "Week 6",
+     "Session 22"
+    ],
+    "orig_index": 83,
+    "survives": true,
+    "apply_name": "Flying Changes \u2014 3v2 in the Attacking Third"
+   },
+   {
+    "n": 4,
+    "name": "11v11 \u2014 Attack Quickly and Exploit Numerical Advantage",
+    "tags": [
+     "Week 6",
+     "Session 22"
+    ],
+    "orig_index": 84,
+    "survives": true,
+    "apply_name": "11v11 \u2014 Attack Quickly and Exploit Numerical Advantage"
+   }
+  ]
+ },
+ {
+  "title": "Week 6: Session #23 - 4v4+3 to warm up then 11v11",
+  "drive_file": "Week_6__Session__23___4v4_3_to_warm_up_then_11v11.pdf",
+  "local_file": "pdfs/Week_6__Session__23___4v4_3_to_warm_up_then_11v11.pdf",
+  "whole_name": "Week 6: Session #23 - 4v4+3 to warm up then 11v11",
+  "screen_count": 2,
+  "surviving_screens": 1,
+  "screens": [
+   {
+    "n": 1,
+    "name": "4v4+3 Warm-Up",
+    "tags": [
+     "Week 6",
+     "Session 23"
+    ],
+    "orig_index": 86,
+    "survives": true,
+    "apply_name": "4v4+3 Warm-Up"
+   },
+   {
+    "n": 2,
+    "name": "11v11",
+    "tags": [
+     "Week 6",
+     "Session 23"
+    ],
+    "orig_index": 87,
+    "survives": false,
+    "apply_name": null
+   }
+  ]
+ },
+ {
+  "title": "Week 7: Session #24 - transition D--A from the midfield third",
+  "drive_file": "Week_7__Session__24___transition_D__A_from_the_midfield_third.pdf",
+  "local_file": "pdfs/Week_7__Session__24___transition_D__A_from_the_midfield_third.pdf",
+  "whole_name": "Week 7: Session #24 - transition D--A from the midfield third",
+  "screen_count": 4,
+  "surviving_screens": 4,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Activation \u2014 Tag, Penny and Reaction Games",
+    "tags": [
+     "Week 7",
+     "Session 24"
+    ],
+    "orig_index": 89,
+    "survives": true,
+    "apply_name": "Activation \u2014 Tag, Penny and Reaction Games"
+   },
+   {
+    "n": 2,
+    "name": "4v2 Four-Color Rondo",
+    "tags": [
+     "Week 7",
+     "Session 24"
+    ],
+    "orig_index": 90,
+    "survives": true,
+    "apply_name": "4v2 Four-Color Rondo"
+   },
+   {
+    "n": 3,
+    "name": "4v4 to Goal \u2014 Exploit Numerical Superiority",
+    "tags": [
+     "Week 7",
+     "Session 24"
+    ],
+    "orig_index": 91,
+    "survives": true,
+    "apply_name": "4v4 to Goal \u2014 Exploit Numerical Superiority"
+   },
+   {
+    "n": 4,
+    "name": "Free Kicks",
+    "tags": [
+     "Week 7",
+     "Session 24"
+    ],
+    "orig_index": 92,
+    "survives": true,
+    "apply_name": "Free Kicks"
+   }
+  ]
+ },
+ {
+  "title": "Week 7: Session #25 - possession based offensive organization",
+  "drive_file": "Week_7__Session__25___possession_based_offensive_organization_.pdf",
+  "local_file": "pdfs/Week_7__Session__25___possession_based_offensive_organization.pdf",
+  "whole_name": "Week 7: Session #25 - possession based offensive organization",
+  "screen_count": 4,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "3v1 Rondo Activation",
+    "tags": [
+     "Week 7",
+     "Session 25"
+    ],
+    "orig_index": 94,
+    "survives": true,
+    "apply_name": "3v1 Rondo Activation"
+   },
+   {
+    "n": 2,
+    "name": "5v5+3 Possession",
+    "tags": [
+     "Week 7",
+     "Session 25"
+    ],
+    "orig_index": 95,
+    "survives": true,
+    "apply_name": "5v5+3 Possession"
+   },
+   {
+    "n": 3,
+    "name": "7v6 Build-Up in Each Half",
+    "tags": [
+     "Week 7",
+     "Session 25"
+    ],
+    "orig_index": 96,
+    "survives": true,
+    "apply_name": "7v6 Build-Up in Each Half"
+   },
+   {
+    "n": 4,
+    "name": "11v11 Game",
+    "tags": [
+     "Week 7",
+     "Session 25"
+    ],
+    "orig_index": 97,
+    "survives": false,
+    "apply_name": null
+   }
+  ]
+ },
+ {
+  "title": "Week 7: Session #26 positional play games",
+  "drive_file": "Week_7__Session__26_positional_play_games.pdf",
+  "local_file": "pdfs/Week_7__Session__26_positional_play_games.pdf",
+  "whole_name": "Week 7: Session #26 positional play games",
+  "screen_count": 3,
+  "surviving_screens": 2,
+  "screens": [
+   {
+    "n": 1,
+    "name": "3v3+2 Possession",
+    "tags": [
+     "Week 7",
+     "Session 26"
+    ],
+    "orig_index": 99,
+    "survives": false,
+    "apply_name": null
+   },
+   {
+    "n": 2,
+    "name": "6v6 to 4 Goals",
+    "tags": [
+     "Week 7",
+     "Session 26"
+    ],
+    "orig_index": 100,
+    "survives": true,
+    "apply_name": "6v6 to 4 Goals"
+   },
+   {
+    "n": 3,
+    "name": "9v9 Round Robin",
+    "tags": [
+     "Week 7",
+     "Session 26"
+    ],
+    "orig_index": 101,
+    "survives": true,
+    "apply_name": "9v9 Round Robin"
+   }
+  ]
+ },
+ {
+  "title": "Week 7: Session #27 3v3+2 and 11v11",
+  "drive_file": "Week_7__Session__27_3v3_2_and_11v11.pdf",
+  "local_file": "pdfs/Week_7__Session__27_3v3_2_and_11v11.pdf",
+  "whole_name": "Week 7: Session #27 3v3+2 and 11v11",
+  "screen_count": 2,
+  "surviving_screens": 1,
+  "screens": [
+   {
+    "n": 1,
+    "name": "3v3+2 Dynamic Warm-Up",
+    "tags": [
+     "Week 7",
+     "Session 27"
+    ],
+    "orig_index": 103,
+    "survives": true,
+    "apply_name": "3v3+2 Dynamic Warm-Up"
+   },
+   {
+    "n": 2,
+    "name": "11v11 Game (4-3-3)",
+    "tags": [
+     "Week 7",
+     "Session 27"
+    ],
+    "orig_index": 104,
+    "survives": false,
+    "apply_name": null
+   }
+  ]
+ },
+ {
+  "title": "Week 8: Session 28 recovery session",
+  "drive_file": "Week_8__Session_28_recovery_session.pdf",
+  "local_file": "pdfs/Week_8__Session_28_recovery_session.pdf",
+  "whole_name": "Week 8: Session 28 recovery session",
+  "screen_count": 3,
+  "surviving_screens": 2,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Passing Pattern Warm-Up",
+    "tags": [
+     "Week 8",
+     "Session 28"
+    ],
+    "orig_index": 106,
+    "survives": true,
+    "apply_name": "Passing Pattern Warm-Up"
+   },
+   {
+    "n": 2,
+    "name": "4v4+4 Possession",
+    "tags": [
+     "Week 8",
+     "Session 28"
+    ],
+    "orig_index": 107,
+    "survives": false,
+    "apply_name": null
+   },
+   {
+    "n": 3,
+    "name": "7v7 in a Tight Space",
+    "tags": [
+     "Week 8",
+     "Session 28"
+    ],
+    "orig_index": 108,
+    "survives": true,
+    "apply_name": "7v7 in a Tight Space"
+   }
+  ]
+ },
+ {
+  "title": "Week 8: Session #29 MD-1 session positional play activities",
+  "drive_file": "Week_8__Session_29_MD_1_session_positional_play_activities.pdf",
+  "local_file": "pdfs/Week_8__Session_29_MD_1_session_positional_play_activities.pdf",
+  "whole_name": "Week 8: Session #29 MD-1 session positional play activities",
+  "screen_count": 3,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "4v1 Rondo",
+    "tags": [
+     "Week 8",
+     "Session 29",
+     "MD-1"
+    ],
+    "orig_index": 110,
+    "survives": true,
+    "apply_name": "4v1 Rondo"
+   },
+   {
+    "n": 2,
+    "name": "6v3 in a Hexagon",
+    "tags": [
+     "Week 8",
+     "Session 29",
+     "MD-1"
+    ],
+    "orig_index": 111,
+    "survives": true,
+    "apply_name": "6v3 in a Hexagon"
+   },
+   {
+    "n": 3,
+    "name": "11v11 in a Tight Space",
+    "tags": [
+     "Week 8",
+     "Session 29",
+     "MD-1"
+    ],
+    "orig_index": 112,
+    "survives": true,
+    "apply_name": "11v11 in a Tight Space"
+   }
+  ]
+ },
+ {
+  "title": "Week 8: Session #30 Building out of the back",
+  "drive_file": "Week_8__Session__30_Building_out_of_the_back.pdf",
+  "local_file": "pdfs/Week_8__Session__30_Building_out_of_the_back.pdf",
+  "whole_name": "Week 8: Session #30 Building out of the back",
+  "screen_count": 3,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Build-Out Passing Pattern Warm-Up",
+    "tags": [
+     "Week 8",
+     "Session 30"
+    ],
+    "orig_index": 114,
+    "survives": true,
+    "apply_name": "Build-Out Passing Pattern Warm-Up"
+   },
+   {
+    "n": 2,
+    "name": "4v4+3 Possession",
+    "tags": [
+     "Week 8",
+     "Session 30"
+    ],
+    "orig_index": 115,
+    "survives": true,
+    "apply_name": "4v4+3 Possession"
+   },
+   {
+    "n": 3,
+    "name": "10v9 Building Out of the Back to 11v11",
+    "tags": [
+     "Week 8",
+     "Session 30"
+    ],
+    "orig_index": 116,
+    "survives": true,
+    "apply_name": "10v9 Building Out of the Back to 11v11"
+   }
+  ]
+ },
+ {
+  "title": "Week 9: Session 31 - MD-1 - high press in the attacking third",
+  "drive_file": "Week_9__Session_31___MD_1___high_press_in_the_attacking_third-2.pdf",
+  "local_file": "pdfs/Week_9__Session_31___MD_1___high_press_in_the_attacking_third-2.pdf",
+  "whole_name": "Week 9: Session 31 - MD-1 - high press in the attacking third",
+  "screen_count": 4,
+  "surviving_screens": 4,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Dynamic Warm-Up",
+    "tags": [
+     "Week 9",
+     "Session 31",
+     "MD-1"
+    ],
+    "orig_index": 118,
+    "survives": true,
+    "apply_name": "Dynamic Warm-Up"
+   },
+   {
+    "n": 2,
+    "name": "Diamond Passing Pattern",
+    "tags": [
+     "Week 9",
+     "Session 31",
+     "MD-1"
+    ],
+    "orig_index": 119,
+    "survives": true,
+    "apply_name": "Diamond Passing Pattern"
+   },
+   {
+    "n": 3,
+    "name": "Positional Play 10v5 in Three Colors",
+    "tags": [
+     "Week 9",
+     "Session 31",
+     "MD-1"
+    ],
+    "orig_index": 120,
+    "survives": true,
+    "apply_name": "Positional Play 10v5 in Three Colors"
+   },
+   {
+    "n": 4,
+    "name": "11v11 Game \u2014 High Press",
+    "tags": [
+     "Week 9",
+     "Session 31",
+     "MD-1"
+    ],
+    "orig_index": 121,
+    "survives": true,
+    "apply_name": "11v11 Game \u2014 High Press"
+   }
+  ]
+ },
+ {
+  "title": "Week 9: Session 32 - MD+1 session for guys that did not play",
+  "drive_file": "Week_9__Session_32___MD_1_session_for_guys_that_did_not_play.pdf",
+  "local_file": "pdfs/Week_9__Session_32___MD_1_session_for_guys_that_did_not_play.pdf",
+  "whole_name": "Week 9: Session 32 - MD+1 session for guys that did not play",
+  "screen_count": 3,
+  "surviving_screens": 2,
+  "screens": [
+   {
+    "n": 1,
+    "name": "3v1",
+    "tags": [
+     "Week 9",
+     "Session 32",
+     "MD+1"
+    ],
+    "orig_index": 123,
+    "survives": true,
+    "apply_name": "3v1"
+   },
+   {
+    "n": 2,
+    "name": "3v3+2 (Week 9, Session 32, MD+1)",
+    "tags": [
+     "Week 9",
+     "Session 32",
+     "MD+1"
+    ],
+    "orig_index": 124,
+    "survives": false,
+    "apply_name": null
+   },
+   {
+    "n": 3,
+    "name": "5v5 + 2 Offensive Bumpers",
+    "tags": [
+     "Week 9",
+     "Session 32",
+     "MD+1"
+    ],
+    "orig_index": 125,
+    "survives": true,
+    "apply_name": "5v5 + 2 Offensive Bumpers"
+   }
+  ]
+ },
+ {
+  "title": "Week 9: Session 33 - MD-1 session",
+  "drive_file": "Week_9__Session_33___MD_1_session.pdf",
+  "local_file": "pdfs/Week_9__Session_33___MD_1_session.pdf",
+  "whole_name": "Week 9: Session 33 - MD-1 session",
+  "screen_count": 3,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Functional Activation",
+    "tags": [
+     "Week 9",
+     "Session 33",
+     "MD-1"
+    ],
+    "orig_index": 127,
+    "survives": true,
+    "apply_name": "Functional Activation"
+   },
+   {
+    "n": 2,
+    "name": "11v11+3 Possession",
+    "tags": [
+     "Week 9",
+     "Session 33",
+     "MD-1"
+    ],
+    "orig_index": 128,
+    "survives": true,
+    "apply_name": "11v11+3 Possession"
+   },
+   {
+    "n": 3,
+    "name": "11v11 Positional Understanding",
+    "tags": [
+     "Week 9",
+     "Session 33",
+     "MD-1"
+    ],
+    "orig_index": 129,
+    "survives": true,
+    "apply_name": "11v11 Positional Understanding"
+   }
+  ]
+ },
+ {
+  "title": "Week 9: Session 34 - MD-1 Session",
+  "drive_file": "Week_9__Session_34___MD_1_Session.pdf",
+  "local_file": "pdfs/Week_9__Session_34___MD_1_Session.pdf",
+  "whole_name": "Week 9: Session 34 - MD-1 Session",
+  "screen_count": 4,
+  "surviving_screens": 4,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Rondo 5v2",
+    "tags": [
+     "Week 9",
+     "Session 34",
+     "MD-1"
+    ],
+    "orig_index": 131,
+    "survives": true,
+    "apply_name": "Rondo 5v2"
+   },
+   {
+    "n": 2,
+    "name": "5v5+4 Positional Play",
+    "tags": [
+     "Week 9",
+     "Session 34",
+     "MD-1"
+    ],
+    "orig_index": 132,
+    "survives": true,
+    "apply_name": "5v5+4 Positional Play"
+   },
+   {
+    "n": 3,
+    "name": "Set Pieces",
+    "tags": [
+     "Week 9",
+     "Session 34",
+     "MD-1"
+    ],
+    "orig_index": 133,
+    "survives": true,
+    "apply_name": "Set Pieces"
+   },
+   {
+    "n": 4,
+    "name": "Shooting",
+    "tags": [
+     "Week 9",
+     "Session 34",
+     "MD-1"
+    ],
+    "orig_index": 134,
+    "survives": true,
+    "apply_name": "Shooting"
+   }
+  ]
+ },
+ {
+  "title": "Building out of the back. In possession in the defensive third of the field",
+  "drive_file": "Building_out_of_the_back__In_possession_in_the_defensive_third_of_the_field-2.pdf",
+  "local_file": "pdfs/Building_out_of_the_back__In_possession_in_the_defensive_third_of_the_field-2.pdf",
+  "whole_name": "Building out of the back. In possession in the defensive third of the field",
+  "screen_count": 3,
+  "surviving_screens": 2,
+  "screens": [
+   {
+    "n": 1,
+    "name": "3v3+2 Warm-Up",
+    "tags": [
+     "Preseason Session 2",
+     "Playing from back"
+    ],
+    "orig_index": 136,
+    "survives": true,
+    "apply_name": "3v3+2 Warm-Up"
+   },
+   {
+    "n": 2,
+    "name": "8v6 Build-Up to Three Counter Goals",
+    "tags": [
+     "Preseason Session 2",
+     "Playing from back"
+    ],
+    "orig_index": 137,
+    "survives": true,
+    "apply_name": "8v6 Build-Up to Three Counter Goals"
+   },
+   {
+    "n": 3,
+    "name": "11v11 Game",
+    "tags": [
+     "Preseason Session 2",
+     "Playing from back"
+    ],
+    "orig_index": 138,
+    "survives": false,
+    "apply_name": null
+   }
+  ]
+ },
+ {
+  "title": "Creating chances and finishing in the final third. Unbalancing the opponent and runs in behind",
+  "drive_file": "Creating_chances_and_finishing_in_the_final_third__Unbalancing_the_opponent_and_runs_in_behind.pdf",
+  "local_file": "pdfs/Creating_chances_and_finishing_in_the_final_third__Unbalancing_the_opponent_and_runs_in_behind.pdf",
+  "whole_name": "Creating chances and finishing in the final third. Unbalancing the opponent and runs in behind",
+  "screen_count": 4,
+  "surviving_screens": 3,
+  "screens": [
+   {
+    "n": 1,
+    "name": "Warm-Up 3v1",
+    "tags": [
+     "Week 3",
+     "Session 10"
+    ],
+    "orig_index": 140,
+    "survives": true,
+    "apply_name": "Warm-Up 3v1"
+   },
+   {
+    "n": 2,
+    "name": "Passing Pattern with a Finish on Goal",
+    "tags": [
+     "Week 3",
+     "Session 10"
+    ],
+    "orig_index": 141,
+    "survives": true,
+    "apply_name": "Passing Pattern with a Finish on Goal"
+   },
+   {
+    "n": 3,
+    "name": "7v7 to Two Goals",
+    "tags": [
+     "Week 3",
+     "Session 10"
+    ],
+    "orig_index": 142,
+    "survives": true,
+    "apply_name": "7v7 to Two Goals"
+   },
+   {
+    "n": 4,
+    "name": "11v11 Game",
+    "tags": [
+     "Week 3",
+     "Session 10"
+    ],
+    "orig_index": 143,
+    "survives": false,
+    "apply_name": null
+   }
+  ]
+ },
+ {
+  "title": "Unbalancing the opponent and building up in the middle third",
+  "drive_file": "Unbalancing_the_opponent_and_building_up_in_the_middle_third.pdf",
+  "local_file": "pdfs/Unbalancing_the_opponent_and_building_up_in_the_middle_third.pdf",
+  "whole_name": "Unbalancing the opponent and building up in the middle third",
+  "screen_count": 4,
+  "surviving_screens": 2,
+  "screens": [
+   {
+    "n": 1,
+    "name": "4v1 Rondo",
+    "tags": [
+     "Preseason Session 2",
+     "Middle third"
+    ],
+    "orig_index": 145,
+    "survives": false,
+    "apply_name": null
+   },
+   {
+    "n": 2,
+    "name": "Passing Pattern Using the Mids",
+    "tags": [
+     "Preseason Session 2",
+     "Middle third"
+    ],
+    "orig_index": 146,
+    "survives": true,
+    "apply_name": "Passing Pattern Using the Mids"
+   },
+   {
+    "n": 3,
+    "name": "7v6 Build-Up in the Middle",
+    "tags": [
+     "Preseason Session 2",
+     "Middle third"
+    ],
+    "orig_index": 147,
+    "survives": true,
+    "apply_name": "7v6 Build-Up in the Middle"
+   },
+   {
+    "n": 4,
+    "name": "11v11 Game",
+    "tags": [
+     "Preseason Session 2",
+     "Middle third"
+    ],
+    "orig_index": 148,
+    "survives": false,
+    "apply_name": null
+   }
+  ]
+ }
+]

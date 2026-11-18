@@ -1,14 +1,22 @@
 // One-off import for the Brophy session-PDF drills.
 //
 // Uploads the staged session PDFs to Firebase Storage
-// (drillPdfs/<anthonyUid>/<filename>), appends each PDF download URL to its
-// whole-session drill's `info`, and writes all drill docs from drills.json
+// (drillPdfs/<anthonyUid>/<filename>) and each drill's diagram image
+// (drills/<anthonyUid>/<filename>), appends each PDF download URL to its
+// whole-session drill's `info`, sets each individual drill's `diagram` to
+// its diagram download URL, and writes all drill docs from drills.json
 // into the shared `drillLibrary` collection (one library for JVB/JVA/Varsity).
 //
-// Run in Google Cloud Shell as logan.abele@forgedreams.ai with a throwaway
-// service-account key (created for this import, deleted right after):
+// KEYLESS: runs with a short-lived access token minted by impersonating the
+// throwaway service account drill-pdf-import@brophy-soccer-app.iam.gserviceaccount.com
+// (roles datastore.user + storage.objectAdmin + firebaseauth.viewer).
+// The token is minted in Cloud Shell as Logan with:
+//   gcloud auth print-access-token --impersonate-service-account=drill-pdf-import@brophy-soccer-app.iam.gserviceaccount.com
+// and passed here with --token. No service-account key file is created.
+// Run in Cloud Shell as logan.abele@forgedreams.ai from the run dir that
+// holds drills.json, staging-upload-list.json, pdfs/ and diagrams/:
 //
-//   node import.js --key ~/drill-import-key.json [--dry-run] [--force]
+//   node import.js --token <access-token> [--dry-run] [--force]
 //
 // --dry-run prints what would happen without uploading or writing anything.
 // Without --force, the script aborts if any payload drill name already
@@ -24,9 +32,9 @@ const crypto = require("crypto");
 const admin = require("firebase-admin");
 
 const DIR = __dirname;
-const PROJECT_ID = "brophy-soccer-app";
 const BUCKET = "brophy-soccer-app.firebasestorage.app";
 const ANTHONY_EMAIL = "anthonyhidalgo365@gmail.com";
+const SA_EMAIL = "drill-pdf-import@brophy-soccer-app.iam.gserviceaccount.com";
 
 function arg(name) {
   const i = process.argv.indexOf(name);
@@ -34,18 +42,31 @@ function arg(name) {
 }
 const hasFlag = (name) => process.argv.includes(name);
 
+function downloadUrl(dest, token) {
+  return (
+    `https://firebasestorage.googleapis.com/v0/b/${BUCKET}` +
+    `/o/${encodeURIComponent(dest)}?alt=media&token=${token}`
+  );
+}
+
 async function main() {
-  const keyPath = arg("--key");
+  const accessToken = arg("--token");
   const dryRun = hasFlag("--dry-run");
   const force = hasFlag("--force");
-  if (!keyPath) throw new Error("Missing --key <service-account-key.json>");
+  if (!accessToken) throw new Error("Missing --token <access-token> (mint with gcloud auth print-access-token --impersonate-service-account=" + SA_EMAIL + ")");
 
   const drills = JSON.parse(fs.readFileSync(path.join(DIR, "drills.json"), "utf8"));
   const staged = JSON.parse(fs.readFileSync(path.join(DIR, "staging-upload-list.json"), "utf8"));
   console.log(`Loaded ${drills.length} drill docs, ${staged.length} staged PDFs.`);
 
+  // Custom credential: the Admin SDK calls getAccessToken() for every
+  // request; the impersonated service-account token bypasses security
+  // rules exactly like a service-account key would — without a key file.
+  const tokenCredential = {
+    getAccessToken: async () => ({ access_token: accessToken, expires_in: 3600 }),
+  };
   admin.initializeApp({
-    credential: admin.credential.cert(require(path.resolve(keyPath))),
+    credential: tokenCredential,
     storageBucket: BUCKET,
   });
   const db = admin.firestore();
@@ -85,9 +106,7 @@ async function main() {
     const filename = path.basename(entry.local_file);
     const dest = `drillPdfs/${anthonyUid}/${filename}`;
     const token = crypto.randomUUID();
-    const url =
-      `https://firebasestorage.googleapis.com/v0/b/${BUCKET}` +
-      `/o/${encodeURIComponent(dest)}?alt=media&token=${token}`;
+    const url = downloadUrl(dest, token);
     if (dryRun) {
       console.log(`[dry-run] would upload ${entry.local_file} -> ${dest}`);
     } else {
@@ -117,6 +136,35 @@ async function main() {
   }
   console.log(`Patched ${patched} whole-session drills with PDF links.`);
 
+  // Upload diagram images, minting one download token per file, and set
+  // each drill's `diagram` to its download URL. diagramFile is a local
+  // staging marker only — it must NOT be written to Firestore.
+  let diagrams = 0;
+  for (const doc of drills) {
+    const diagramFile = doc.diagramFile;
+    if (!diagramFile) continue;
+    const localPath = path.join(DIR, diagramFile);
+    const filename = path.basename(diagramFile);
+    const dest = `drills/${anthonyUid}/${filename}`;
+    const token = crypto.randomUUID();
+    const url = downloadUrl(dest, token);
+    if (dryRun) {
+      console.log(`[dry-run] would upload diagram ${diagramFile} -> ${dest} for "${doc.name}"`);
+    } else {
+      await bucket.upload(localPath, {
+        destination: dest,
+        metadata: {
+          contentType: "image/jpeg",
+          metadata: { firebaseStorageDownloadTokens: token },
+        },
+      });
+    }
+    doc.diagram = url;
+    delete doc.diagramFile;
+    diagrams++;
+  }
+  console.log(`Attached ${diagrams} diagram images.`);
+
   // Convert timestamp markers + stamp createdByUid.
   for (const doc of drills) {
     for (const [k, v] of Object.entries(doc)) {
@@ -126,6 +174,7 @@ async function main() {
     // Firestore rejects undefined anywhere — fail loudly instead of writing a bad doc.
     const bad = Object.entries(doc).filter(([, v]) => v === undefined);
     if (bad.length) throw new Error(`Undefined field(s) in "${doc.name}": ${bad.map(([k]) => k).join(", ")}`);
+    if (doc.diagramFile !== undefined) throw new Error(`diagramFile marker leaked into "${doc.name}"`);
   }
 
   if (dryRun) {
@@ -133,7 +182,7 @@ async function main() {
     return;
   }
 
-  // Write in batches of 100 (batch limit is 500; 150 docs total).
+  // Write in batches of 100 (batch limit is 500; 127 docs total).
   const results = [];
   for (let i = 0; i < drills.length; i += 100) {
     const batch = db.batch();
