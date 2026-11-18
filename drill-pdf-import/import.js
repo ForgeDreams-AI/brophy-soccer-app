@@ -267,7 +267,7 @@ async function main() {
       results.push({ name: doc.name, id });
       return {
         update: {
-          name: `${FIRESTORE_BASE}/documents/drillLibrary/${id}`,
+          name: `projects/brophy-soccer-app/databases/(default)/documents/drillLibrary/${id}`,
           fields: toFields(doc),
         },
       };
