@@ -52,6 +52,7 @@ import { searchFoods, hasUsdaKey } from "./lib/usda";
 import { loadExercises, exerciseImageUrl } from "./lib/exercises";
 import { searchExercises } from "./lib/exerciseSearch";
 import { lookupBarcode, searchProducts } from "./lib/openfoodfacts";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import {
   notificationsSupported, currentPermission,
   enablePushNotifications, clearAllPushTokens, onForegroundMessage,
@@ -5203,7 +5204,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
   // the manual entry fields. (Food photo AI was removed — no photo flow.)
   const [formState, setFormState] = useState("idle"); // idle | uploading | done | error
   const [formNote, setFormNote] = useState("");
-  // Barcode scanner — uses browser BarcodeDetector + Open Food Facts lookup.
+  // Barcode scanner — html5-qrcode + Open Food Facts lookup.
   const [scannerOpen, setScannerOpen] = useState(false);
 
   const handleBarcode = async (code) => {
@@ -5740,57 +5741,62 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
 
 /* ─── BARCODE SCANNER MODAL ─── */
 const BarcodeScannerModal = ({ onClose, onScan }) => {
-  const videoRef = useRef(null);
   const [err, setErr] = useState("");
   const [ready, setReady] = useState(false);
+  const onScanRef = useRef(onScan);
+  useEffect(() => { onScanRef.current = onScan; });
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("BarcodeDetector" in window)) {
-      setErr("Your browser doesn't support barcode scanning. Try Chrome on Android or Safari 17+ on iOS.");
-      return;
-    }
     let cancelled = false;
-    let stream;
-    let frameId;
+    let scanner = null;
     (async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
+        scanner = new Html5Qrcode("brophy-barcode-scanner", {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.QR_CODE,
+          ],
+          // Never use the browser's native BarcodeDetector: Safari on iPhone
+          // does not support it, which is why the old scanner always failed
+          // there. The library's own decoder works wherever getUserMedia does.
+          useBarCodeDetectorIfSupported: false,
+          verbose: false,
         });
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10 },
+          (decodedText) => {
+            if (cancelled) return;
+            cancelled = true;
+            onScanRef.current(decodedText);
+          },
+          () => { /* per-frame misses are normal */ }
+        );
+        if (cancelled) {
+          // Unmounted while the camera was starting: release it.
+          scanner.stop().catch(() => {});
+          return;
         }
         setReady(true);
-        const detector = new window.BarcodeDetector({
-          formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "qr_code"],
-        });
-        const tick = async () => {
-          if (cancelled || !videoRef.current) return;
-          try {
-            const codes = await detector.detect(videoRef.current);
-            const code = codes.find((c) => c.rawValue);
-            if (code) {
-              cancelled = true;
-              onScan(code.rawValue);
-              return;
-            }
-          } catch { /* transient detect errors are fine */ }
-          frameId = requestAnimationFrame(tick);
-        };
-        tick();
       } catch (e) {
-        setErr("Couldn't access camera — " + (e.message || "permission denied?"));
+        if (!cancelled) setErr("Couldn't access camera - " + (e?.message || e || "permission denied?"));
       }
     })();
     return () => {
       cancelled = true;
-      if (frameId) cancelAnimationFrame(frameId);
-      if (stream) stream.getTracks().forEach((t) => t.stop());
+      const s = scanner;
+      scanner = null;
+      if (s) {
+        // stop() throws when the camera never started; clear() frees the view.
+        s.stop().catch(() => {}).finally(() => { try { s.clear(); } catch { /* already cleared */ } });
+      }
     };
-  }, [onScan]);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
@@ -5804,7 +5810,7 @@ const BarcodeScannerModal = ({ onClose, onScan }) => {
             <div className="absolute inset-0 flex items-center justify-center text-white text-sm px-6 text-center">{err}</div>
           ) : (
             <>
-              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+              <div id="brophy-barcode-scanner" className="w-full h-full" />
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-3/4 h-20 border-2 rounded-lg" style={{ borderColor: COLORS.accent, boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)" }} />
               </div>
