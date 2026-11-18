@@ -4682,11 +4682,19 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
   const signedEmails = useMemo(() => new Set((allUsers || []).map((u) => (u.email || "").toLowerCase())), [allUsers]);
   const pendingCount = (invites || []).filter((inv) => inv.email && !signedEmails.has(inv.email.toLowerCase())).length;
 
+  // Players who joined through an invite link never get an invitedEmails
+  // entry, so they never showed in this list even though they are on the
+  // team. They are the signed-in team members (allUsers is already scoped
+  // to this team) with no matching invite email.
+  const invitedEmailsSet = useMemo(() => new Set((invites || []).map((inv) => (inv.email || "").toLowerCase())), [invites]);
+  const linkJoiners = useMemo(() => (allUsers || []).filter((u) => (u.email || u.name) && !invitedEmailsSet.has((u.email || "").toLowerCase())), [allUsers, invitedEmailsSet]);
+  const rosterTotal = (invites?.length || 0) + linkJoiners.length;
+
   return (
     <div className="pt-4 pb-6 px-5 space-y-4">
       <div>
         <h3 className="text-base font-bold text-slate-900">Roster &amp; Invites</h3>
-        <p className="text-xs text-slate-500 mt-0.5">{getTeam(activeTeamId).name} · {invites?.length || 0} on the roster{pendingCount > 0 ? ` · ${pendingCount} invite${pendingCount === 1 ? "" : "s"} still pending` : ""}</p>
+        <p className="text-xs text-slate-500 mt-0.5">{getTeam(activeTeamId).name} · {rosterTotal} on the roster{pendingCount > 0 ? ` · ${pendingCount} invite${pendingCount === 1 ? "" : "s"} still pending` : ""}</p>
       </div>
       {requestProfileUpdate && (
         <button onClick={async () => { try { await requestProfileUpdate(); toast("Sent — everyone will be asked to add their name."); } catch (e) { toast("Couldn't send — " + (e.message || "")); } }} className="w-full py-2 rounded-full text-[11px] font-bold uppercase tracking-wider border border-slate-200 bg-white text-slate-700 flex items-center justify-center gap-1.5">
@@ -4830,7 +4838,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
         )}
       </div>
 
-      {(!invites || invites.length === 0) ? (
+      {rosterTotal === 0 ? (
         <p className="text-sm text-slate-400 italic text-center py-3">No players on the roster yet.</p>
       ) : (
         <ul className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -4847,7 +4855,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
               }
             };
             return (
-              <li key={inv.id} className={`flex items-center gap-2 px-3 py-2.5 ${i < invites.length - 1 ? "border-b border-slate-100" : ""}`}>
+              <li key={inv.id} className={`flex items-center gap-2 px-3 py-2.5 ${i < rosterTotal - 1 ? "border-b border-slate-100" : ""}`}>
                 <span className="truncate flex-1">
                   {nameByEmail[inv.email]
                     ? <><span className="text-xs font-semibold text-slate-800">{nameByEmail[inv.email]}</span><span className="text-[10px] text-slate-400 ml-1.5">{inv.email}</span></>
@@ -4882,6 +4890,28 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
                 <button onClick={() => removeInvite(inv.id)} disabled={isSelf} title={isSelf ? "You can't remove yourself." : `Remove ${inv.email}`} aria-label={`Remove ${inv.email}`} className="text-slate-300 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
+              </li>
+            );
+          })}
+          {/* Players who joined through an invite link: they have a users
+              doc but no invitedEmails entry, so they are listed here with a
+              "Via link" tag. No role toggle and no remove button: they were
+              never invited by email, so there is no invite to change or
+              delete. */}
+          {linkJoiners.map((u, j) => {
+            const isCoach = u.role === "admin";
+            const displayName = (u.name || "").trim();
+            return (
+              <li key={u.id} className={`flex items-center gap-2 px-3 py-2.5 ${j < linkJoiners.length - 1 ? "border-b border-slate-100" : ""}`}>
+                <span className="truncate flex-1">
+                  {displayName
+                    ? <><span className="text-xs font-semibold text-slate-800">{displayName}</span>{u.email ? <span className="text-[10px] text-slate-400 ml-1.5">{u.email}</span> : null}</>
+                    : <span className="text-xs font-mono text-slate-700">{u.email}</span>}
+                </span>
+                <span title="Joined through an invite link." className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>Via link</span>
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={isCoach ? { backgroundColor: COLORS.primary, color: "white" } : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}>
+                  {isCoach ? "Coach" : "Player"}
+                </span>
               </li>
             );
           })}
