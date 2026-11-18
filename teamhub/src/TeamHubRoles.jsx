@@ -298,12 +298,12 @@ const seedEvents = [];
 const VIDEO_CATS = ["Film", "Breathing", "Stretching", "Mobility", "Strength", "Cooldown"];
 const CAT_ICON = { Film: Video, Breathing: Wind, Stretching: StretchHorizontal, Mobility: Activity, Strength: Dumbbell, Cooldown: Snowflake };
 
-// Drill library categories — Brophy's 17 tactical topics, in session-flow
+// Drill library categories — Brophy's 18 tactical topics, in session-flow
 // order: warm up, technique, passing, staples, possessions, attacking,
 // then the rest. Coaches can also add their own from the drill form; those
 // show in the filter once a drill uses them, but they are not part of this
 // built-in list.
-const DRILL_CATS = ["Warm up games", "Technique Drills", "Passing patterns", "Passing patterns to finish", "Staple Drills", "Possession in the middle third", "Possession in the final third", "Transitions to the final third", "Switching the point of attack", "Crossing", "Finishing", "Playing from back", "Transitions to the middle third", "Pressing when losing the ball", "Getting into shapes", "Line of confrontation", "Set pieces"];
+const DRILL_CATS = ["Warm up games", "Technique Drills", "Passing patterns", "Passing patterns to finish", "Staple Drills", "Possession in the middle third", "Possession in the final third", "Transitions to the final third", "Switching the point of attack", "Crossing", "Finishing", "Playing from back", "Transitions to the middle third", "Pressing when losing the ball", "Getting into shapes", "Line of confrontation", "Set pieces", "Full Practices"];
 const DRILL_CAT_ICON = {
   "Playing from back": Shield, "Transitions to the middle third": ArrowRight, "Possession in the middle third": Repeat,
   "Transitions to the final third": Zap, "Possession in the final third": Target, "Switching the point of attack": Shuffle,

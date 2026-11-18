@@ -9,7 +9,7 @@
 //   kind?: "drill" — anything else (e.g. legacy "point" coaching-point
 //     items from the old `drills` collection) is NOT a drill and is
 //     filtered out of every list
-//   cat: string — one of the drill categories (both apps list the same 17
+//   cat: string — one of the drill categories (both apps list the same 18
 //     built-ins; both add any cat a drill uses to the filter pills, so an
 //     unknown cat still renders and filters fine)
 //   tags?: string[]
