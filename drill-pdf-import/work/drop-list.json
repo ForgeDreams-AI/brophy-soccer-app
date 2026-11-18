@@ -1,0 +1,210 @@
+[
+ {
+  "index": 8,
+  "name": "3rd Man Combination to Goal",
+  "tags": [
+   "Preseason",
+   "Session 2"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 19,
+  "name": "4v4+4 Possession",
+  "tags": [
+   "Preseason",
+   "Session 4"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 22,
+  "name": "Three-Player Passing Pattern",
+  "tags": [
+   "Week 2",
+   "Session 5"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 30,
+  "name": "7v7 Game",
+  "tags": [
+   "Week 2",
+   "Session 6"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 33,
+  "name": "3v3+3 Transitional Possession",
+  "tags": [
+   "Week 2",
+   "Session 7"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 35,
+  "name": "7v7 Game",
+  "tags": [
+   "Week 2",
+   "Session 7"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 43,
+  "name": "11v11 Game (4-3-3)",
+  "tags": [
+   "Week 3",
+   "Session 12"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 57,
+  "name": "11v11 Game",
+  "tags": [
+   "Week 4",
+   "Session 15"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 59,
+  "name": "4v4 + 3 Dynamic Warm-Up",
+  "tags": [
+   "Week 4",
+   "Session 16"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 60,
+  "name": "11v11 Game (4-3-3)",
+  "tags": [
+   "Week 4",
+   "Session 16"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 67,
+  "name": "6v6 in Zones to 4 Goals",
+  "tags": [
+   "Week 5",
+   "Session 18"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 71,
+  "name": "3v3+2 (Week 5, Session 19)",
+  "tags": [
+   "Week 5",
+   "Session 19"
+  ],
+  "reason": "double of existing drillLibrary drill '3v3+2' (Anthony, 2026-11-10) \u2014 incoming copy dropped"
+ },
+ {
+  "index": 82,
+  "name": "4v2 Rondo",
+  "tags": [
+   "Week 6",
+   "Session 22"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 87,
+  "name": "11v11",
+  "tags": [
+   "Week 6",
+   "Session 23"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 97,
+  "name": "11v11 Game",
+  "tags": [
+   "Week 7",
+   "Session 25"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 99,
+  "name": "3v3+2 Possession",
+  "tags": [
+   "Week 7",
+   "Session 26"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 104,
+  "name": "11v11 Game (4-3-3)",
+  "tags": [
+   "Week 7",
+   "Session 27"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 107,
+  "name": "4v4+4 Possession",
+  "tags": [
+   "Week 8",
+   "Session 28"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 124,
+  "name": "3v3+2 (Week 9, Session 32, MD+1)",
+  "tags": [
+   "Week 9",
+   "Session 32",
+   "MD+1"
+  ],
+  "reason": "double of existing drillLibrary drill '3v3+2' (Anthony, 2026-11-10) \u2014 incoming copy dropped"
+ },
+ {
+  "index": 138,
+  "name": "11v11 Game",
+  "tags": [
+   "Preseason Session 2",
+   "Playing from back"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 143,
+  "name": "11v11 Game",
+  "tags": [
+   "Week 3",
+   "Session 10"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 145,
+  "name": "4v1 Rondo",
+  "tags": [
+   "Preseason Session 2",
+   "Middle third"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ },
+ {
+  "index": 148,
+  "name": "11v11 Game",
+  "tags": [
+   "Preseason Session 2",
+   "Middle third"
+  ],
+  "reason": "duplicate name \u2014 later copy dropped, kept first occurrence in drills.json order"
+ }
+]
