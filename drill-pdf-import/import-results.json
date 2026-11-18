@@ -1,0 +1,513 @@
+{
+  "importedAt": "2026-11-18T14:57:35.298Z",
+  "docs": [
+    {
+      "name": "Dynamic Warm-Up and Static Stretch",
+      "id": "1FBCoAbG2A0TPeWkssk5"
+    },
+    {
+      "name": "5v2 Rondo",
+      "id": "5Vahc3X775iKwBxTWXNn"
+    },
+    {
+      "name": "Fitness Load Dribbling and Running",
+      "id": "eOuzwDRYY5IcZLAnDMkp"
+    },
+    {
+      "name": "3rd Man Combination to Goal",
+      "id": "52SMSosGCpVMiTvCBZm5"
+    },
+    {
+      "name": "7v7 Game",
+      "id": "cwt8sesMaZOeknFLLC7g"
+    },
+    {
+      "name": "Preseason session #1: passing patterns, fitness, combination play to goal",
+      "id": "a8PchrlOOx9egYAoZ2Px"
+    },
+    {
+      "name": "Three-Player Passing Pattern",
+      "id": "JhtcHSZ6qDRcJAozmIXS"
+    },
+    {
+      "name": "4v2 Rondo",
+      "id": "h4zEJsxJ91vzbVeJdLxc"
+    },
+    {
+      "name": "6v6+GK Transitional Game",
+      "id": "GGRH43HsCbDMEokwacT0"
+    },
+    {
+      "name": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness base and feel for playing",
+      "id": "Too2DpIhht0t7IyMLjvM"
+    },
+    {
+      "name": "Triangle Passing Pattern",
+      "id": "HzkOWR5K8Vvy0fibGj9e"
+    },
+    {
+      "name": "5v2 Rondo with Pivot",
+      "id": "T2qmQXM4nEDKLGjfFU0q"
+    },
+    {
+      "name": "Flying Changes",
+      "id": "o5D8g2A7os7jVAk7CF6V"
+    },
+    {
+      "name": "4v4+4 Possession",
+      "id": "A2UtH83HWsRS1tZ5e6DE"
+    },
+    {
+      "name": "6v6 Game",
+      "id": "WuxLupodwfDFX1qtHuaD"
+    },
+    {
+      "name": "Preseason session #3: passing, transitional rondos, flying changes",
+      "id": "UpN3i8qhglgIPL48B0rB"
+    },
+    {
+      "name": "3v1 Rondo",
+      "id": "aNnqjjbOIixC2LDeybLw"
+    },
+    {
+      "name": "Passing Pattern with Third Man - Play Where You Face",
+      "id": "6GdMWwMBmEkvqWSFVbT8"
+    },
+    {
+      "name": "11v11 Game",
+      "id": "d3QAWOpBhif0P70Hs75A"
+    },
+    {
+      "name": "Preseason session #4: Rondo, passing pattern, directional possession, and game",
+      "id": "muXB2CjaIj831ZkILtvZ"
+    },
+    {
+      "name": "3v3+2 Possession",
+      "id": "W1AfhJgrSfFXPgiYafr0"
+    },
+    {
+      "name": "3rd Man Combination",
+      "id": "TiT6hq6xDdWfVnb2rGKX"
+    },
+    {
+      "name": "5v5+GK Transitional Game",
+      "id": "bGqPUsu5qkDsFVBNQcaq"
+    },
+    {
+      "name": "Week 2: session #5 continue to build fitness base, while doing individual and small group activities",
+      "id": "7BBPt9y4Tmo0MjZNVIzF"
+    },
+    {
+      "name": "Passing Pattern Through the Midfield",
+      "id": "55PwWTN8KLzgd5IBqVHp"
+    },
+    {
+      "name": "3v3+3 Transitional Possession",
+      "id": "Ew1SQ9UgJOI6j7vubdzj"
+    },
+    {
+      "name": "Flying Changes 1v0 to 4v3",
+      "id": "4UEMcKQV75zLjkiqssKQ"
+    },
+    {
+      "name": "Week 2: session #6 - continue to build fitness base, transitional possession games and play",
+      "id": "wdjkSwEGfH2x28tgm2J6"
+    },
+    {
+      "name": "5v2 Rondo Warm-Up",
+      "id": "OY2tlfse59WINGoSxx3h"
+    },
+    {
+      "name": "Flying Changes 1v0 to 3v2",
+      "id": "RAB5nu0e7FBmc1QqfkZM"
+    },
+    {
+      "name": "Week 2: Session #7, dynamic warm up and SAQ, 5v2 rondo to 3v3+2, transitional game, and play 7v7",
+      "id": "bxKl5R5fBMg78ue5Fq07"
+    },
+    {
+      "name": "Dynamic Warm-Up Rondo",
+      "id": "AZuzU4Yyom4BsaiEaS25"
+    },
+    {
+      "name": "5v5 + 3 Possession",
+      "id": "sLuxKsF3AFuL1UBn5yTA"
+    },
+    {
+      "name": "3rd Man Combination to Finish",
+      "id": "7Q0Kab1pMZmP54VK0ThU"
+    },
+    {
+      "name": "11v11 Game (4-3-3)",
+      "id": "wvpQrmMw0clCRaZBT4H5"
+    },
+    {
+      "name": "Week 2: Session #8 directional possession, combine to finish, pre season session",
+      "id": "dpeoy5NrUbeLxJaevt4y"
+    },
+    {
+      "name": "4v4 + 3 Dynamic Warm-Up",
+      "id": "FvzyP4lbCDfKZNP50NAF"
+    },
+    {
+      "name": "Week 3: Session #12. Warm up then game. Emphasis on build up, breaking lines, and creating goals",
+      "id": "qOqqCFrGbjOH4CIaBDxE"
+    },
+    {
+      "name": "4v2 Counter Press Rondo",
+      "id": "AjbatF54mXUWmdJDwwnP"
+    },
+    {
+      "name": "4v4 + 3 Counter Press",
+      "id": "EVBAqGPXKDRDSNct0IKP"
+    },
+    {
+      "name": "6v6 + GK Transitional Fluid Game",
+      "id": "g46SH3GnkmfKIEHob5A0"
+    },
+    {
+      "name": "11v11 Murder Ball",
+      "id": "9dXOel5wH7xqX1YtRJgG"
+    },
+    {
+      "name": "Week 4: Session #13 - Counter pressing in the final third",
+      "id": "eNhXxAICiIp1i5rGA53X"
+    },
+    {
+      "name": "Team Handball Activation",
+      "id": "8D7TlJoEBizLMp5u1JFW"
+    },
+    {
+      "name": "4v4 + 3 to 4 Counter Goals",
+      "id": "cd2iyigf4QYaNQwkrJmR"
+    },
+    {
+      "name": "6v6 Round Robin Games",
+      "id": "GbCcOrLyMWAca7JCxB3A"
+    },
+    {
+      "name": "Week 4: Session #14 Counter pressing in the middle third",
+      "id": "rjKV1aRGWeMMr0Hx1uYK"
+    },
+    {
+      "name": "3v1 Warm-Up Rondo",
+      "id": "xboPFECO7tEPumxsiQGo"
+    },
+    {
+      "name": "3v3 + 3 to 4 Counter Goals",
+      "id": "jxEf8mWEYqQ1Fub7073k"
+    },
+    {
+      "name": "Building Out of the Back with Counter Press",
+      "id": "w0kCOnnoG8ADU1v87exC"
+    },
+    {
+      "name": "Week 4: Session #15 Counter pressing in the defensive third / building out",
+      "id": "yMK03FLgXnYu738PUIMJ"
+    },
+    {
+      "name": "Week 4: Session #16 Counter press in all three zones as a focus",
+      "id": "C9LYmgTM9bMjXIuZF9A9"
+    },
+    {
+      "name": "6v6 in Zones to 4 Goals",
+      "id": "kG7ES2Yrg4zgCLzWa61e"
+    },
+    {
+      "name": "8v7 High Press in the Middle Third",
+      "id": "94TBUrLQbZZosOMQ5fI6"
+    },
+    {
+      "name": "11v11 High Press off Goal Kicks",
+      "id": "IiAl5UPQY86D4OCrYsId"
+    },
+    {
+      "name": "Week 5: Session #17 high press organization off of opponent's goal kicks.",
+      "id": "oWgmq1Z6yshoz6WFirgL"
+    },
+    {
+      "name": "Passing Pattern — 3rd Man Involvement",
+      "id": "jHDTvADhEurldgvNccT3"
+    },
+    {
+      "name": "8v7 in the Middle Third to Two Goals",
+      "id": "WcfPQ4FHuCqnpddN6Fdy"
+    },
+    {
+      "name": "11v11",
+      "id": "F8LXI12j5TWLhuBvQkfp"
+    },
+    {
+      "name": "Week 5: Session 18. Defensive organization in the middle third to prevent penetration",
+      "id": "ZOmS7ejUGGNuO8VtYLTx"
+    },
+    {
+      "name": "4v4 Tournament",
+      "id": "tYY6ftShbxfTtKTNxsta"
+    },
+    {
+      "name": "Week 5: Session #19 - 3v3+2 and 4v4 tournament",
+      "id": "YZ4KR01rMz74siAVVFWV"
+    },
+    {
+      "name": "3v3+2 to Two Counter Goals",
+      "id": "76OA6UAgMKpHIE68Ez08"
+    },
+    {
+      "name": "7v7+1 Runs in Behind",
+      "id": "VAr3d1ufYhbLT3xPqxK9"
+    },
+    {
+      "name": "7v7+1 Regular Game with Offsides",
+      "id": "PJYFcRhm6OMMXjyetf43"
+    },
+    {
+      "name": "Week 6: Session 20 - creating and finishing chances in the final 3rd",
+      "id": "BAJCJqYMjbSI5B7Hi73v"
+    },
+    {
+      "name": "Activation and 4v4+3",
+      "id": "kwWG6YEVB2uurENtDZ32"
+    },
+    {
+      "name": "5v5+GKs Round Robin Tournament",
+      "id": "tAn3oz5BGcBIiFPSAccE"
+    },
+    {
+      "name": "Week 6: Session #21 - 4v4 + 3 and 6v6 tournament to big goals",
+      "id": "fVvVgcBfrG5QGryuhkVH"
+    },
+    {
+      "name": "Activation — Tag Games and Directional Sprinting",
+      "id": "nsKuXFSQYaH0ELWWaFAp"
+    },
+    {
+      "name": "Flying Changes — 3v2 in the Attacking Third",
+      "id": "2RGzTuYK0sin9sqZa7ju"
+    },
+    {
+      "name": "11v11 — Attack Quickly and Exploit Numerical Advantage",
+      "id": "oMnpgWkv8c7WtUjmzD5b"
+    },
+    {
+      "name": "Week 6: Session #22 - exploit numerical advantage in the final third",
+      "id": "89mHCYOlwxxsGiwHwT9r"
+    },
+    {
+      "name": "4v4+3 Warm-Up",
+      "id": "3EgYodwxZ4XjQMZOHQLL"
+    },
+    {
+      "name": "Week 6: Session #23 - 4v4+3 to warm up then 11v11",
+      "id": "BjurPGKQ1kgt3DF9ty2X"
+    },
+    {
+      "name": "Activation — Tag, Penny and Reaction Games",
+      "id": "DhSGQChL830rHmesRJlm"
+    },
+    {
+      "name": "4v2 Four-Color Rondo",
+      "id": "R1qYbAdvhr8jcsRvAXi9"
+    },
+    {
+      "name": "4v4 to Goal — Exploit Numerical Superiority",
+      "id": "LesIftnbeT2WshnWEmlH"
+    },
+    {
+      "name": "Free Kicks",
+      "id": "uRH5pEaIqQuMnXuyA0k8"
+    },
+    {
+      "name": "Week 7: Session #24 - transition D--A from the midfield third",
+      "id": "fvBQ3hYLz4YUwAs36mmD"
+    },
+    {
+      "name": "3v1 Rondo Activation",
+      "id": "kAlLidkPuFpkxUsDD0a2"
+    },
+    {
+      "name": "5v5+3 Possession",
+      "id": "3hP6CSniKcf1O2egRkEu"
+    },
+    {
+      "name": "7v6 Build-Up in Each Half",
+      "id": "SK3MahUvvvwnFzuKbVyT"
+    },
+    {
+      "name": "Week 7: Session #25 - possession based offensive organization",
+      "id": "nH3nVXRZl7nTmS5cZFB3"
+    },
+    {
+      "name": "6v6 to 4 Goals",
+      "id": "Kw2tCfBOAxciIPvhi9JJ"
+    },
+    {
+      "name": "9v9 Round Robin",
+      "id": "F9XoGKZjZk9F0f0pTghS"
+    },
+    {
+      "name": "Week 7: Session #26 positional play games",
+      "id": "lpgwGVS5yXgMlSGpYTqP"
+    },
+    {
+      "name": "3v3+2 Dynamic Warm-Up",
+      "id": "pRrAEQXFTUZtVVDn2VHC"
+    },
+    {
+      "name": "Week 7: Session #27 3v3+2 and 11v11",
+      "id": "pX0JWdKX0HWEo8E7Qw6p"
+    },
+    {
+      "name": "Passing Pattern Warm-Up",
+      "id": "WyflahE4GS0r3HnDfoe6"
+    },
+    {
+      "name": "7v7 in a Tight Space",
+      "id": "1D4WOMttPogtETy1nr1g"
+    },
+    {
+      "name": "Week 8: Session 28 recovery session",
+      "id": "AX84X8uUG0KwlIwM2iE8"
+    },
+    {
+      "name": "4v1 Rondo",
+      "id": "NWSt2QUBenwuzLDqyXgw"
+    },
+    {
+      "name": "6v3 in a Hexagon",
+      "id": "bmrMKw38H4ehzBqaPr8A"
+    },
+    {
+      "name": "11v11 in a Tight Space",
+      "id": "CH8vxF5FXZgy7P362AAL"
+    },
+    {
+      "name": "Week 8: Session #29 MD-1 session positional play activities",
+      "id": "G7T6Si8b2cXEa0MqaFls"
+    },
+    {
+      "name": "Build-Out Passing Pattern Warm-Up",
+      "id": "ZAeqoxNh2XQgPb5d3L5E"
+    },
+    {
+      "name": "4v4+3 Possession",
+      "id": "ikeMXKp2Gpn4LslDQtXI"
+    },
+    {
+      "name": "10v9 Building Out of the Back to 11v11",
+      "id": "wBQyZiunI5E12OvYL14Z"
+    },
+    {
+      "name": "Week 8: Session #30 Building out of the back",
+      "id": "R39b2PiOP2jVwFxkwA5v"
+    },
+    {
+      "name": "Dynamic Warm-Up",
+      "id": "WI38KbLQFFFhv4AsF5fS"
+    },
+    {
+      "name": "Diamond Passing Pattern",
+      "id": "ttj69kLBTOTx5IQgQDoN"
+    },
+    {
+      "name": "Positional Play 10v5 in Three Colors",
+      "id": "U01IDJGzG7CDOB5rttGk"
+    },
+    {
+      "name": "11v11 Game — High Press",
+      "id": "9sA3ORU9AVjUYtpZACyk"
+    },
+    {
+      "name": "Week 9: Session 31 - MD-1 - high press in the attacking third",
+      "id": "hQI3WCblZf9IYLE3uUcV"
+    },
+    {
+      "name": "3v1",
+      "id": "jhYyGp8V0PaHncCxcHk4"
+    },
+    {
+      "name": "5v5 + 2 Offensive Bumpers",
+      "id": "y5P5LjEhHbsTqaV1XWbl"
+    },
+    {
+      "name": "Week 9: Session 32 - MD+1 session for guys that did not play",
+      "id": "arDSo3WyZA8tODzE7yDT"
+    },
+    {
+      "name": "Functional Activation",
+      "id": "AnFOzkElyjWTlPyaKZ7l"
+    },
+    {
+      "name": "11v11+3 Possession",
+      "id": "EMHUdqD3fEiCPp9Ulkx8"
+    },
+    {
+      "name": "11v11 Positional Understanding",
+      "id": "ZaXpjp2rJSr7wvpAR6CZ"
+    },
+    {
+      "name": "Week 9: Session 33 - MD-1 session",
+      "id": "Fsv70wwGLGDSoBzs1QKk"
+    },
+    {
+      "name": "Rondo 5v2",
+      "id": "U68maRqOy8ZSEKWYp1Sx"
+    },
+    {
+      "name": "5v5+4 Positional Play",
+      "id": "q3MwPYWGTNAabEOIeglg"
+    },
+    {
+      "name": "Set Pieces",
+      "id": "NpwfgOZJZx9lGmufEykK"
+    },
+    {
+      "name": "Shooting",
+      "id": "vO9F70CXiXA7DKe4yWfm"
+    },
+    {
+      "name": "Week 9: Session 34 - MD-1 Session",
+      "id": "dQnsXVNZf0RRbuTGfGzH"
+    },
+    {
+      "name": "3v3+2 Warm-Up",
+      "id": "wtBOzFYSHvPYUwvzODYH"
+    },
+    {
+      "name": "8v6 Build-Up to Three Counter Goals",
+      "id": "Y56auqzOFDcT80o3GP7K"
+    },
+    {
+      "name": "Building out of the back. In possession in the defensive third of the field",
+      "id": "eWEG77vbHhNkBSD2nNTQ"
+    },
+    {
+      "name": "Warm-Up 3v1",
+      "id": "5yk7qzwXKpr1Zi93SKZj"
+    },
+    {
+      "name": "Passing Pattern with a Finish on Goal",
+      "id": "nItxhyLHSs4ecKQYT3o2"
+    },
+    {
+      "name": "7v7 to Two Goals",
+      "id": "qsEX4PyIkjFNh9FIeBRu"
+    },
+    {
+      "name": "Creating chances and finishing in the final third. Unbalancing the opponent and runs in behind",
+      "id": "EG0LYWxMBNhwU854fBvU"
+    },
+    {
+      "name": "Passing Pattern Using the Mids",
+      "id": "UL9Cef3hiySPW25h4tzm"
+    },
+    {
+      "name": "7v6 Build-Up in the Middle",
+      "id": "2J6Ho9by8plPM0qIecGx"
+    },
+    {
+      "name": "Unbalancing the opponent and building up in the middle third",
+      "id": "qpWkW9IbQ3rSSUtb57Hs"
+    }
+  ]
+}
