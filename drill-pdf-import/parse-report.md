@@ -306,3 +306,7 @@ Counts: **116 individual drills + 34 whole-session drills = 150 drill docs**.
 - **Session 32 is MD+1** (not MD-1); tags use "MD+1". Session 33/34 are MD-1.
 - **No coaching points** in any of the 7 batch-D PDFs — those individual drills carry no `info` key.
 - **Minimal blocks:** Session 3 Screens 3 and 5 and Session 4 blocks 3–4 contain only a title with no activity detail — `desc`/`howTo` are correspondingly minimal; nothing invented.
+
+## Post-build fix (2026-11-17)
+
+Two incoming drills were both named "3v3+2" (Week 5 Session 19 and Week 9 Session 32), and a drill with that name already existed in drillLibrary (created by Anthony 2026-11-10). The import dry run refused to write duplicates, so the two incoming drills were renamed to "3v3+2 (Week 5, Session 19)" and "3v3+2 (Week 9, Session 32, MD+1)". Anthony's existing "3v3+2" was left untouched.
