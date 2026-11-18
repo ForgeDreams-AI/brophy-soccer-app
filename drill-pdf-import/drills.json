@@ -1,2362 +1,2362 @@
 [
-  {
-    "name": "Dynamic Warm-Up and Static Stretch",
-    "kind": "drill",
-    "cat": "Warm up games",
-    "tags": [
-      "Preseason",
-      "Session 1"
-    ],
-    "dur": 20,
-    "desc": "Dynamic warm up and static stretch.",
-    "howTo": "Warm up dynamically.\nStretch statically.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "5v2 Rondo",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Preseason",
-      "Session 1"
-    ],
-    "dur": 20,
-    "players": "5v2",
-    "desc": "5v2 rondo in a 10 yards by 8 yards space. Player that loses the ball goes in the middle. Start with two touch limit, then go to one touch.",
-    "howTo": "Set up a 10 yd x 8 yd space with 5 attackers and 2 defenders.\nKeep possession with a two-touch limit.\nThe player who loses the ball goes in the middle.\nProgress to a one-touch limit.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Fitness Load Dribbling and Running",
-    "kind": "drill",
-    "cat": "Technique Drills",
-    "tags": [
-      "Preseason",
-      "Session 1"
-    ],
-    "desc": "Stage II: fitness load activity. Players are dribbling in their square, coach blows the whistle and they have to run at 85% to the next box without the balls. Progression, players are juggling above their head with one touch.",
-    "howTo": "Players dribble inside their square.\nOn the coach's whistle, run at 85% to the next box without the ball.\nProgression: juggle the ball above the head with one touch.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "3rd Man Combination to Goal",
-    "kind": "drill",
-    "cat": "Passing patterns to finish",
-    "tags": [
-      "Preseason",
-      "Session 1"
-    ],
-    "dur": 20,
-    "desc": "Stage III: Player A starts with a ball and passes it to player B. Player B lays the ball off to player A, who then plays a forward pass to player C. Player C lays the ball off to player B who showed underneath and came to support after player A made a pass to player C. As player C lays the ball off, he opens in a looping motion, then receives a ball back from player B, dribbles around the mannequin, and takes a shot on goal. He then collects the ball and returns back to the other line.",
-    "howTo": "A passes to B.\nB lays the ball off to A.\nA plays a forward pass to C.\nC lays the ball off to B, who showed underneath to support.\nAs C lays it off, he opens in a looping motion.\nC receives the ball back from B.\nC dribbles around the mannequin and shoots on goal.\nC collects the ball and returns to the other line.",
-    "info": "Coaching points: Counter movement of a players to lose opponents. Weight, accuracy, and angle of passing. Movement to open the body and look to receive a ball on half turn. Movement to support the play after playing the ball and after laying it off. Third man recognition and involvement.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "7v7 Game",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Preseason",
-      "Session 1"
-    ],
-    "dur": 30,
-    "players": "7v7",
-    "desc": "Stage IV: 7v7 game, half field space. Round robin, rotate teams.",
-    "howTo": "Play 7v7 on a half-field space.\nRound robin - rotate teams.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Preseason session #1: passing patterns, fitness, combination play to goal",
-    "kind": "drill",
-    "cat": "Passing patterns",
-    "tags": [
-      "Preseason",
-      "Session 1"
-    ],
-    "dur": 90,
-    "desc": "Preseason session #1: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- Dynamic Warm-Up and Static Stretch (20 mins)\n- 5v2 Rondo (20 mins)\n- Fitness Load Dribbling and Running (no minutes shown)\n- 3rd Man Combination to Goal (20 mins)\n- 7v7 Game (30 mins)",
-    "info": "Source: Preseason session #1.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Three-Player Passing Pattern",
-    "kind": "drill",
-    "cat": "Passing patterns",
-    "tags": [
-      "Preseason",
-      "Session 2"
-    ],
-    "dur": 20,
-    "desc": "Three player passing pattern. Part of the dynamic warm up and stretch. A passes to B who is checking his shoulder and opening up his body posture as he receives the ball. Traps with the far foot, and plays the ball into C with the near foot. C takes the ball on the run, dribbles half the way and plays the ball to the back of the line to start over. Progression: A passes to B, B lays the ball to A, A plays it to C, C does a give and go with B. This is all 1 touch to go back to the start, and start over with one touch.",
-    "howTo": "A passes to B.\nB checks his shoulder and opens his body posture to receive.\nB traps with the far foot and plays to C with the near foot.\nC takes the ball on the run, dribbles halfway, and plays it to the back of the line to start over.\nProgression: A to B, B lays off to A, A plays to C, C does a give and go with B - all one touch, back to the start.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "4v2 Rondo",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Preseason",
-      "Session 2"
-    ],
-    "dur": 20,
-    "players": "4v2",
-    "desc": "4v2 rondo in a 12 yards by 10 yards space. Player that loses the ball goes in the middle.",
-    "howTo": "Set up a 12 yd x 10 yd space with 4 attackers and 2 defenders.\nKeep possession; the player who loses the ball goes in the middle.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "3rd Man Combination to Goal",
-    "kind": "drill",
-    "cat": "Passing patterns to finish",
-    "tags": [
-      "Preseason",
-      "Session 2"
-    ],
-    "dur": 20,
-    "desc": "Stage III: Player A starts with a ball and passes it to player B. Player B does a counter movement, checks away and comes back to receive a pass. Player B lays the ball off to player A, who then plays a forward pass to player C. Player C lays the ball off to player B who showed underneath and came to support after player A made a pass to player C. As player C lays the ball off, he opens in a looping motion, then receives a ball back from player B, dribbles in between the mannequins, and takes a shot on goal. He then collects the ball and returns back to the other line.",
-    "howTo": "A passes to B.\nB makes a counter movement, checks away and comes back to receive.\nB lays the ball off to A.\nA plays a forward pass to C.\nC lays the ball off to B, who showed underneath to support.\nAs C lays it off, he opens in a looping motion.\nC receives the ball back from B.\nC dribbles between the mannequins and shoots on goal.\nC collects the ball and returns to the other line.",
-    "info": "Coaching points: Counter movement of a players to lose opponents. Weight, accuracy, and angle of passing. Movement to open the body and look to receive a ball on half turn. Movement to support the play after playing the ball and after laying it off. Third man recognition and involvement.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "6v6+GK Transitional Game",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Preseason",
-      "Session 2"
-    ],
-    "dur": 30,
-    "players": "6v6+GK",
-    "desc": "Stage IV: 6v6+GK half court game. One team attacks three counter goals, once they score in one of the three counter goals when they get beyond the blue line in the final zone, they earn a right to attack the big goal. Quick transitional game. No offsides. Team that is attacking the big goal, if they score, they continue attacking the big goal and get the ball back.",
-    "howTo": "Play 6v6+GK on a half-court space.\nAttack three counter goals; scoring in one beyond the blue line in the final zone earns the right to attack the big goal.\nNo offsides - quick transitional game.\nIf the team attacking the big goal scores, they keep attacking it and get the ball back.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness base and feel for playing",
-    "kind": "drill",
-    "cat": "Passing patterns",
-    "tags": [
-      "Preseason",
-      "Session 2"
-    ],
-    "dur": 90,
-    "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- Three-Player Passing Pattern (20 mins)\n- 4v2 Rondo (20 mins)\n- 3rd Man Combination to Goal (20 mins)\n- 6v6+GK Transitional Game (30 mins)",
-    "info": "Source: Preseason session #2 Passing patterns, 3rd man runs, building a fitness base and feel for playing.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Triangle Passing Pattern",
-    "kind": "drill",
-    "cat": "Passing patterns",
-    "tags": [
-      "Preseason",
-      "Session 3"
-    ],
-    "dur": 10,
-    "desc": "Dynamic warm up then progress to a triangle passing pattern. Part of the dynamic warm up and stretch. Three player passing pattern. A passes to B who plays a quick combination around the cone with A who followed his pass. C holds, and then makes a run, B plays a firm ball into his run, C dribbles back and starts the new sequence. Everyone follows their pass. Accuracy of the passes, weight, angle, timing of the movement and passing.",
-    "howTo": "Warm up dynamically, then progress to a triangle passing pattern.\nA passes to B.\nB plays a quick combination around the cone with A, who followed his pass.\nC holds, then makes a run.\nB plays a firm ball into C's run.\nC dribbles back and starts the new sequence.\nEveryone follows their pass.",
-    "info": "Coaching points: Accuracy of the passes, weight, angle, timing of the movement and passing.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "5v2 Rondo with Pivot",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Preseason",
-      "Session 3"
-    ],
-    "dur": 10,
-    "players": "5v2",
-    "desc": "Stage I: 5v2 rondo in a 12 yards by 10 yards space. Player that loses the ball goes in the middle. 4 on the outside 1 stays in the middle as a pivot.",
-    "howTo": "Set up a 12 yd x 10 yd space.\n4 players on the outside, 1 stays in the middle as a pivot, against 2 defenders.\nThe player who loses the ball goes in the middle.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Flying Changes",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Preseason",
-      "Session 3"
-    ],
-    "dur": 20,
-    "desc": "Stage III: Flying changes.",
-    "howTo": "Play flying changes - players change over on the fly as the game flows.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "4v4+4 Possession",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Preseason",
-      "Session 3"
-    ],
-    "dur": 20,
-    "players": "4v4+4",
-    "desc": "Stage II: 4v4+4. 4 in the middle, while the other two colors keep the ball. Color that loses the ball goes in the middle.",
-    "howTo": "4 players in the middle, while the other two colors keep the ball.\nThe color that loses the ball goes in the middle.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "6v6 Game",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Preseason",
-      "Session 3"
-    ],
-    "dur": 20,
-    "players": "6v6",
-    "desc": "Stage IV: 6v6 game.",
-    "howTo": "Play a 6v6 game.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Preseason session #3: passing, transitional rondos, flying changes",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Preseason",
-      "Session 3"
-    ],
-    "dur": 80,
-    "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- Triangle Passing Pattern (10 mins)\n- 5v2 Rondo with Pivot (10 mins)\n- Flying Changes (20 mins)\n- 4v4+4 Possession (20 mins)\n- 6v6 Game (20 mins)",
-    "info": "Source: Preseason_session__3__passing__transitional_rondos__flying_changes-2.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "3v1 Rondo",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Preseason",
-      "Session 4"
-    ],
-    "dur": 15,
-    "players": "3v1",
-    "desc": "Dynamic warm up then progress to a rondo. Part of the dynamic warm up and stretch. 3v1 rondo in a 8x8 square.",
-    "howTo": "Warm up dynamically, then progress to a rondo.\nPlay 3v1 in an 8x8 square.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Passing Pattern with Third Man - Play Where You Face",
-    "kind": "drill",
-    "cat": "Passing patterns",
-    "tags": [
-      "Preseason",
-      "Session 4"
-    ],
-    "dur": 20,
-    "desc": "Stage II: Passing pattern, play forward, show underneath, make supporting run. Play where you face. Movement. Accuracy and weight of passing.",
-    "howTo": "Play the passing pattern forward.\nShow underneath and make a supporting run.\nPlay where you face.",
-    "info": "Coaching points: Movement. Accuracy and weight of passing.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "4v4+4 Possession",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Preseason",
-      "Session 4"
-    ],
-    "dur": 25,
-    "players": "4v4+4",
-    "desc": "Stage III: 4v4+4. 4 in the middle, while the other two colors keep the ball. Color that loses the ball goes in the middle.",
-    "howTo": "4 players in the middle, while the other two colors keep the ball.\nThe color that loses the ball goes in the middle.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "11v11 Game",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Preseason",
-      "Session 4"
-    ],
-    "dur": 30,
-    "players": "11v11",
-    "desc": "Stage IV: 11v11 game.",
-    "howTo": "Play an 11v11 game.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Preseason session #4: Rondo, passing pattern, directional possession, and game",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Preseason",
-      "Session 4"
-    ],
-    "dur": 90,
-    "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- 3v1 Rondo (15 mins)\n- Passing Pattern with Third Man - Play Where You Face (20 mins)\n- 4v4+4 Possession (25 mins)\n- 11v11 Game (30 mins)",
-    "info": "Source: Preseason_session__4__Rondo__passing_pattern__directional_possession__and_game.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Three-Player Passing Pattern",
-    "kind": "drill",
-    "cat": "Passing patterns",
-    "tags": [
-      "Week 2",
-      "Session 5"
-    ],
-    "dur": 20,
-    "desc": "Three player passing pattern. Part of the dynamic warm up and stretch. A passes to B, who does a give and go with B, and then releases C for a through pass.",
-    "howTo": "A passes to B.\nB does a give and go, then releases C for a through pass.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "3v3+2 Possession",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Week 2",
-      "Session 5"
-    ],
-    "dur": 20,
-    "players": "3v3+2",
-    "desc": "3v3 + 2 in 15 yards by 18 yards.",
-    "howTo": "Play 3v3 + 2 neutrals in a 15 yd x 18 yd space.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "3rd Man Combination",
-    "kind": "drill",
-    "cat": "Passing patterns",
-    "tags": [
-      "Week 2",
-      "Session 5"
-    ],
-    "dur": 20,
-    "desc": "Stage III: Player A starts with a ball and passes it to player B. Player B does a counter movement, checks away and comes back to receive a pass. Player B lays the ball off to player A, who then plays a forward pass to player C. Player C lays the ball off to player D who showed underneath from the opposite side.",
-    "howTo": "A passes to B.\nB makes a counter movement, checks away and comes back to receive.\nB lays the ball off to A.\nA plays a forward pass to C.\nC lays the ball off to D, who showed underneath from the opposite side.",
-    "info": "Coaching points: Counter movement of a players to lose opponents. Weight, accuracy, and angle of passing. Movement to open the body and look to receive a ball on half turn. Movement to support the play after playing the ball and after laying it off. Third man recognition and involvement.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "5v5+GK Transitional Game",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 2",
-      "Session 5"
-    ],
-    "dur": 30,
-    "players": "5v5+GK",
-    "desc": "Stage IV: 5v5+GK half court game. One team attacks two counter goals, once they score in one of the two counter goals when they get beyond the half way line, they earn a right to attack the big goal. Everyone must be over the half way line on both ends for a goal to count. Quick transitional game. No offsides. Team that is attacking the big goal, if they score, they continue attacking the big goal and get the ball back.",
-    "howTo": "Play 5v5+GK on a half-court space.\nAttack two counter goals; scoring in one beyond the halfway line earns the right to attack the big goal.\nEveryone must be over the halfway line on both ends for a goal to count.\nNo offsides - quick transitional game.\nIf the team attacking the big goal scores, they keep attacking it and get the ball back.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 2: session #5 continue to build fitness base, while doing individual and small group activities",
-    "kind": "drill",
-    "cat": "Technique Drills",
-    "tags": [
-      "Week 2",
-      "Session 5"
-    ],
-    "dur": 90,
-    "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- Three-Player Passing Pattern (20 mins)\n- 3v3+2 Possession (20 mins)\n- 3rd Man Combination (20 mins)\n- 5v5+GK Transitional Game (30 mins)",
-    "info": "Source: Week_2__session__5_continue_to_build_fitness_base__while_doing_individual_and_small_group_activities.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Passing Pattern Through the Midfield",
-    "kind": "drill",
-    "cat": "Passing patterns",
-    "tags": [
-      "Week 2",
-      "Session 6"
-    ],
-    "dur": 20,
-    "desc": "Part of the dynamic warm up and stretch. Passing pattern. Play the ball into CDM, engage the third man to show underneath, play ACM, lay off, and finish the sequence. Two players stay in the middle.",
-    "howTo": "Play the ball into the CDM.\nEngage the third man to show underneath.\nPlay the ACM, lay off, and finish the sequence.\nTwo players stay in the middle.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "3v3+3 Transitional Possession",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 2",
-      "Session 6"
-    ],
-    "dur": 20,
-    "players": "3v3+3",
-    "desc": "3v3 + 3. Two counter goals. Team in the middle must score on one of the two counter goals to get out of the middle. Two teams of 3 keep the ball, whoever loses it goes in the middle.",
-    "howTo": "Two teams of 3 keep the ball against a team of 3 in the middle.\nThe team in the middle must score on one of the two counter goals to get out of the middle.\nWhoever loses the ball goes in the middle.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Flying Changes 1v0 to 4v3",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 2",
-      "Session 6"
-    ],
-    "dur": 30,
-    "players": "1v0 to 4v3",
-    "desc": "Stage III: Flying changes 1v0, to 2v1, to 3v2, to 4v3 then start over. Quick transitions from numerical superiority, to numerical disadvantage, quick adaptations.",
-    "howTo": "Start 1v0, then 2v1, then 3v2, then 4v3, then start over.\nQuick transitions from numerical superiority to numerical disadvantage - adapt quickly.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "7v7 Game",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Week 2",
-      "Session 6"
-    ],
-    "dur": 30,
-    "players": "7v7",
-    "desc": "Stage IV: 7v7 game. Two games simultaneously. Round robin. 1 - 2 - 3 - 1 formation.",
-    "howTo": "Play 7v7 - two games simultaneously.\nRound robin.\nFormation: 1-2-3-1.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 2: session #6 - continue to build fitness base, transitional possession games and play",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 2",
-      "Session 6"
-    ],
-    "dur": 100,
-    "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- Passing Pattern Through the Midfield (20 mins)\n- 3v3+3 Transitional Possession (20 mins)\n- Flying Changes 1v0 to 4v3 (30 mins)\n- 7v7 Game (30 mins)",
-    "info": "Source: Week_2__session__6___continue_to_build_fitness_base__transitional_possession_games_and_play.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "5v2 Rondo Warm-Up",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Week 2",
-      "Session 7"
-    ],
-    "dur": 20,
-    "players": "5v2",
-    "desc": "Part of the dynamic warm up and stretch. 5v2 rondo.",
-    "howTo": "Warm up dynamically.\nPlay a 5v2 rondo.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "3v3+3 Transitional Possession",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 2",
-      "Session 7"
-    ],
-    "dur": 30,
-    "players": "3v3+3",
-    "desc": "3v3 + 3. Two counter goals. Team in the middle must score on one of the two counter goals to get out of the middle. Two teams of 3 keep the ball, whoever loses it goes in the middle.",
-    "howTo": "Two teams of 3 keep the ball against a team of 3 in the middle.\nThe team in the middle must score on one of the two counter goals to get out of the middle.\nWhoever loses the ball goes in the middle.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Flying Changes 1v0 to 3v2",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 2",
-      "Session 7"
-    ],
-    "dur": 20,
-    "players": "1v0 to 3v2",
-    "desc": "Stage III: Flying changes 1v0, to 2v1, to 3v2. Quick transitions from numerical superiority, to numerical disadvantage, quick adaptations. Player takes a shot, then turns around and defends 1v2. When play over, the 2 defend the new 3 that come on. Then after the 3v2 new sequence starts.",
-    "howTo": "Start 1v0, then 2v1, then 3v2.\nQuick transitions from numerical superiority to numerical disadvantage - adapt quickly.\nThe player takes a shot, then turns around and defends 1v2.\nWhen play is over, the 2 defend the new 3 that come on.\nThen the new 3v2 sequence starts.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "7v7 Game",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Week 2",
-      "Session 7"
-    ],
-    "dur": 30,
-    "players": "7v7",
-    "desc": "Stage IV: 7v7 game. Two games simultaneously. Round robin. 1 - 2 - 3 - 1 formation.",
-    "howTo": "Play 7v7 - two games simultaneously.\nRound robin.\nFormation: 1-2-3-1.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 2: Session #7, dynamic warm up and SAQ, 5v2 rondo to 3v3+2, transitional game, and play 7v7",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Week 2",
-      "Session 7"
-    ],
-    "dur": 100,
-    "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- 5v2 Rondo Warm-Up (20 mins)\n- 3v3+3 Transitional Possession (30 mins)\n- Flying Changes 1v0 to 3v2 (20 mins)\n- 7v7 Game (30 mins)",
-    "info": "Source: Week_2__Session__7__dynamic_warm_up_and_SAQ__5v2_rondo_to_3v3_2__transitional_game__and_play_7v7.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "Dynamic Warm-Up Rondo",
-    "cat": "Warm up games",
-    "dur": 20,
-    "desc": "Part of the dynamic warm up and stretch. Players on the inside dribble the ball around one of the 4 poles and do a give and go with an outside player to switch places. Progress to different types of combinations, then throw to combine. Implement stretches during short breaks.",
-    "howTo": "Inside players dribble around one of the 4 poles\nPlay a give and go with an outside player to switch places\nProgress to different types of combinations, then throw to combine\nImplement stretches during short breaks",
-    "tags": [
-      "Week 2",
-      "Session 8"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "5v5 + 3 Possession",
-    "cat": "Possession in the middle third",
-    "dur": 30,
-    "players": "5v5 + 3",
-    "desc": "5v5 + 3. Three neutrals play with the team in possession.",
-    "howTo": "Set up 5v5 with 3 neutrals\nThree neutrals play with the team in possession",
-    "tags": [
-      "Week 2",
-      "Session 8"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "3rd Man Combination to Finish",
-    "cat": "Passing patterns to finish",
-    "dur": 20,
-    "desc": "Stage III: Passing pattern to combine and finish on goal. Midfielder plays it out wide, shows underneath to support, gets it back and finds target who turns and shoots on goal. Progress to combination to release wide player for a cross.",
-    "howTo": "Midfielder plays it out wide\nMidfielder shows underneath to support and gets it back\nFind the target, who turns and shoots on goal\nProgress to a combination to release the wide player for a cross",
-    "tags": [
-      "Week 2",
-      "Session 8"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "11v11 Game (4-3-3)",
-    "cat": "Staple Drills",
-    "dur": 30,
-    "players": "11v11",
-    "desc": "Stage IV: 11v11 game. 4-3-3 formation.",
-    "howTo": "Play 11v11 in a 4-3-3 formation",
-    "tags": [
-      "Week 2",
-      "Session 8"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "Week 2: Session #8 directional possession, combine to finish, pre season session",
-    "cat": "Passing patterns to finish",
-    "dur": 100,
-    "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills: Dynamic Warm-Up Rondo (20 min); 5v5 + 3 Possession (30 min); 3rd Man Combination to Finish (20 min); 11v11 Game (4-3-3) (30 min)",
-    "info": "Source: Week_2__Session__8_directional_possession__combine_to_finish__pre_season_session.pdf",
-    "tags": [
-      "Week 2",
-      "Session 8"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "4v4 + 3 Dynamic Warm-Up",
-    "cat": "Warm up games",
-    "dur": 30,
-    "players": "4v4 + 3",
-    "desc": "Dynamic warm up. 4 v4 + 3. 1 touch for the three neutrals.",
-    "howTo": "Play 4v4 + 3 as a dynamic warm up\nThe three neutrals are limited to 1 touch",
-    "tags": [
-      "Week 3",
-      "Session 12"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "11v11 Game (4-3-3)",
-    "cat": "Staple Drills",
-    "dur": 60,
-    "players": "11v11",
-    "desc": "Stage IV: 11v11 game. 4-3-3 formation. 2x30 mins.",
-    "howTo": "Play 11v11 in a 4-3-3 formation\nTwo 30-minute halves",
-    "tags": [
-      "Week 3",
-      "Session 12"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "Week 3: Session #12. Warm up then game. Emphasis on build up, breaking lines, and creating goals",
-    "cat": "Possession in the final third",
-    "dur": 90,
-    "desc": "Week 3: Session #12. Warm up in 4v4+3 and then play. Attacking principles.\n\nDrills: 4v4 + 3 Dynamic Warm-Up (30 min); 11v11 Game (4-3-3) (60 min)",
-    "info": "Source: Week_3__Session__12__Warm_up_then_game__Emphasis_on_build_up__breaking_lines__and_creating_goals.pdf",
-    "tags": [
-      "Week 3",
-      "Session 12"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "4v2 Counter Press Rondo",
-    "cat": "Pressing when losing the ball",
-    "dur": 25,
-    "players": "4v2",
-    "desc": "Stage I: 4v2. Outside players have a 2 touch limit, except two on the sides have 1 touch limit. When they lose possession, they counter press to prevent the two in the middle dribbling the ball out of the rectangle. Introduce immediate reaction and concepts.",
-    "howTo": "Outside players are limited to 2 touches; the two on the sides have a 1 touch limit\nWhen they lose possession, counter press to stop the two in the middle dribbling out of the rectangle\nIntroduce immediate reaction and the counter-press concepts",
-    "tags": [
-      "Week 4",
-      "Session 13"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "4v4 + 3 Counter Press",
-    "cat": "Pressing when losing the ball",
-    "dur": 20,
-    "players": "4v4 + 3",
-    "desc": "Stage II: 4v4 +3. 18 yards by 14 yards space, no touch restrictions. Team in possession gets a point every 6 passes. Emphasis on quick transitional reaction once the possession is lost.",
-    "howTo": "Play 4v4 + 3 in an 18 x 14 yard space with no touch restrictions\nTeam in possession scores a point every 6 passes\nOn losing possession, react quickly to win it back",
-    "info": "Coaching point: quickly close down where the ball is lost. Closest players to the ball must react in a manner of winning it back. Farthest players must squeeze in to create numerical superiority in identified area of the field.",
-    "tags": [
-      "Week 4",
-      "Session 13"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "6v6 + GK Transitional Fluid Game",
-    "cat": "Transitions to the final third",
-    "dur": 30,
-    "players": "6v6 + GK",
-    "desc": "Stage III: 6v6+GK. Continuous transitional game, with players restricted to their own half of play. Attacking team has three front players and three midfielders, while the defending team has back four and two holding mids. Attacking team looks to score. Defensive team looks to defend, win possession and keep the ball. They keep possession with the team on the opposite end. 12 passes gives them a point, while a regular goal gives the other team a point.",
-    "howTo": "Continuous transitional game, players restricted to their own half\nAttacking team: three front players and three midfielders; defending team: back four and two holding mids\nAttacking team looks to score; defending team defends, wins possession and keeps the ball\n12 passes earns a point; a regular goal earns the other team a point",
-    "info": "Coaching points: REACTION. Once the possession is lost in the final third, can we quickly close the ball down with everyone squeezing, weak sided midfielders tucking in, to create numbers up situation. Continues movement to react and win the ball back without negative emotional reactions once the turn over has occurred.",
-    "tags": [
-      "Week 4",
-      "Session 13"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "11v11 Murder Ball",
-    "cat": "Staple Drills",
-    "dur": 20,
-    "players": "11v11",
-    "desc": "Stage IV: 11v11 game. 4v4+3. Murder ball. Every time a ball goes out, it's kicked back in right away.",
-    "howTo": "Play 11v11, murder ball rules\nEvery time a ball goes out, kick it back in right away",
-    "info": "REACTION. Once the possession is lost in the final third, can we quickly close the ball down with everyone squeezing, weak sided midfielders tucking in, to create numbers up situation.",
-    "tags": [
-      "Week 4",
-      "Session 13"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "Week 4: Session #13 - Counter pressing in the final third",
-    "cat": "Pressing when losing the ball",
-    "dur": 95,
-    "desc": "Transitional REACTION to get the ball back once it's lost with the main emphasis in the final third of the field. Constant emphasis on reaction, no negative emotions shown when the ball is lost but entire intent to win it back.\n\nDrills: 4v2 Counter Press Rondo (25 min); 4v4 + 3 Counter Press (20 min); 6v6 + GK Transitional Fluid Game (30 min); 11v11 Murder Ball (20 min)",
-    "info": "Source: Week_4__Session__13___Counter_pressing_in_the_final_third.pdf",
-    "tags": [
-      "Week 4",
-      "Session 13"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "Team Handball Activation",
-    "cat": "Warm up games",
-    "dur": 30,
-    "desc": "Stage I: Warm up. Team handball activation phase. Start with throwing then progress to kicking!",
-    "howTo": "Start with throwing, then progress to kicking",
-    "tags": [
-      "Week 4",
-      "Session 14"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "4v4 + 3 to 4 Counter Goals",
-    "cat": "Pressing when losing the ball",
-    "dur": 20,
-    "players": "4v4 + 3",
-    "desc": "Stage II: 4v4+3 to 4 counter goals. Team in the middle must score in one of the 4 counter goals to get out of the middle. Team in possession reacts and presses when they lose possession. 4 games of 3.5 minutes.",
-    "howTo": "Play 4v4 + 3 to 4 counter goals\nThe team in the middle must score in one of the 4 counter goals to get out of the middle\nThe team in possession reacts and presses when they lose possession\n4 games of 3.5 minutes",
-    "tags": [
-      "Week 4",
-      "Session 14"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "6v6 Round Robin Games",
-    "cat": "Staple Drills",
-    "dur": 30,
-    "players": "6v6",
-    "desc": "Stage III: 6v6 game. Two games simultaneously. Round robin. 2-2-1 formation. 3 games of 10 minutes.",
-    "howTo": "Two 6v6 games simultaneously, round robin\n2-2-1 formation\n3 games of 10 minutes",
-    "tags": [
-      "Week 4",
-      "Session 14"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "Week 4: Session #14 Counter pressing in the middle third",
-    "cat": "Pressing when losing the ball",
-    "dur": 80,
-    "desc": "Counter pressing in the middle third. Continue to instill the counter press mentality. Win the ball back immediately.\n\nDrills: Team Handball Activation (30 min); 4v4 + 3 to 4 Counter Goals (20 min); 6v6 Round Robin Games (30 min)",
-    "info": "Source: Week_4__Session__14_Counter_pressing_in_the_middle_third.pdf",
-    "tags": [
-      "Week 4",
-      "Session 14"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "3v1 Warm-Up Rondo",
-    "cat": "Warm up games",
-    "dur": 15,
-    "players": "3v1",
-    "desc": "Stage I: 3v1 part of the warm up. 1 touch limit, counter press to react.",
-    "howTo": "Play 3v1 with a 1 touch limit\nCounter press to react when possession is lost",
-    "tags": [
-      "Week 4",
-      "Session 15"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "3v3 + 3 to 4 Counter Goals",
-    "cat": "Pressing when losing the ball",
-    "dur": 20,
-    "players": "3v3 + 3",
-    "desc": "Stage II: 3v3+3 to 4 counter goals. Team in the middle must score in one of the 4 counter goals to get out of the middle. Team in possession reacts and presses when they lose possession. 4 games of 4 minutes. Focus on reaction of the players once the possession is lost.",
-    "howTo": "Play 3v3 + 3 to 4 counter goals\nThe team in the middle must score in one of the 4 counter goals to get out of the middle\nThe team in possession reacts and presses when they lose possession\n4 games of 4 minutes",
-    "tags": [
-      "Week 4",
-      "Session 15"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "Building Out of the Back with Counter Press",
-    "cat": "Playing from back",
-    "dur": 30,
-    "desc": "Stage III: Building out of the back and counter press when the possession is lost. Team building has the back 4, three mids, and wingers. Team pressing has the front three, two attacking mids, holding mid, full backs, and center back. Focus on reaction.",
-    "howTo": "Building team: back 4, three mids, and wingers\nPressing team: front three, two attacking mids, holding mid, full backs, and center back\nCounter press when possession is lost; focus on reaction",
-    "tags": [
-      "Week 4",
-      "Session 15"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "11v11 Game",
-    "cat": "Staple Drills",
-    "dur": 10,
-    "players": "11v11",
-    "desc": "Stage IV: 11v11 game.",
-    "howTo": "Play 11v11",
-    "tags": [
-      "Week 4",
-      "Session 15"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "Week 4: Session #15 Counter pressing in the defensive third / building out",
-    "cat": "Playing from back",
-    "dur": 75,
-    "desc": "Counter pressing in the middle third. Continue to instill the counter press mentality. Win the ball back immediately.\n\nDrills: 3v1 Warm-Up Rondo (15 min); 3v3 + 3 to 4 Counter Goals (20 min); Building Out of the Back with Counter Press (30 min); 11v11 Game (10 min)",
-    "info": "Source: Week_4__Session_15_Counter_pressing_in_the_defensive_third___building_out.pdf",
-    "tags": [
-      "Week 4",
-      "Session 15"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "4v4 + 3 Dynamic Warm-Up",
-    "cat": "Warm up games",
-    "dur": 30,
-    "players": "4v4 + 3",
-    "desc": "Dynamic warm up. 4 v4 + 3. No touch restriction, 4 counter goals to play on.",
-    "howTo": "Play 4v4 + 3 as a dynamic warm up\nNo touch restriction; 4 counter goals to play on",
-    "tags": [
-      "Week 4",
-      "Session 16"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "11v11 Game (4-3-3)",
-    "cat": "Staple Drills",
-    "dur": 60,
-    "players": "11v11",
-    "desc": "Stage IV: 11v11 game. 4-3-3 formation. 2x30 mins.",
-    "howTo": "Play 11v11 in a 4-3-3 formation\nTwo 30-minute halves",
-    "tags": [
-      "Week 4",
-      "Session 16"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "Week 4: Session #16 Counter press in all three zones as a focus",
-    "cat": "Pressing when losing the ball",
-    "dur": 90,
-    "desc": "Week 4: Session #16. Warm up in 4v4+3 and then play. Attacking principles.\n\nDrills: 4v4 + 3 Dynamic Warm-Up (30 min); 11v11 Game (4-3-3) (60 min)",
-    "info": "Source: Week_4__Session__16_Counter_press_in_all_three_zones_as_a_focus.pdf",
-    "tags": [
-      "Week 4",
-      "Session 16"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "6v6 in Zones to 4 Goals",
-    "cat": "Line of confrontation",
-    "dur": 20,
-    "players": "6v6",
-    "desc": "4v4v4. 4 groups of 4 over the river game. 2 players from the middle group can go in to press.",
-    "howTo": "4 groups of 4 in an over-the-river game\n2 players from the middle group can go in to press",
-    "tags": [
-      "Week 5",
-      "Session 17"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "8v7 High Press in the Middle Third",
-    "cat": "Line of confrontation",
-    "dur": 40,
-    "players": "8v7",
-    "desc": "Stage II and III: 8v7 including the GKs. Team in possession has the back 4 and three mids while the opposite team has the front three and three midfielders. Defensive organization in high press off of opponent's goal kicks.",
-    "howTo": "Play 8v7 including the GKs\nTeam in possession: back 4 and three mids; opposite team: front three and three midfielders\nWork on defensive organization in the high press off opponent's goal kicks",
-    "tags": [
-      "Week 5",
-      "Session 17"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "11v11 High Press off Goal Kicks",
-    "cat": "Line of confrontation",
-    "dur": 30,
-    "players": "11v11",
-    "desc": "Stage IV: 11v1 game. 1-4-3-3. Work on high pressing opponent's goal kicks.",
-    "howTo": "Play 11v11 in a 1-4-3-3\nWork on high pressing the opponent's goal kicks",
-    "tags": [
-      "Week 5",
-      "Session 17"
-    ]
-  },
-  {
-    "kind": "drill",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "name": "Week 5: Session #17 high press organization off of opponent's goal kicks.",
-    "cat": "Line of confrontation",
-    "dur": 90,
-    "desc": "Week 5: Session 17. Defensive organization in the final third off of opponent's goal kicks\n\nDrills: 6v6 in Zones to 4 Goals (20 min); 8v7 High Press in the Middle Third (40 min); 11v11 High Press off Goal Kicks (30 min)",
-    "info": "Source: Week_5__Session__17_high_press_organization_off_of_opponent_s_goal_kicks_.pdf",
-    "tags": [
-      "Week 5",
-      "Session 17"
-    ]
-  },
-  {
-    "name": "Passing Pattern — 3rd Man Involvement",
-    "kind": "drill",
-    "cat": "Passing patterns",
-    "tags": [
-      "Week 5",
-      "Session 18"
-    ],
-    "dur": 20,
-    "desc": "Part of the dynamic warm up and stretch. Passing pattern. Play the ball into CDM, engage the third man to show underneath, play ACM, lay off, and finish the sequence. Two players stay in the middle.",
-    "howTo": "Play the ball into the CDM.\nEngage the third man to show underneath.\nPlay the ACM.\nLay off and finish the sequence.\nTwo players stay in the middle.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "6v6 in Zones to 4 Goals",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Week 5",
-      "Session 18"
-    ],
-    "dur": 20,
-    "desc": "6v6 in restricted zones. 4 blues shift the ball side to side to break a line and find one of the two blues in the final zone. Once they find the final zone, the defending 4 can enter and prevent the blues from scoring. Pressure, cover, balance, to prevent penetrating passes. Team communication, shifting, moving.",
-    "howTo": "Play 6v6 in restricted zones.\nThe 4 blues shift the ball side to side to break a line.\nFind one of the two blues in the final zone.\nOnce the final zone is found, the defending 4 can enter and prevent the blues from scoring.\nDefend with pressure, cover and balance to prevent penetrating passes.\nCommunicate as a team, shifting and moving together.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "8v7 in the Middle Third to Two Goals",
-    "kind": "drill",
-    "cat": "Getting into shapes",
-    "tags": [
-      "Week 5",
-      "Session 18"
-    ],
-    "dur": 30,
-    "desc": "Stage II and III: 8v7 including the GKs. Team in possession has the back 4 and three mids while the opposite team has the front three and three midfielders. Defensive organization in the middle third, preventing central penetration.",
-    "howTo": "Play 8v7 including the GKs.\nThe team in possession has the back 4 and three midfielders.\nThe opposite team has the front three and three midfielders.\nOrganize defensively in the middle third to prevent central penetration.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "11v11",
-    "kind": "drill",
-    "cat": "Getting into shapes",
-    "tags": [
-      "Week 5",
-      "Session 18"
-    ],
-    "dur": 30,
-    "desc": "Stage IV: 11v11 game. 1-4-3-3.",
-    "howTo": "Play 11v11.\nShape: 1-4-3-3.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 5: Session 18. Defensive organization in the middle third to prevent penetration",
-    "kind": "drill",
-    "cat": "Getting into shapes",
-    "tags": [
-      "Week 5",
-      "Session 18"
-    ],
-    "dur": 100,
-    "desc": "Week 5: Session 18. Defensive organization in the middle third to prevent penetration\n\nDrills: Passing Pattern — 3rd Man Involvement (20 min); 6v6 in Zones to 4 Goals (20 min); 8v7 in the Middle Third to Two Goals (30 min); 11v11 (30 min).",
-    "info": "Source: Week_5__Session_18__Defensive_organization_in_the_middle_third_to_prevent_penetration.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "3v3+2",
-    "kind": "drill",
-    "cat": "Staple Drills",
-    "tags": [
-      "Week 5",
-      "Session 19"
-    ],
-    "dur": 40,
-    "desc": "3v3 + 2. 3 bouts of 4 mins.",
-    "howTo": "Play 3v3 + 2.\n3 bouts of 4 minutes each.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "4v4 Tournament",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 5",
-      "Session 19"
-    ],
-    "dur": 30,
-    "desc": "Two games simultaneously. Round robin tournament. 4 games of 8 minutes each. 1 field is 4v4 with GKs on big goal, another game is 4v4 on small goals.",
-    "howTo": "Set up two games simultaneously.\nPlay a round robin tournament.\n4 games of 8 minutes each.\nOne field is 4v4 with GKs on big goal; the other game is 4v4 on small goals.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 5: Session #19 - 3v3+2 and 4v4 tournament",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 5",
-      "Session 19"
-    ],
-    "dur": 70,
-    "desc": "3v3+2 and 4v4 mini tournament\n\nDrills: 3v3+2 (40 min); 4v4 Tournament (30 min).",
-    "info": "Source: Week_5__Session__19___3v3_2_and_4v4_tournament.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "3v3+2 to Two Counter Goals",
-    "kind": "drill",
-    "cat": "Finishing",
-    "tags": [
-      "Week 6",
-      "Session 20"
-    ],
-    "dur": 20,
-    "desc": "3v3 + 2 to two counter goals. 3 bouts of 4 mins.",
-    "howTo": "Play 3v3 + 2 to two counter goals.\n3 bouts of 4 minutes each.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "7v7+1 Runs in Behind",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 6",
-      "Session 20"
-    ],
-    "dur": 40,
-    "desc": "Stage II and III: 7v7+1 neutral and GKs. 2 games of 10 minutes each. Game is played in one half of the field. Nobody can enter the other half until a pass leads a player to run into the opposing half. Once that happens, everyone slides over to the other half and game continues.",
-    "howTo": "Play 7v7+1 neutral and GKs in one half of the field.\nNobody can enter the other half until a pass leads a player to run into the opposing half.\nOnce that happens, everyone slides over to the other half and the game continues.\n2 games of 10 minutes each.",
-    "info": "Coaching points:\ntiming of the runs\nreading cues\nbody posture and positioning\ncommunication\nspatial awareness",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "7v7+1 Regular Game with Offsides",
-    "kind": "drill",
-    "cat": "Finishing",
-    "tags": [
-      "Week 6",
-      "Session 20"
-    ],
-    "dur": 30,
-    "desc": "Stage IV: 7v7+1 neutral and GKs. 2 games of 10 minutes each. Regular game with offsides.",
-    "howTo": "Play 7v7+1 neutral and GKs.\nRegular game with offsides.\n2 games of 10 minutes each.",
-    "info": "Coaching points:\ntiming of the runs\nreading cues\nbody posture and positioning\ncommunication\nspatial awareness",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 6: Session 20 - creating and finishing chances in the final 3rd",
-    "kind": "drill",
-    "cat": "Finishing",
-    "tags": [
-      "Week 6",
-      "Session 20"
-    ],
-    "dur": 90,
-    "desc": "Week 6: Session #20\nCreating and finishing goal scoring opportunities in the final third\nEmphasis on penetrating runs in behind the last line of defense, timing, spatial awareness, beating the offsides trap, communication.\n\nDrills: 3v3+2 to Two Counter Goals (20 min); 7v7+1 Runs in Behind (40 min); 7v7+1 Regular Game with Offsides (30 min).",
-    "info": "Source: Week_6__Session_20___creating_and_finishing_chances_in_the_final_3rd.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Activation and 4v4+3",
-    "kind": "drill",
-    "cat": "Warm up games",
-    "tags": [
-      "Week 6",
-      "Session 21"
-    ],
-    "dur": 40,
-    "desc": "Start with a lap and then do soccer specific activation for 30 mins. Then stage II is 4v4 + 3. 3 bouts of 4 mins.",
-    "howTo": "Start with a lap.\nDo soccer specific activation for 30 minutes.\nThen play stage II: 4v4 + 3.\n3 bouts of 4 minutes each.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "5v5+GKs Round Robin Tournament",
-    "kind": "drill",
-    "cat": "Staple Drills",
-    "tags": [
-      "Week 6",
-      "Session 21"
-    ],
-    "dur": 30,
-    "desc": "Stage IV: 5v5 + GKs. Two games simultaneously. Round robin tournament. 4 games of 8 minutes each.",
-    "howTo": "Set up two games simultaneously.\nPlay a round robin tournament, 5v5 + GKs.\n4 games of 8 minutes each.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 6: Session #21 - 4v4 + 3 and 6v6 tournament to big goals",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "tags": [
-      "Week 6",
-      "Session 21"
-    ],
-    "dur": 70,
-    "desc": "Drills: Activation and 4v4+3 (40 min); 5v5+GKs Round Robin Tournament (30 min).",
-    "info": "Source: Week_6__Session__21___4v4___3_and_6v6_tournament_to_big_goals.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Activation — Tag Games and Directional Sprinting",
-    "kind": "drill",
-    "cat": "Warm up games",
-    "tags": [
-      "Week 6",
-      "Session 22"
-    ],
-    "dur": 20,
-    "desc": "Stage I: Activation. Different tag games to activate. Directional sprinting game to activate.",
-    "howTo": "Play different tag games to activate.\nPlay a directional sprinting game to activate.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "4v2 Rondo",
-    "kind": "drill",
-    "cat": "Staple Drills",
-    "tags": [
-      "Week 6",
-      "Session 22"
-    ],
-    "dur": 20,
-    "desc": "Stage II: 4v2 rondo. 1 touch on the ends, two touches on the sides. Alternate.",
-    "howTo": "Play 4v2 rondo.\n1 touch on the ends, two touches on the sides.\nAlternate.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Flying Changes — 3v2 in the Attacking Third",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 6",
-      "Session 22"
-    ],
-    "dur": 30,
-    "desc": "Stage III: Flying changes with numerical advantage. When a team has possession, they get an extra player to join them from the side.",
-    "howTo": "Play flying changes with numerical advantage.\nWhen a team has possession, they get an extra player to join them from the side.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "11v11 — Attack Quickly and Exploit Numerical Advantage",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 6",
-      "Session 22"
-    ],
-    "dur": 30,
-    "desc": "Stage IV: 11v11 focus on attacking quickly and exploiting numerical advantages in the opponent's half.",
-    "howTo": "Play 11v11.\nFocus on attacking quickly and exploiting numerical advantages in the opponent's half.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 6: Session #22 - exploit numerical advantage in the final third",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 6",
-      "Session 22"
-    ],
-    "dur": 100,
-    "desc": "Week 6: Session#22 - transition from D-->A\nexploit numerical superiority by attacking quickly in the attacking third\n\nDrills: Activation — Tag Games and Directional Sprinting (20 min); 4v2 Rondo (20 min); Flying Changes — 3v2 in the Attacking Third (30 min); 11v11 — Attack Quickly and Exploit Numerical Advantage (30 min).",
-    "info": "Source: Week_6__Session_22___exploit_numerical_advantage_in_the_final_third.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "4v4+3 Warm-Up",
-    "kind": "drill",
-    "cat": "Warm up games",
-    "tags": [
-      "Week 6",
-      "Session 23"
-    ],
-    "dur": 25,
-    "desc": "Dynamic warm up. 4 v4 + 3. 1 touch for the three neutrals.",
-    "howTo": "Dynamic warm up.\nPlay 4v4 + 3.\n1 touch for the three neutrals.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "11v11",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 6",
-      "Session 23"
-    ],
-    "dur": 70,
-    "desc": "Stage IV: 11v11 game. 4-3-3 formation. 2x30 mins.",
-    "howTo": "Play 11v11.\nFormation: 4-3-3.\n2 x 30 minutes.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 6: Session #23 - 4v4+3 to warm up then 11v11",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 6",
-      "Session 23"
-    ],
-    "dur": 95,
-    "desc": "Week 3: Session #12\nWarm up in 4v4+3 and then play\nAttacking principles\n\nDrills: 4v4+3 Warm-Up (25 min); 11v11 (70 min).",
-    "info": "Source: Week_6__Session__23___4v4_3_to_warm_up_then_11v11.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Activation — Tag, Penny and Reaction Games",
-    "kind": "drill",
-    "cat": "Warm up games",
-    "tags": [
-      "Week 7",
-      "Session 24"
-    ],
-    "dur": 25,
-    "desc": "Stage I: Activation. 3 players in a circle with hands held together. One player tries to go around trying to tag a player that is being protected. Tag game: grab a penny being held as a tail. The one with most pennies wins. Reaction game of running to one side or the other.",
-    "howTo": "3 players stand in a circle with hands held together; one player tries to go around trying to tag a player that is being protected.\nTag game: grab a penny being held as a tail; the one with the most pennies wins.\nReaction game: run to one side or the other.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "4v2 Four-Color Rondo",
-    "kind": "drill",
-    "cat": "Staple Drills",
-    "tags": [
-      "Week 7",
-      "Session 24"
-    ],
-    "dur": 25,
-    "desc": "4 color game. Players play 4v2, must complete 4 passes before switching it over to the next grid and shifting over two players providing new passing lanes. 4 bouts of 3 mins.",
-    "howTo": "Play 4v2 in the four-color game.\nComplete 4 passes before switching it over to the next grid.\nShift over two players, providing new passing lanes.\n4 bouts of 3 minutes each.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "4v4 to Goal — Exploit Numerical Superiority",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 7",
-      "Session 24"
-    ],
-    "dur": 30,
-    "desc": "Stage II: Exploit numerical superiority game. 3v1 in the square, after 5 passes, 2 blues advance to make it 4v3 to goal, while one red is recovering to defend. When blues score it counts as two goals, when reds score on counter goals it's 1 goal each.",
-    "howTo": "Play 3v1 in the square.\nAfter 5 passes, 2 blues advance to make it 4v3 to goal, while one red is recovering to defend.\nWhen blues score it counts as two goals; when reds score on counter goals it is 1 goal each.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Free Kicks",
-    "kind": "drill",
-    "cat": "Set pieces",
-    "tags": [
-      "Week 7",
-      "Session 24"
-    ],
-    "dur": 20,
-    "desc": "Stage IV: Practice free kicks.",
-    "howTo": "Practice free kicks.",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 7: Session #24 - transition D--A from the midfield third",
-    "kind": "drill",
-    "cat": "Transitions to the final third",
-    "tags": [
-      "Week 7",
-      "Session 24"
-    ],
-    "dur": 100,
-    "desc": "Week 7: Session#24 - transition from D-->A from the middle of the field\nexploit numerical superiority by attacking quickly\n\nDrills: Activation — Tag, Penny and Reaction Games (25 min); 4v2 Four-Color Rondo (25 min); 4v4 to Goal — Exploit Numerical Superiority (30 min); Free Kicks (20 min).",
-    "info": "Source: Week_7__Session__24___transition_D__A_from_the_midfield_third.pdf",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "cat": "Warm up games",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Stage I: 3v1 rondo activation",
-    "dur": 20,
-    "howTo": "Set up a 3v1 rondo.\nThree attackers keep possession against one defender.\nUse as the activation to start the session.",
-    "kind": "drill",
-    "name": "3v1 Rondo Activation",
-    "players": "3v1",
-    "tags": [
-      "Week 7",
-      "Session 25"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "5v5 + 3 possession. 3 bouts of 4 mins",
-    "dur": 20,
-    "howTo": "Play 5v5 with 3 neutral players supporting the team in possession.\nPlay 3 bouts of 4 minutes.",
-    "kind": "drill",
-    "name": "5v5+3 Possession",
-    "players": "5v5 + 3 neutrals",
-    "tags": [
-      "Week 7",
-      "Session 25"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Stage III: 7v6 in each half. Team in build up looks to connect passes and advance the ball into the other half to the other team building out. Attackers look to press and score. 2 bouts of 10 mins",
-    "dur": 30,
-    "howTo": "Split the field into two halves with a 7v6 in each half, playing together in their own area.\nThe team in build-up connects passes and advances the ball into the other half to the team building out.\nAttackers press and look to score.\nPlay 2 bouts of 10 minutes.",
-    "kind": "drill",
-    "name": "7v6 Build-Up in Each Half",
-    "players": "7v6",
-    "tags": [
-      "Week 7",
-      "Session 25"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Stage IV: Game. 2x12 mins regular game",
-    "dur": 25,
-    "howTo": "Play a regular 11v11 game.\nPlay 2 x 12 minutes.",
-    "kind": "drill",
-    "name": "11v11 Game",
-    "players": "11v11",
-    "tags": [
-      "Week 7",
-      "Session 25"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Week 7: Session#25 - Possession based offensive organization and implementation of principles\n\nDrills: 3v1 Rondo Activation (20 mins), 5v5+3 Possession (20 mins), 7v6 Build-Up in Each Half (30 mins), 11v11 Game (25 mins)",
-    "dur": 95,
-    "info": "Source: Week_7__Session__25___possession_based_offensive_organization_.pdf",
-    "kind": "drill",
-    "name": "Week 7: Session #25 - possession based offensive organization",
-    "tags": [
-      "Week 7",
-      "Session 25"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "3v3 + 2. 3 bouts of 4 mins",
-    "dur": 25,
-    "howTo": "Play 3v3 with 2 neutral players.\nPlay 3 bouts of 4 minutes.",
-    "kind": "drill",
-    "name": "3v3+2 Possession",
-    "players": "3v3 + 2 neutrals",
-    "tags": [
-      "Week 7",
-      "Session 26"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the final third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "6v6. 4 team round robin for points.",
-    "dur": 30,
-    "howTo": "Play 6v6 to 4 goals.\nRun a 4-team round robin for points.",
-    "kind": "drill",
-    "name": "6v6 to 4 Goals",
-    "players": "6v6",
-    "tags": [
-      "Week 7",
-      "Session 26"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "9v9 with 3 teams round robin.",
-    "dur": 25,
-    "howTo": "Play 9v9 with 3 teams in a round robin.",
-    "kind": "drill",
-    "name": "9v9 Round Robin",
-    "players": "9v9",
-    "tags": [
-      "Week 7",
-      "Session 26"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "3v3+2 and 4v4 mini tournament\n\nDrills: 3v3+2 Possession (25 mins), 6v6 to 4 Goals (30 mins), 9v9 Round Robin (25 mins)",
-    "dur": 80,
-    "info": "Source: Week_7__Session__26_positional_play_games.pdf",
-    "kind": "drill",
-    "name": "Week 7: Session #26 positional play games",
-    "tags": [
-      "Week 7",
-      "Session 26"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Warm up games",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Dynamic warm up. 3v3+2",
-    "dur": 25,
-    "howTo": "Start with a dynamic warm-up.\nPlay 3v3+2.",
-    "kind": "drill",
-    "name": "3v3+2 Dynamic Warm-Up",
-    "players": "3v3 + 2 neutrals",
-    "tags": [
-      "Week 7",
-      "Session 27"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the final third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Stage IV: 11v11 game. 4-3-3 formation. 2x30 mins",
-    "dur": 70,
-    "howTo": "Play an 11v11 game in a 4-3-3 formation.\nPlay 2 x 30 minutes.",
-    "kind": "drill",
-    "name": "11v11 Game (4-3-3)",
-    "players": "11v11",
-    "tags": [
-      "Week 7",
-      "Session 27"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the final third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Week 7: Session #27\nWarm up in 3v3+2 and then play\nAttacking principles\n\nDrills: 3v3+2 Dynamic Warm-Up (25 mins), 11v11 Game (4-3-3) (70 mins)",
-    "dur": 95,
-    "info": "Source: Week_7__Session__27_3v3_2_and_11v11.pdf",
-    "kind": "drill",
-    "name": "Week 7: Session #27 3v3+2 and 11v11",
-    "tags": [
-      "Week 7",
-      "Session 27"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Passing patterns",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Passing pattern to warm up. Play the ball and show underneath, play a far player and third man follows the pass to show underneath to advance the next pass and so on",
-    "dur": 15,
-    "howTo": "Play the ball and show underneath.\nPlay a far player.\nThe third man follows the pass to show underneath to advance the next pass.\nRepeat the pattern.",
-    "kind": "drill",
-    "name": "Passing Pattern Warm-Up",
-    "tags": [
-      "Week 8",
-      "Session 28"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "4v4+4",
-    "dur": 20,
-    "howTo": "Play 4v4 with 4 neutral players.",
-    "kind": "drill",
-    "name": "4v4+4 Possession",
-    "players": "4v4 + 4 neutrals",
-    "tags": [
-      "Week 8",
-      "Session 28"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "7v7 in tight space",
-    "dur": 45,
-    "howTo": "Play 7v7 in a tight space.",
-    "kind": "drill",
-    "name": "7v7 in a Tight Space",
-    "players": "7v7",
-    "tags": [
-      "Week 8",
-      "Session 28"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Recovery session and game replication for players that played more\n\nDrills: Passing Pattern Warm-Up (15 mins), 4v4+4 Possession (20 mins), 7v7 in a Tight Space (45 mins)",
-    "dur": 80,
-    "info": "Source: Week_8__Session_28_recovery_session.pdf",
-    "kind": "drill",
-    "name": "Week 8: Session 28 recovery session",
-    "tags": [
-      "Week 8",
-      "Session 28"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Warm up games",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "4v1 rondo",
-    "dur": 20,
-    "howTo": "Play a 4v1 rondo.",
-    "kind": "drill",
-    "name": "4v1 Rondo",
-    "players": "4v1",
-    "tags": [
-      "Week 8",
-      "Session 29",
-      "MD-1"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "6v3 always in a hexagon. The three in the middle must score a goal to then be in possession",
-    "dur": 30,
-    "howTo": "Set up a hexagon with 6 players in possession and 3 in the middle.\nThe three in the middle must score a goal to then be in possession.",
-    "kind": "drill",
-    "name": "6v3 in a Hexagon",
-    "players": "6v3",
-    "tags": [
-      "Week 8",
-      "Session 29",
-      "MD-1"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "11v11 two touch limit to small goals on either end. Three small goals on both ends.",
-    "dur": 20,
-    "howTo": "Play 11v11 in a tight space with a two-touch limit.\nPlay to small goals on either end — three small goals on both ends.",
-    "kind": "drill",
-    "name": "11v11 in a Tight Space",
-    "players": "11v11",
-    "tags": [
-      "Week 8",
-      "Session 29",
-      "MD-1"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Passing patterns",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Drills: 4v1 Rondo (20 mins), 6v3 in a Hexagon (30 mins), 11v11 in a Tight Space (20 mins)",
-    "dur": 70,
-    "info": "Source: Week_8__Session_29_MD_1_session_positional_play_activities.pdf",
-    "kind": "drill",
-    "name": "Week 8: Session #29 MD-1 session positional play activities",
-    "tags": [
-      "Week 8",
-      "Session 29",
-      "MD-1"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Passing patterns",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Stage I: Passing pattern as part of the warm up. Ball starts with pass out wide. Give and go out wide to play forward. Play square and then wide. Another give and go. Give to the start through a pivot and start over. Everyone follows their pass",
-    "dur": 25,
-    "howTo": "Ball starts with a pass out wide.\nGive and go out wide to play forward.\nPlay square and then wide.\nAnother give and go.\nGive to the start through a pivot and start over.\nEveryone follows their pass.",
-    "kind": "drill",
-    "name": "Build-Out Passing Pattern Warm-Up",
-    "tags": [
-      "Week 8",
-      "Session 30"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Possession in the middle third",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Stage II: Big space 4v4+3. 2 touch on the outside, 1 touch neutrals. Quick ball circulation, movement off the ball, passing lanes, breaking lines. Effective possession",
-    "dur": 20,
-    "howTo": "Play 4v4+3 in a big space.\nOutside players are limited to 2 touches; neutrals play 1 touch.\nFocus on quick ball circulation, movement off the ball, passing lanes, and breaking lines.",
-    "kind": "drill",
-    "name": "4v4+3 Possession",
-    "players": "4v4 + 3 neutrals",
-    "tags": [
-      "Week 8",
-      "Session 30"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Playing from back",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Stage III and IV: Building out of the back in 10v9 with advancing the ball to score on a goal in the middle. Full back pins inside, create 4v3 in the middle",
-    "dur": 35,
-    "howTo": "Build out of the back in 10v9, advancing the ball to score on a goal in the middle.\nFull back pins inside to create a 4v3 in the middle.\nProgress to 11v11.",
-    "kind": "drill",
-    "name": "10v9 Building Out of the Back to 11v11",
-    "players": "10v9 progressing to 11v11",
-    "tags": [
-      "Week 8",
-      "Session 30"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Playing from back",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Week 8: Session #30\nBuilding out of the back\n\nDrills: Build-Out Passing Pattern Warm-Up (25 mins), 4v4+3 Possession (20 mins), 10v9 Building Out of the Back to 11v11 (35 mins)",
-    "dur": 80,
-    "info": "Source: Week_8__Session__30_Building_out_of_the_back.pdf",
-    "kind": "drill",
-    "name": "Week 8: Session #30 Building out of the back",
-    "tags": [
-      "Week 8",
-      "Session 30"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Warm up games",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Warm up: Dynamic activation. Different variations of tag games, changes of directions, stretches, and some sprints",
-    "dur": 15,
-    "howTo": "Dynamic activation.\nDifferent variations of tag games.\nChanges of direction, stretches, and some sprints.",
-    "kind": "drill",
-    "name": "Dynamic Warm-Up",
-    "tags": [
-      "Week 9",
-      "Session 31",
-      "MD-1"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Passing patterns",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Stage I: Passing pattern. 2 balls start at the same time. 6 groups of 6",
-    "dur": 15,
-    "howTo": "Set up a diamond passing pattern in 6 groups of 6.\n2 balls start at the same time.",
-    "kind": "drill",
-    "name": "Diamond Passing Pattern",
-    "players": "6 groups of 6",
-    "tags": [
-      "Week 9",
-      "Session 31",
-      "MD-1"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Pressing when losing the ball",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Stage II: Positional Play game. 3 teams of 5 players. 10 players in possession occupy their exact positions in a 4-3-3 set up. 5 players work in the middle, high pressing in identified areas. Once the group of 5 win the ball, then occupy positions of the 5 that they have stolen it from and keep it with the other color. The 5 that lost possession has to touch hands in the middle before starting to defend.",
-    "dur": 20,
-    "howTo": "Three teams of 5 players; 10 in possession occupy their exact positions in a 4-3-3 set-up.\nThe 5 players in the middle work high pressing in identified areas.\nOnce the group of 5 wins the ball, they occupy the positions of the 5 they stole it from and keep it with the other color.\nThe 5 that lost possession must touch hands in the middle before starting to defend.",
-    "kind": "drill",
-    "name": "Positional Play 10v5 in Three Colors",
-    "players": "10v5 (3 teams of 5)",
-    "tags": [
-      "Week 9",
-      "Session 31",
-      "MD-1"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Pressing when losing the ball",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Stage III and IV: 11v11 game. High press against the team in build up",
-    "dur": 30,
-    "howTo": "Play an 11v11 game.\nPress high against the team in build-up.",
-    "kind": "drill",
-    "name": "11v11 Game — High Press",
-    "players": "11v11",
-    "tags": [
-      "Week 9",
-      "Session 31",
-      "MD-1"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "cat": "Pressing when losing the ball",
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo",
-    "desc": "Transitional REACTION to get the ball back once it's lost with the main emphasis in the final third of the field. Constant emphasis on reaction, no negative emotions shown when the ball is lost but entire intent to win it back.\n\nDrills: Dynamic Warm-Up (15 mins), Diamond Passing Pattern (15 mins), Positional Play 10v5 in Three Colors (20 mins), 11v11 Game — High Press (30 mins)",
-    "dur": 80,
-    "info": "Source: Week_9__Session_31___MD_1___high_press_in_the_attacking_third-2.pdf",
-    "kind": "drill",
-    "name": "Week 9: Session 31 - MD-1 - high press in the attacking third",
-    "tags": [
-      "Week 9",
-      "Session 31",
-      "MD-1"
-    ],
-    "updatedAt": "__SERVER_TIMESTAMP__"
-  },
-  {
-    "name": "3v1",
-    "kind": "drill",
-    "cat": "Warm up games",
-    "dur": 15,
-    "players": "3v1",
-    "desc": "Stage I and warm up. 3v1 rondo with a 1 touch limit.",
-    "howTo": "Play 3v1.\n1 touch limit.",
-    "info": "Body positioning and orientation.\nMovement off the ball to give passing lanes.\nDeception in passing.\nIntention and specificity of passing.\nFinding the back foot, leading into the next action.",
-    "tags": [
-      "Week 9",
-      "Session 32",
-      "MD+1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "3v3+2",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "dur": 20,
-    "players": "3v3+2",
-    "desc": "Stage II: 3v3 + 2. 3 bouts of 3 mins. Two neutrals have a 1 touch limit, while everyone else is unlimited.",
-    "howTo": "Play 3v3 + 2.\nPlay 3 bouts of 3 mins.\nTwo neutrals have a 1 touch limit; everyone else is unlimited.",
-    "info": "Constantly look to provide passing lanes, proactive movement.\nCreate numerical superiorities, exploit them, switch the point of attack.",
-    "tags": [
-      "Week 9",
-      "Session 32",
-      "MD+1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "5v5 + 2 Offensive Bumpers",
-    "kind": "drill",
-    "cat": "Possession in the final third",
-    "dur": 30,
-    "players": "5v5+2",
-    "desc": "Stage III and IV: 5v5 in tight space + 2 bumpers on the attacking end. 3 min games and rotate teams.",
-    "howTo": "Play 5v5 in a tight space with 2 bumpers on the attacking end.\nPlay 3 min games and rotate teams.",
-    "info": "Keep it high intensity.",
-    "tags": [
-      "Week 9",
-      "Session 32",
-      "MD+1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 9: Session 32 - MD+1 session for guys that did not play",
-    "kind": "drill",
-    "cat": "Staple Drills",
-    "dur": 65,
-    "desc": "Drills: 3v1 (15 mins); 3v3+2 (20 mins); 5v5 + 2 Offensive Bumpers (30 mins).",
-    "info": "Source: Week_9__Session_32___MD_1_session_for_guys_that_did_not_play.pdf",
-    "tags": [
-      "Week 9",
-      "Session 32",
-      "MD+1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Functional Activation",
-    "kind": "drill",
-    "cat": "Warm up games",
-    "dur": 30,
-    "desc": "Stage I. Dynamic and functional activation.",
-    "howTo": "Run a dynamic and functional activation.",
-    "tags": [
-      "Week 9",
-      "Session 33",
-      "MD-1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "11v11+3 Possession",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "dur": 25,
-    "players": "11v11+3",
-    "desc": "Stage II: 11v11 + 3 Neutrals possession game in the top of the box to half way line space.",
-    "howTo": "Play 11v11 + 3 neutrals possession in the space from the top of the box to the half way line.",
-    "tags": [
-      "Week 9",
-      "Session 33",
-      "MD-1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "11v11 Positional Understanding",
-    "kind": "drill",
-    "cat": "Possession in the final third",
-    "dur": 30,
-    "players": "11v11",
-    "desc": "Stage III and IV: 11v11 top of the box one goal, the other one regular set up. Exploiting half spaces, working on positional rotations to create numerical superiorities. Build up play in the middle third to unbalance opponent and find teammates in dangerous areas.",
-    "howTo": "Set up 11v11, one goal at the top of the box and the other a regular set up.\nExploit half spaces with positional rotations to create numerical superiorities.\nBuild up play in the middle third to unbalance the opponent and find teammates in dangerous areas.",
-    "tags": [
-      "Week 9",
-      "Session 33",
-      "MD-1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 9: Session 33 - MD-1 session",
-    "kind": "drill",
-    "cat": "Possession in the final third",
-    "dur": 85,
-    "desc": "Positional understanding and attacking principles. Create and exploit numerical advantage in the attacking third and wide areas by exploiting half spaces\nDrills: Functional Activation (30 mins); 11v11+3 Possession (25 mins); 11v11 Positional Understanding (30 mins).",
-    "info": "Source: Week_9__Session_33___MD_1_session.pdf",
-    "tags": [
-      "Week 9",
-      "Session 33",
-      "MD-1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Rondo 5v2",
-    "kind": "drill",
-    "cat": "Warm up games",
-    "dur": 15,
-    "players": "5v2",
-    "desc": "Warm up and Stage I: 5v2 rondo in a 8x8 square. Go from up to two touch, one touch only. Include stretches in between bouts.",
-    "howTo": "Play 5v2 rondo in an 8x8 square.\nStart with up to two touches, then one touch only.\nInclude stretches in between bouts.",
-    "info": "Passing lanes, back foot passing, weight of the pass, quality, accuracy.",
-    "tags": [
-      "Week 9",
-      "Session 34",
-      "MD-1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "5v5+4 Positional Play",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "dur": 20,
-    "players": "5v5+4",
-    "desc": "Stage II: Positional play, 5v5 + 4. Two GKs on each end as two neutrals, and two CMs in the middle as two neutrals as well. In transition, team that wins the ball occupies outside positions.",
-    "howTo": "Play 5v5 + 4 positional play.\nTwo GKs on each end act as two neutrals, and two CMs in the middle act as two neutrals.\nIn transition, the team that wins the ball occupies outside positions.",
-    "tags": [
-      "Week 9",
-      "Session 34",
-      "MD-1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Set Pieces",
-    "kind": "drill",
-    "cat": "Set pieces",
-    "dur": 30,
-    "desc": "Stage III: Defensive and offensive set pieces.",
-    "howTo": "Work on defensive and offensive set pieces.",
-    "tags": [
-      "Week 9",
-      "Session 34",
-      "MD-1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Shooting",
-    "kind": "drill",
-    "cat": "Finishing",
-    "dur": 20,
-    "desc": "Shooting. 4 goals.",
-    "howTo": "Player on the right dribbles by the mannequin and takes a shot.\nPlayer in the middle does a give and go around a mannequin and shoots.\nPlayer on the right does a give and go around the mannequin, gets sent through for a cross, and sends a firm ball on the ground for the first two shooters to finish, who make a near post and back post runs.\nSwitch lines.",
-    "tags": [
-      "Week 9",
-      "Session 34",
-      "MD-1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Week 9: Session 34 - MD-1 Session",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "dur": 85,
-    "desc": "MD-1 session. Possession, combinations, playing quickly through the middle, reinforcing partnerships on the field. Set pieces\nDrills: Rondo 5v2 (15 mins); 5v5+4 Positional Play (20 mins); Set Pieces (30 mins); Shooting (20 mins).",
-    "info": "Source: Week_9__Session_34___MD_1_Session.pdf",
-    "tags": [
-      "Week 9",
-      "Session 34",
-      "MD-1"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "3v3+2 Warm-Up",
-    "kind": "drill",
-    "cat": "Warm up games",
-    "dur": 30,
-    "players": "3v3+2",
-    "desc": "Stage I: Part of the dynamic warm up and stretch. 3v3+2.",
-    "howTo": "Play 3v3+2 as part of the dynamic warm up and stretch.",
-    "tags": [
-      "Preseason Session 2",
-      "Playing from back"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "8v6 Build-Up to Three Counter Goals",
-    "kind": "drill",
-    "cat": "Playing from back",
-    "dur": 40,
-    "players": "8v6",
-    "desc": "Stage II and III: 8v6 to three counter goals. Working on build up. Team working on build up must be in the final zone over the line to score on one of the three counter goals. Team pressing has 10 seconds to score if they steal a ball.",
-    "howTo": "Play 8v6 to three counter goals, working on build up.\nThe build-up team must be in the final zone over the line to score on one of the three counter goals.\nThe pressing team has 10 seconds to score if they steal the ball.",
-    "info": "Find the open player and explore numerical superiority.",
-    "tags": [
-      "Preseason Session 2",
-      "Playing from back"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "11v11 Game",
-    "kind": "drill",
-    "cat": "Playing from back",
-    "dur": 30,
-    "players": "11v11",
-    "desc": "Stage IV: 11v11 game. 4-3-3 formation.",
-    "howTo": "Play an 11v11 game in a 4-3-3 formation.",
-    "tags": [
-      "Preseason Session 2",
-      "Playing from back"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Building out of the back. In possession in the defensive third of the field",
-    "kind": "drill",
-    "cat": "Playing from back",
-    "dur": 100,
-    "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\nDrills: 3v3+2 Warm-Up (30 mins); 8v6 Build-Up to Three Counter Goals (40 mins); 11v11 Game (30 mins).",
-    "info": "Source: Building_out_of_the_back__In_possession_in_the_defensive_third_of_the_field-2.pdf",
-    "tags": [
-      "Preseason Session 2",
-      "Playing from back"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Warm-Up 3v1",
-    "kind": "drill",
-    "cat": "Warm up games",
-    "dur": 20,
-    "players": "3v1",
-    "desc": "Warm up. Part of the dynamic warm up and stretch. 3v1 one touch.",
-    "howTo": "Play 3v1 one touch as part of the dynamic warm up and stretch.",
-    "tags": [
-      "Week 3",
-      "Session 10"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Passing Pattern with a Finish on Goal",
-    "kind": "drill",
-    "cat": "Passing patterns to finish",
-    "dur": 20,
-    "desc": "Stage II: Passing pattern to break a line and get in behind the defense.",
-    "howTo": "A #8 plays the ball into the #9.\nThe #9 lays it off to the #8.\nThe #8 chips it over the back line for an oncoming player from the other side to finish.",
-    "tags": [
-      "Week 3",
-      "Session 10"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "7v7 to Two Goals",
-    "kind": "drill",
-    "cat": "Possession in the final third",
-    "dur": 30,
-    "players": "7v7",
-    "desc": "Stage II and III: 7v7 to two goals. Attacking team of front three and three midfielders must unbalance the back line and two pivots, and beat the offsides trap to get in behind.",
-    "howTo": "Play 7v7 to two goals.\nThe attacking team (front three and three midfielders) must unbalance the back line and two pivots and beat the offsides trap to get in behind.\nThe defending team has 10 seconds to get a shot on goal.",
-    "info": "Timing of the runs. Synchronization. Quality of a pass. Find the open player and explore numerical superiority.",
-    "tags": [
-      "Week 3",
-      "Session 10"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "11v11 Game",
-    "kind": "drill",
-    "cat": "Possession in the final third",
-    "dur": 20,
-    "players": "11v11",
-    "desc": "Stage IV: 11v11 game. 4-3-3 formation.",
-    "howTo": "Play an 11v11 game in a 4-3-3 formation.",
-    "tags": [
-      "Week 3",
-      "Session 10"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Creating chances and finishing in the final third. Unbalancing the opponent and runs in behind",
-    "kind": "drill",
-    "cat": "Possession in the final third",
-    "dur": 90,
-    "desc": "Week 3: Session #10. Runs in behind and unbalancing the opponent in the final third\nDrills: Warm-Up 3v1 (20 mins); Passing Pattern with a Finish on Goal (20 mins); 7v7 to Two Goals (30 mins); 11v11 Game (20 mins).",
-    "info": "Source: Creating_chances_and_finishing_in_the_final_third__Unbalancing_the_opponent_and_runs_in_behind.pdf",
-    "tags": [
-      "Week 3",
-      "Session 10"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "4v1 Rondo",
-    "kind": "drill",
-    "cat": "Warm up games",
-    "dur": 15,
-    "players": "4v1",
-    "desc": "Stage I: Part of the dynamic warm up and stretch. 4v1 rondo in a tight 4yard x 4yard space. One touch limit.",
-    "howTo": "Play 4v1 rondo in a tight 4 yard x 4 yard space.\nOne touch limit.",
-    "tags": [
-      "Preseason Session 2",
-      "Middle third"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Passing Pattern Using the Mids",
-    "kind": "drill",
-    "cat": "Passing patterns",
-    "dur": 10,
-    "desc": "Stage I: Part of the dynamic warm up, passing pattern.",
-    "howTo": "Find a pivot and lay the ball off to the other runner.\nPlay the attacking mid.\nThen play to the other side.",
-    "tags": [
-      "Preseason Session 2",
-      "Middle third"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "7v6 Build-Up in the Middle",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "dur": 40,
-    "players": "7v6",
-    "desc": "Stage II and III: 7v6. Emphasis is on unbalancing the opponent and advancing the ball forward in the middle third. Emphasis team works with back 4 and three midfielders. The counter team has front three and three midfielders. Emphasis team can not use the GK in build up. Working on finding a way how to progress the ball forward through the pivot and creating numerical superiority in the back.",
-    "howTo": "Play 7v6: emphasis team with a back 4 and three midfielders, counter team with a front three and three midfielders.\nThe emphasis team can not use the GK in build up.\nProgress the ball forward through the pivot, creating numerical superiority in the back.\nThe pressing team has 10 seconds to score if they steal the ball.",
-    "info": "Identify an open player and exploit it.",
-    "tags": [
-      "Preseason Session 2",
-      "Middle third"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "11v11 Game",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "dur": 25,
-    "players": "11v11",
-    "desc": "Stage IV: 11v11 game. 4-3-3 formation for each team.",
-    "howTo": "Play an 11v11 game, 4-3-3 formation for each team.",
-    "tags": [
-      "Preseason Session 2",
-      "Middle third"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  },
-  {
-    "name": "Unbalancing the opponent and building up in the middle third",
-    "kind": "drill",
-    "cat": "Possession in the middle third",
-    "dur": 90,
-    "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\nDrills: 4v1 Rondo (15 mins); Passing Pattern Using the Mids (10 mins); 7v6 Build-Up in the Middle (40 mins); 11v11 Game (25 mins).",
-    "info": "Source: Unbalancing_the_opponent_and_building_up_in_the_middle_third.pdf",
-    "tags": [
-      "Preseason Session 2",
-      "Middle third"
-    ],
-    "createdAt": "__SERVER_TIMESTAMP__",
-    "updatedAt": "__SERVER_TIMESTAMP__",
-    "createdByName": "Anthony Hidalgo"
-  }
+ {
+  "name": "Dynamic Warm-Up and Static Stretch",
+  "kind": "drill",
+  "cat": "Warm up games",
+  "tags": [
+   "Preseason",
+   "Session 1"
+  ],
+  "dur": 20,
+  "desc": "Dynamic warm up and static stretch.",
+  "howTo": "Warm up dynamically.\nStretch statically.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "5v2 Rondo",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Preseason",
+   "Session 1"
+  ],
+  "dur": 20,
+  "players": "5v2",
+  "desc": "5v2 rondo in a 10 yards by 8 yards space. Player that loses the ball goes in the middle. Start with two touch limit, then go to one touch.",
+  "howTo": "Set up a 10 yd x 8 yd space with 5 attackers and 2 defenders.\nKeep possession with a two-touch limit.\nThe player who loses the ball goes in the middle.\nProgress to a one-touch limit.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Fitness Load Dribbling and Running",
+  "kind": "drill",
+  "cat": "Technique Drills",
+  "tags": [
+   "Preseason",
+   "Session 1"
+  ],
+  "desc": "Stage II: fitness load activity. Players are dribbling in their square, coach blows the whistle and they have to run at 85% to the next box without the balls. Progression, players are juggling above their head with one touch.",
+  "howTo": "Players dribble inside their square.\nOn the coach's whistle, run at 85% to the next box without the ball.\nProgression: juggle the ball above the head with one touch.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "3rd Man Combination to Goal",
+  "kind": "drill",
+  "cat": "Passing patterns to finish",
+  "tags": [
+   "Preseason",
+   "Session 1"
+  ],
+  "dur": 20,
+  "desc": "Stage III: Player A starts with a ball and passes it to player B. Player B lays the ball off to player A, who then plays a forward pass to player C. Player C lays the ball off to player B who showed underneath and came to support after player A made a pass to player C. As player C lays the ball off, he opens in a looping motion, then receives a ball back from player B, dribbles around the mannequin, and takes a shot on goal. He then collects the ball and returns back to the other line.",
+  "howTo": "A passes to B.\nB lays the ball off to A.\nA plays a forward pass to C.\nC lays the ball off to B, who showed underneath to support.\nAs C lays it off, he opens in a looping motion.\nC receives the ball back from B.\nC dribbles around the mannequin and shoots on goal.\nC collects the ball and returns to the other line.",
+  "info": "Coaching points: Counter movement of a players to lose opponents. Weight, accuracy, and angle of passing. Movement to open the body and look to receive a ball on half turn. Movement to support the play after playing the ball and after laying it off. Third man recognition and involvement.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "7v7 Game",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Preseason",
+   "Session 1"
+  ],
+  "dur": 30,
+  "players": "7v7",
+  "desc": "Stage IV: 7v7 game, half field space. Round robin, rotate teams.",
+  "howTo": "Play 7v7 on a half-field space.\nRound robin - rotate teams.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Preseason session #1: passing patterns, fitness, combination play to goal",
+  "kind": "drill",
+  "cat": "Passing patterns",
+  "tags": [
+   "Preseason",
+   "Session 1"
+  ],
+  "dur": 90,
+  "desc": "Preseason session #1: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- Dynamic Warm-Up and Static Stretch (20 mins)\n- 5v2 Rondo (20 mins)\n- Fitness Load Dribbling and Running (no minutes shown)\n- 3rd Man Combination to Goal (20 mins)\n- 7v7 Game (30 mins)",
+  "info": "Source: Preseason session #1.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Three-Player Passing Pattern",
+  "kind": "drill",
+  "cat": "Passing patterns",
+  "tags": [
+   "Preseason",
+   "Session 2"
+  ],
+  "dur": 20,
+  "desc": "Three player passing pattern. Part of the dynamic warm up and stretch. A passes to B who is checking his shoulder and opening up his body posture as he receives the ball. Traps with the far foot, and plays the ball into C with the near foot. C takes the ball on the run, dribbles half the way and plays the ball to the back of the line to start over. Progression: A passes to B, B lays the ball to A, A plays it to C, C does a give and go with B. This is all 1 touch to go back to the start, and start over with one touch.",
+  "howTo": "A passes to B.\nB checks his shoulder and opens his body posture to receive.\nB traps with the far foot and plays to C with the near foot.\nC takes the ball on the run, dribbles halfway, and plays it to the back of the line to start over.\nProgression: A to B, B lays off to A, A plays to C, C does a give and go with B - all one touch, back to the start.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "4v2 Rondo",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Preseason",
+   "Session 2"
+  ],
+  "dur": 20,
+  "players": "4v2",
+  "desc": "4v2 rondo in a 12 yards by 10 yards space. Player that loses the ball goes in the middle.",
+  "howTo": "Set up a 12 yd x 10 yd space with 4 attackers and 2 defenders.\nKeep possession; the player who loses the ball goes in the middle.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "3rd Man Combination to Goal",
+  "kind": "drill",
+  "cat": "Passing patterns to finish",
+  "tags": [
+   "Preseason",
+   "Session 2"
+  ],
+  "dur": 20,
+  "desc": "Stage III: Player A starts with a ball and passes it to player B. Player B does a counter movement, checks away and comes back to receive a pass. Player B lays the ball off to player A, who then plays a forward pass to player C. Player C lays the ball off to player B who showed underneath and came to support after player A made a pass to player C. As player C lays the ball off, he opens in a looping motion, then receives a ball back from player B, dribbles in between the mannequins, and takes a shot on goal. He then collects the ball and returns back to the other line.",
+  "howTo": "A passes to B.\nB makes a counter movement, checks away and comes back to receive.\nB lays the ball off to A.\nA plays a forward pass to C.\nC lays the ball off to B, who showed underneath to support.\nAs C lays it off, he opens in a looping motion.\nC receives the ball back from B.\nC dribbles between the mannequins and shoots on goal.\nC collects the ball and returns to the other line.",
+  "info": "Coaching points: Counter movement of a players to lose opponents. Weight, accuracy, and angle of passing. Movement to open the body and look to receive a ball on half turn. Movement to support the play after playing the ball and after laying it off. Third man recognition and involvement.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "6v6+GK Transitional Game",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Preseason",
+   "Session 2"
+  ],
+  "dur": 30,
+  "players": "6v6+GK",
+  "desc": "Stage IV: 6v6+GK half court game. One team attacks three counter goals, once they score in one of the three counter goals when they get beyond the blue line in the final zone, they earn a right to attack the big goal. Quick transitional game. No offsides. Team that is attacking the big goal, if they score, they continue attacking the big goal and get the ball back.",
+  "howTo": "Play 6v6+GK on a half-court space.\nAttack three counter goals; scoring in one beyond the blue line in the final zone earns the right to attack the big goal.\nNo offsides - quick transitional game.\nIf the team attacking the big goal scores, they keep attacking it and get the ball back.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness base and feel for playing",
+  "kind": "drill",
+  "cat": "Passing patterns",
+  "tags": [
+   "Preseason",
+   "Session 2"
+  ],
+  "dur": 90,
+  "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- Three-Player Passing Pattern (20 mins)\n- 4v2 Rondo (20 mins)\n- 3rd Man Combination to Goal (20 mins)\n- 6v6+GK Transitional Game (30 mins)",
+  "info": "Source: Preseason session #2 Passing patterns, 3rd man runs, building a fitness base and feel for playing.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Triangle Passing Pattern",
+  "kind": "drill",
+  "cat": "Passing patterns",
+  "tags": [
+   "Preseason",
+   "Session 3"
+  ],
+  "dur": 10,
+  "desc": "Dynamic warm up then progress to a triangle passing pattern. Part of the dynamic warm up and stretch. Three player passing pattern. A passes to B who plays a quick combination around the cone with A who followed his pass. C holds, and then makes a run, B plays a firm ball into his run, C dribbles back and starts the new sequence. Everyone follows their pass. Accuracy of the passes, weight, angle, timing of the movement and passing.",
+  "howTo": "Warm up dynamically, then progress to a triangle passing pattern.\nA passes to B.\nB plays a quick combination around the cone with A, who followed his pass.\nC holds, then makes a run.\nB plays a firm ball into C's run.\nC dribbles back and starts the new sequence.\nEveryone follows their pass.",
+  "info": "Coaching points: Accuracy of the passes, weight, angle, timing of the movement and passing.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "5v2 Rondo with Pivot",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Preseason",
+   "Session 3"
+  ],
+  "dur": 10,
+  "players": "5v2",
+  "desc": "Stage I: 5v2 rondo in a 12 yards by 10 yards space. Player that loses the ball goes in the middle. 4 on the outside 1 stays in the middle as a pivot.",
+  "howTo": "Set up a 12 yd x 10 yd space.\n4 players on the outside, 1 stays in the middle as a pivot, against 2 defenders.\nThe player who loses the ball goes in the middle.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Flying Changes",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Preseason",
+   "Session 3"
+  ],
+  "dur": 20,
+  "desc": "Stage III: Flying changes.",
+  "howTo": "Play flying changes - players change over on the fly as the game flows.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "4v4+4 Possession",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Preseason",
+   "Session 3"
+  ],
+  "dur": 20,
+  "players": "4v4+4",
+  "desc": "Stage II: 4v4+4. 4 in the middle, while the other two colors keep the ball. Color that loses the ball goes in the middle.",
+  "howTo": "4 players in the middle, while the other two colors keep the ball.\nThe color that loses the ball goes in the middle.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "6v6 Game",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Preseason",
+   "Session 3"
+  ],
+  "dur": 20,
+  "players": "6v6",
+  "desc": "Stage IV: 6v6 game.",
+  "howTo": "Play a 6v6 game.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Preseason session #3: passing, transitional rondos, flying changes",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Preseason",
+   "Session 3"
+  ],
+  "dur": 80,
+  "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- Triangle Passing Pattern (10 mins)\n- 5v2 Rondo with Pivot (10 mins)\n- Flying Changes (20 mins)\n- 4v4+4 Possession (20 mins)\n- 6v6 Game (20 mins)",
+  "info": "Source: Preseason_session__3__passing__transitional_rondos__flying_changes-2.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "3v1 Rondo",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Preseason",
+   "Session 4"
+  ],
+  "dur": 15,
+  "players": "3v1",
+  "desc": "Dynamic warm up then progress to a rondo. Part of the dynamic warm up and stretch. 3v1 rondo in a 8x8 square.",
+  "howTo": "Warm up dynamically, then progress to a rondo.\nPlay 3v1 in an 8x8 square.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Passing Pattern with Third Man - Play Where You Face",
+  "kind": "drill",
+  "cat": "Passing patterns",
+  "tags": [
+   "Preseason",
+   "Session 4"
+  ],
+  "dur": 20,
+  "desc": "Stage II: Passing pattern, play forward, show underneath, make supporting run. Play where you face. Movement. Accuracy and weight of passing.",
+  "howTo": "Play the passing pattern forward.\nShow underneath and make a supporting run.\nPlay where you face.",
+  "info": "Coaching points: Movement. Accuracy and weight of passing.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "4v4+4 Possession",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Preseason",
+   "Session 4"
+  ],
+  "dur": 25,
+  "players": "4v4+4",
+  "desc": "Stage III: 4v4+4. 4 in the middle, while the other two colors keep the ball. Color that loses the ball goes in the middle.",
+  "howTo": "4 players in the middle, while the other two colors keep the ball.\nThe color that loses the ball goes in the middle.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "11v11 Game",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Preseason",
+   "Session 4"
+  ],
+  "dur": 30,
+  "players": "11v11",
+  "desc": "Stage IV: 11v11 game.",
+  "howTo": "Play an 11v11 game.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Preseason session #4: Rondo, passing pattern, directional possession, and game",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Preseason",
+   "Session 4"
+  ],
+  "dur": 90,
+  "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- 3v1 Rondo (15 mins)\n- Passing Pattern with Third Man - Play Where You Face (20 mins)\n- 4v4+4 Possession (25 mins)\n- 11v11 Game (30 mins)",
+  "info": "Source: Preseason_session__4__Rondo__passing_pattern__directional_possession__and_game.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Three-Player Passing Pattern",
+  "kind": "drill",
+  "cat": "Passing patterns",
+  "tags": [
+   "Week 2",
+   "Session 5"
+  ],
+  "dur": 20,
+  "desc": "Three player passing pattern. Part of the dynamic warm up and stretch. A passes to B, who does a give and go with B, and then releases C for a through pass.",
+  "howTo": "A passes to B.\nB does a give and go, then releases C for a through pass.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "3v3+2 Possession",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Week 2",
+   "Session 5"
+  ],
+  "dur": 20,
+  "players": "3v3+2",
+  "desc": "3v3 + 2 in 15 yards by 18 yards.",
+  "howTo": "Play 3v3 + 2 neutrals in a 15 yd x 18 yd space.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "3rd Man Combination",
+  "kind": "drill",
+  "cat": "Passing patterns",
+  "tags": [
+   "Week 2",
+   "Session 5"
+  ],
+  "dur": 20,
+  "desc": "Stage III: Player A starts with a ball and passes it to player B. Player B does a counter movement, checks away and comes back to receive a pass. Player B lays the ball off to player A, who then plays a forward pass to player C. Player C lays the ball off to player D who showed underneath from the opposite side.",
+  "howTo": "A passes to B.\nB makes a counter movement, checks away and comes back to receive.\nB lays the ball off to A.\nA plays a forward pass to C.\nC lays the ball off to D, who showed underneath from the opposite side.",
+  "info": "Coaching points: Counter movement of a players to lose opponents. Weight, accuracy, and angle of passing. Movement to open the body and look to receive a ball on half turn. Movement to support the play after playing the ball and after laying it off. Third man recognition and involvement.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "5v5+GK Transitional Game",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 2",
+   "Session 5"
+  ],
+  "dur": 30,
+  "players": "5v5+GK",
+  "desc": "Stage IV: 5v5+GK half court game. One team attacks two counter goals, once they score in one of the two counter goals when they get beyond the half way line, they earn a right to attack the big goal. Everyone must be over the half way line on both ends for a goal to count. Quick transitional game. No offsides. Team that is attacking the big goal, if they score, they continue attacking the big goal and get the ball back.",
+  "howTo": "Play 5v5+GK on a half-court space.\nAttack two counter goals; scoring in one beyond the halfway line earns the right to attack the big goal.\nEveryone must be over the halfway line on both ends for a goal to count.\nNo offsides - quick transitional game.\nIf the team attacking the big goal scores, they keep attacking it and get the ball back.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 2: session #5 continue to build fitness base, while doing individual and small group activities",
+  "kind": "drill",
+  "cat": "Technique Drills",
+  "tags": [
+   "Week 2",
+   "Session 5"
+  ],
+  "dur": 90,
+  "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- Three-Player Passing Pattern (20 mins)\n- 3v3+2 Possession (20 mins)\n- 3rd Man Combination (20 mins)\n- 5v5+GK Transitional Game (30 mins)",
+  "info": "Source: Week_2__session__5_continue_to_build_fitness_base__while_doing_individual_and_small_group_activities.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Passing Pattern Through the Midfield",
+  "kind": "drill",
+  "cat": "Passing patterns",
+  "tags": [
+   "Week 2",
+   "Session 6"
+  ],
+  "dur": 20,
+  "desc": "Part of the dynamic warm up and stretch. Passing pattern. Play the ball into CDM, engage the third man to show underneath, play ACM, lay off, and finish the sequence. Two players stay in the middle.",
+  "howTo": "Play the ball into the CDM.\nEngage the third man to show underneath.\nPlay the ACM, lay off, and finish the sequence.\nTwo players stay in the middle.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "3v3+3 Transitional Possession",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 2",
+   "Session 6"
+  ],
+  "dur": 20,
+  "players": "3v3+3",
+  "desc": "3v3 + 3. Two counter goals. Team in the middle must score on one of the two counter goals to get out of the middle. Two teams of 3 keep the ball, whoever loses it goes in the middle.",
+  "howTo": "Two teams of 3 keep the ball against a team of 3 in the middle.\nThe team in the middle must score on one of the two counter goals to get out of the middle.\nWhoever loses the ball goes in the middle.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Flying Changes 1v0 to 4v3",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 2",
+   "Session 6"
+  ],
+  "dur": 30,
+  "players": "1v0 to 4v3",
+  "desc": "Stage III: Flying changes 1v0, to 2v1, to 3v2, to 4v3 then start over. Quick transitions from numerical superiority, to numerical disadvantage, quick adaptations.",
+  "howTo": "Start 1v0, then 2v1, then 3v2, then 4v3, then start over.\nQuick transitions from numerical superiority to numerical disadvantage - adapt quickly.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "7v7 Game",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Week 2",
+   "Session 6"
+  ],
+  "dur": 30,
+  "players": "7v7",
+  "desc": "Stage IV: 7v7 game. Two games simultaneously. Round robin. 1 - 2 - 3 - 1 formation.",
+  "howTo": "Play 7v7 - two games simultaneously.\nRound robin.\nFormation: 1-2-3-1.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 2: session #6 - continue to build fitness base, transitional possession games and play",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 2",
+   "Session 6"
+  ],
+  "dur": 100,
+  "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- Passing Pattern Through the Midfield (20 mins)\n- 3v3+3 Transitional Possession (20 mins)\n- Flying Changes 1v0 to 4v3 (30 mins)\n- 7v7 Game (30 mins)",
+  "info": "Source: Week_2__session__6___continue_to_build_fitness_base__transitional_possession_games_and_play.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "5v2 Rondo Warm-Up",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Week 2",
+   "Session 7"
+  ],
+  "dur": 20,
+  "players": "5v2",
+  "desc": "Part of the dynamic warm up and stretch. 5v2 rondo.",
+  "howTo": "Warm up dynamically.\nPlay a 5v2 rondo.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "3v3+3 Transitional Possession",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 2",
+   "Session 7"
+  ],
+  "dur": 30,
+  "players": "3v3+3",
+  "desc": "3v3 + 3. Two counter goals. Team in the middle must score on one of the two counter goals to get out of the middle. Two teams of 3 keep the ball, whoever loses it goes in the middle.",
+  "howTo": "Two teams of 3 keep the ball against a team of 3 in the middle.\nThe team in the middle must score on one of the two counter goals to get out of the middle.\nWhoever loses the ball goes in the middle.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Flying Changes 1v0 to 3v2",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 2",
+   "Session 7"
+  ],
+  "dur": 20,
+  "players": "1v0 to 3v2",
+  "desc": "Stage III: Flying changes 1v0, to 2v1, to 3v2. Quick transitions from numerical superiority, to numerical disadvantage, quick adaptations. Player takes a shot, then turns around and defends 1v2. When play over, the 2 defend the new 3 that come on. Then after the 3v2 new sequence starts.",
+  "howTo": "Start 1v0, then 2v1, then 3v2.\nQuick transitions from numerical superiority to numerical disadvantage - adapt quickly.\nThe player takes a shot, then turns around and defends 1v2.\nWhen play is over, the 2 defend the new 3 that come on.\nThen the new 3v2 sequence starts.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "7v7 Game",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Week 2",
+   "Session 7"
+  ],
+  "dur": 30,
+  "players": "7v7",
+  "desc": "Stage IV: 7v7 game. Two games simultaneously. Round robin. 1 - 2 - 3 - 1 formation.",
+  "howTo": "Play 7v7 - two games simultaneously.\nRound robin.\nFormation: 1-2-3-1.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 2: Session #7, dynamic warm up and SAQ, 5v2 rondo to 3v3+2, transitional game, and play 7v7",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Week 2",
+   "Session 7"
+  ],
+  "dur": 100,
+  "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills in this session:\n- 5v2 Rondo Warm-Up (20 mins)\n- 3v3+3 Transitional Possession (30 mins)\n- Flying Changes 1v0 to 3v2 (20 mins)\n- 7v7 Game (30 mins)",
+  "info": "Source: Week_2__Session__7__dynamic_warm_up_and_SAQ__5v2_rondo_to_3v3_2__transitional_game__and_play_7v7.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "Dynamic Warm-Up Rondo",
+  "cat": "Warm up games",
+  "dur": 20,
+  "desc": "Part of the dynamic warm up and stretch. Players on the inside dribble the ball around one of the 4 poles and do a give and go with an outside player to switch places. Progress to different types of combinations, then throw to combine. Implement stretches during short breaks.",
+  "howTo": "Inside players dribble around one of the 4 poles\nPlay a give and go with an outside player to switch places\nProgress to different types of combinations, then throw to combine\nImplement stretches during short breaks",
+  "tags": [
+   "Week 2",
+   "Session 8"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "5v5 + 3 Possession",
+  "cat": "Possession in the middle third",
+  "dur": 30,
+  "players": "5v5 + 3",
+  "desc": "5v5 + 3. Three neutrals play with the team in possession.",
+  "howTo": "Set up 5v5 with 3 neutrals\nThree neutrals play with the team in possession",
+  "tags": [
+   "Week 2",
+   "Session 8"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "3rd Man Combination to Finish",
+  "cat": "Passing patterns to finish",
+  "dur": 20,
+  "desc": "Stage III: Passing pattern to combine and finish on goal. Midfielder plays it out wide, shows underneath to support, gets it back and finds target who turns and shoots on goal. Progress to combination to release wide player for a cross.",
+  "howTo": "Midfielder plays it out wide\nMidfielder shows underneath to support and gets it back\nFind the target, who turns and shoots on goal\nProgress to a combination to release the wide player for a cross",
+  "tags": [
+   "Week 2",
+   "Session 8"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "11v11 Game (4-3-3)",
+  "cat": "Staple Drills",
+  "dur": 30,
+  "players": "11v11",
+  "desc": "Stage IV: 11v11 game. 4-3-3 formation.",
+  "howTo": "Play 11v11 in a 4-3-3 formation",
+  "tags": [
+   "Week 2",
+   "Session 8"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "Week 2: Session #8 directional possession, combine to finish, pre season session",
+  "cat": "Passing patterns to finish",
+  "dur": 100,
+  "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\n\nDrills: Dynamic Warm-Up Rondo (20 min); 5v5 + 3 Possession (30 min); 3rd Man Combination to Finish (20 min); 11v11 Game (4-3-3) (30 min)",
+  "info": "Source: Week_2__Session__8_directional_possession__combine_to_finish__pre_season_session.pdf",
+  "tags": [
+   "Week 2",
+   "Session 8"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "4v4 + 3 Dynamic Warm-Up",
+  "cat": "Warm up games",
+  "dur": 30,
+  "players": "4v4 + 3",
+  "desc": "Dynamic warm up. 4 v4 + 3. 1 touch for the three neutrals.",
+  "howTo": "Play 4v4 + 3 as a dynamic warm up\nThe three neutrals are limited to 1 touch",
+  "tags": [
+   "Week 3",
+   "Session 12"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "11v11 Game (4-3-3)",
+  "cat": "Staple Drills",
+  "dur": 60,
+  "players": "11v11",
+  "desc": "Stage IV: 11v11 game. 4-3-3 formation. 2x30 mins.",
+  "howTo": "Play 11v11 in a 4-3-3 formation\nTwo 30-minute halves",
+  "tags": [
+   "Week 3",
+   "Session 12"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "Week 3: Session #12. Warm up then game. Emphasis on build up, breaking lines, and creating goals",
+  "cat": "Possession in the final third",
+  "dur": 90,
+  "desc": "Week 3: Session #12. Warm up in 4v4+3 and then play. Attacking principles.\n\nDrills: 4v4 + 3 Dynamic Warm-Up (30 min); 11v11 Game (4-3-3) (60 min)",
+  "info": "Source: Week_3__Session__12__Warm_up_then_game__Emphasis_on_build_up__breaking_lines__and_creating_goals.pdf",
+  "tags": [
+   "Week 3",
+   "Session 12"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "4v2 Counter Press Rondo",
+  "cat": "Pressing when losing the ball",
+  "dur": 25,
+  "players": "4v2",
+  "desc": "Stage I: 4v2. Outside players have a 2 touch limit, except two on the sides have 1 touch limit. When they lose possession, they counter press to prevent the two in the middle dribbling the ball out of the rectangle. Introduce immediate reaction and concepts.",
+  "howTo": "Outside players are limited to 2 touches; the two on the sides have a 1 touch limit\nWhen they lose possession, counter press to stop the two in the middle dribbling out of the rectangle\nIntroduce immediate reaction and the counter-press concepts",
+  "tags": [
+   "Week 4",
+   "Session 13"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "4v4 + 3 Counter Press",
+  "cat": "Pressing when losing the ball",
+  "dur": 20,
+  "players": "4v4 + 3",
+  "desc": "Stage II: 4v4 +3. 18 yards by 14 yards space, no touch restrictions. Team in possession gets a point every 6 passes. Emphasis on quick transitional reaction once the possession is lost.",
+  "howTo": "Play 4v4 + 3 in an 18 x 14 yard space with no touch restrictions\nTeam in possession scores a point every 6 passes\nOn losing possession, react quickly to win it back",
+  "info": "Coaching point: quickly close down where the ball is lost. Closest players to the ball must react in a manner of winning it back. Farthest players must squeeze in to create numerical superiority in identified area of the field.",
+  "tags": [
+   "Week 4",
+   "Session 13"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "6v6 + GK Transitional Fluid Game",
+  "cat": "Transitions to the final third",
+  "dur": 30,
+  "players": "6v6 + GK",
+  "desc": "Stage III: 6v6+GK. Continuous transitional game, with players restricted to their own half of play. Attacking team has three front players and three midfielders, while the defending team has back four and two holding mids. Attacking team looks to score. Defensive team looks to defend, win possession and keep the ball. They keep possession with the team on the opposite end. 12 passes gives them a point, while a regular goal gives the other team a point.",
+  "howTo": "Continuous transitional game, players restricted to their own half\nAttacking team: three front players and three midfielders; defending team: back four and two holding mids\nAttacking team looks to score; defending team defends, wins possession and keeps the ball\n12 passes earns a point; a regular goal earns the other team a point",
+  "info": "Coaching points: REACTION. Once the possession is lost in the final third, can we quickly close the ball down with everyone squeezing, weak sided midfielders tucking in, to create numbers up situation. Continues movement to react and win the ball back without negative emotional reactions once the turn over has occurred.",
+  "tags": [
+   "Week 4",
+   "Session 13"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "11v11 Murder Ball",
+  "cat": "Staple Drills",
+  "dur": 20,
+  "players": "11v11",
+  "desc": "Stage IV: 11v11 game. 4v4+3. Murder ball. Every time a ball goes out, it's kicked back in right away.",
+  "howTo": "Play 11v11, murder ball rules\nEvery time a ball goes out, kick it back in right away",
+  "info": "REACTION. Once the possession is lost in the final third, can we quickly close the ball down with everyone squeezing, weak sided midfielders tucking in, to create numbers up situation.",
+  "tags": [
+   "Week 4",
+   "Session 13"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "Week 4: Session #13 - Counter pressing in the final third",
+  "cat": "Pressing when losing the ball",
+  "dur": 95,
+  "desc": "Transitional REACTION to get the ball back once it's lost with the main emphasis in the final third of the field. Constant emphasis on reaction, no negative emotions shown when the ball is lost but entire intent to win it back.\n\nDrills: 4v2 Counter Press Rondo (25 min); 4v4 + 3 Counter Press (20 min); 6v6 + GK Transitional Fluid Game (30 min); 11v11 Murder Ball (20 min)",
+  "info": "Source: Week_4__Session__13___Counter_pressing_in_the_final_third.pdf",
+  "tags": [
+   "Week 4",
+   "Session 13"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "Team Handball Activation",
+  "cat": "Warm up games",
+  "dur": 30,
+  "desc": "Stage I: Warm up. Team handball activation phase. Start with throwing then progress to kicking!",
+  "howTo": "Start with throwing, then progress to kicking",
+  "tags": [
+   "Week 4",
+   "Session 14"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "4v4 + 3 to 4 Counter Goals",
+  "cat": "Pressing when losing the ball",
+  "dur": 20,
+  "players": "4v4 + 3",
+  "desc": "Stage II: 4v4+3 to 4 counter goals. Team in the middle must score in one of the 4 counter goals to get out of the middle. Team in possession reacts and presses when they lose possession. 4 games of 3.5 minutes.",
+  "howTo": "Play 4v4 + 3 to 4 counter goals\nThe team in the middle must score in one of the 4 counter goals to get out of the middle\nThe team in possession reacts and presses when they lose possession\n4 games of 3.5 minutes",
+  "tags": [
+   "Week 4",
+   "Session 14"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "6v6 Round Robin Games",
+  "cat": "Staple Drills",
+  "dur": 30,
+  "players": "6v6",
+  "desc": "Stage III: 6v6 game. Two games simultaneously. Round robin. 2-2-1 formation. 3 games of 10 minutes.",
+  "howTo": "Two 6v6 games simultaneously, round robin\n2-2-1 formation\n3 games of 10 minutes",
+  "tags": [
+   "Week 4",
+   "Session 14"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "Week 4: Session #14 Counter pressing in the middle third",
+  "cat": "Pressing when losing the ball",
+  "dur": 80,
+  "desc": "Counter pressing in the middle third. Continue to instill the counter press mentality. Win the ball back immediately.\n\nDrills: Team Handball Activation (30 min); 4v4 + 3 to 4 Counter Goals (20 min); 6v6 Round Robin Games (30 min)",
+  "info": "Source: Week_4__Session__14_Counter_pressing_in_the_middle_third.pdf",
+  "tags": [
+   "Week 4",
+   "Session 14"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "3v1 Warm-Up Rondo",
+  "cat": "Warm up games",
+  "dur": 15,
+  "players": "3v1",
+  "desc": "Stage I: 3v1 part of the warm up. 1 touch limit, counter press to react.",
+  "howTo": "Play 3v1 with a 1 touch limit\nCounter press to react when possession is lost",
+  "tags": [
+   "Week 4",
+   "Session 15"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "3v3 + 3 to 4 Counter Goals",
+  "cat": "Pressing when losing the ball",
+  "dur": 20,
+  "players": "3v3 + 3",
+  "desc": "Stage II: 3v3+3 to 4 counter goals. Team in the middle must score in one of the 4 counter goals to get out of the middle. Team in possession reacts and presses when they lose possession. 4 games of 4 minutes. Focus on reaction of the players once the possession is lost.",
+  "howTo": "Play 3v3 + 3 to 4 counter goals\nThe team in the middle must score in one of the 4 counter goals to get out of the middle\nThe team in possession reacts and presses when they lose possession\n4 games of 4 minutes",
+  "tags": [
+   "Week 4",
+   "Session 15"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "Building Out of the Back with Counter Press",
+  "cat": "Playing from back",
+  "dur": 30,
+  "desc": "Stage III: Building out of the back and counter press when the possession is lost. Team building has the back 4, three mids, and wingers. Team pressing has the front three, two attacking mids, holding mid, full backs, and center back. Focus on reaction.",
+  "howTo": "Building team: back 4, three mids, and wingers\nPressing team: front three, two attacking mids, holding mid, full backs, and center back\nCounter press when possession is lost; focus on reaction",
+  "tags": [
+   "Week 4",
+   "Session 15"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "11v11 Game",
+  "cat": "Staple Drills",
+  "dur": 10,
+  "players": "11v11",
+  "desc": "Stage IV: 11v11 game.",
+  "howTo": "Play 11v11",
+  "tags": [
+   "Week 4",
+   "Session 15"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "Week 4: Session #15 Counter pressing in the defensive third / building out",
+  "cat": "Playing from back",
+  "dur": 75,
+  "desc": "Counter pressing in the middle third. Continue to instill the counter press mentality. Win the ball back immediately.\n\nDrills: 3v1 Warm-Up Rondo (15 min); 3v3 + 3 to 4 Counter Goals (20 min); Building Out of the Back with Counter Press (30 min); 11v11 Game (10 min)",
+  "info": "Source: Week_4__Session_15_Counter_pressing_in_the_defensive_third___building_out.pdf",
+  "tags": [
+   "Week 4",
+   "Session 15"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "4v4 + 3 Dynamic Warm-Up",
+  "cat": "Warm up games",
+  "dur": 30,
+  "players": "4v4 + 3",
+  "desc": "Dynamic warm up. 4 v4 + 3. No touch restriction, 4 counter goals to play on.",
+  "howTo": "Play 4v4 + 3 as a dynamic warm up\nNo touch restriction; 4 counter goals to play on",
+  "tags": [
+   "Week 4",
+   "Session 16"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "11v11 Game (4-3-3)",
+  "cat": "Staple Drills",
+  "dur": 60,
+  "players": "11v11",
+  "desc": "Stage IV: 11v11 game. 4-3-3 formation. 2x30 mins.",
+  "howTo": "Play 11v11 in a 4-3-3 formation\nTwo 30-minute halves",
+  "tags": [
+   "Week 4",
+   "Session 16"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "Week 4: Session #16 Counter press in all three zones as a focus",
+  "cat": "Pressing when losing the ball",
+  "dur": 90,
+  "desc": "Week 4: Session #16. Warm up in 4v4+3 and then play. Attacking principles.\n\nDrills: 4v4 + 3 Dynamic Warm-Up (30 min); 11v11 Game (4-3-3) (60 min)",
+  "info": "Source: Week_4__Session__16_Counter_press_in_all_three_zones_as_a_focus.pdf",
+  "tags": [
+   "Week 4",
+   "Session 16"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "6v6 in Zones to 4 Goals",
+  "cat": "Line of confrontation",
+  "dur": 20,
+  "players": "6v6",
+  "desc": "4v4v4. 4 groups of 4 over the river game. 2 players from the middle group can go in to press.",
+  "howTo": "4 groups of 4 in an over-the-river game\n2 players from the middle group can go in to press",
+  "tags": [
+   "Week 5",
+   "Session 17"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "8v7 High Press in the Middle Third",
+  "cat": "Line of confrontation",
+  "dur": 40,
+  "players": "8v7",
+  "desc": "Stage II and III: 8v7 including the GKs. Team in possession has the back 4 and three mids while the opposite team has the front three and three midfielders. Defensive organization in high press off of opponent's goal kicks.",
+  "howTo": "Play 8v7 including the GKs\nTeam in possession: back 4 and three mids; opposite team: front three and three midfielders\nWork on defensive organization in the high press off opponent's goal kicks",
+  "tags": [
+   "Week 5",
+   "Session 17"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "11v11 High Press off Goal Kicks",
+  "cat": "Line of confrontation",
+  "dur": 30,
+  "players": "11v11",
+  "desc": "Stage IV: 11v1 game. 1-4-3-3. Work on high pressing opponent's goal kicks.",
+  "howTo": "Play 11v11 in a 1-4-3-3\nWork on high pressing the opponent's goal kicks",
+  "tags": [
+   "Week 5",
+   "Session 17"
+  ]
+ },
+ {
+  "kind": "drill",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "name": "Week 5: Session #17 high press organization off of opponent's goal kicks.",
+  "cat": "Line of confrontation",
+  "dur": 90,
+  "desc": "Week 5: Session 17. Defensive organization in the final third off of opponent's goal kicks\n\nDrills: 6v6 in Zones to 4 Goals (20 min); 8v7 High Press in the Middle Third (40 min); 11v11 High Press off Goal Kicks (30 min)",
+  "info": "Source: Week_5__Session__17_high_press_organization_off_of_opponent_s_goal_kicks_.pdf",
+  "tags": [
+   "Week 5",
+   "Session 17"
+  ]
+ },
+ {
+  "name": "Passing Pattern \u2014 3rd Man Involvement",
+  "kind": "drill",
+  "cat": "Passing patterns",
+  "tags": [
+   "Week 5",
+   "Session 18"
+  ],
+  "dur": 20,
+  "desc": "Part of the dynamic warm up and stretch. Passing pattern. Play the ball into CDM, engage the third man to show underneath, play ACM, lay off, and finish the sequence. Two players stay in the middle.",
+  "howTo": "Play the ball into the CDM.\nEngage the third man to show underneath.\nPlay the ACM.\nLay off and finish the sequence.\nTwo players stay in the middle.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "6v6 in Zones to 4 Goals",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Week 5",
+   "Session 18"
+  ],
+  "dur": 20,
+  "desc": "6v6 in restricted zones. 4 blues shift the ball side to side to break a line and find one of the two blues in the final zone. Once they find the final zone, the defending 4 can enter and prevent the blues from scoring. Pressure, cover, balance, to prevent penetrating passes. Team communication, shifting, moving.",
+  "howTo": "Play 6v6 in restricted zones.\nThe 4 blues shift the ball side to side to break a line.\nFind one of the two blues in the final zone.\nOnce the final zone is found, the defending 4 can enter and prevent the blues from scoring.\nDefend with pressure, cover and balance to prevent penetrating passes.\nCommunicate as a team, shifting and moving together.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "8v7 in the Middle Third to Two Goals",
+  "kind": "drill",
+  "cat": "Getting into shapes",
+  "tags": [
+   "Week 5",
+   "Session 18"
+  ],
+  "dur": 30,
+  "desc": "Stage II and III: 8v7 including the GKs. Team in possession has the back 4 and three mids while the opposite team has the front three and three midfielders. Defensive organization in the middle third, preventing central penetration.",
+  "howTo": "Play 8v7 including the GKs.\nThe team in possession has the back 4 and three midfielders.\nThe opposite team has the front three and three midfielders.\nOrganize defensively in the middle third to prevent central penetration.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "11v11",
+  "kind": "drill",
+  "cat": "Getting into shapes",
+  "tags": [
+   "Week 5",
+   "Session 18"
+  ],
+  "dur": 30,
+  "desc": "Stage IV: 11v11 game. 1-4-3-3.",
+  "howTo": "Play 11v11.\nShape: 1-4-3-3.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 5: Session 18. Defensive organization in the middle third to prevent penetration",
+  "kind": "drill",
+  "cat": "Getting into shapes",
+  "tags": [
+   "Week 5",
+   "Session 18"
+  ],
+  "dur": 100,
+  "desc": "Week 5: Session 18. Defensive organization in the middle third to prevent penetration\n\nDrills: Passing Pattern \u2014 3rd Man Involvement (20 min); 6v6 in Zones to 4 Goals (20 min); 8v7 in the Middle Third to Two Goals (30 min); 11v11 (30 min).",
+  "info": "Source: Week_5__Session_18__Defensive_organization_in_the_middle_third_to_prevent_penetration.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "3v3+2 (Week 5, Session 19)",
+  "kind": "drill",
+  "cat": "Staple Drills",
+  "tags": [
+   "Week 5",
+   "Session 19"
+  ],
+  "dur": 40,
+  "desc": "3v3 + 2. 3 bouts of 4 mins.",
+  "howTo": "Play 3v3 + 2.\n3 bouts of 4 minutes each.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "4v4 Tournament",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 5",
+   "Session 19"
+  ],
+  "dur": 30,
+  "desc": "Two games simultaneously. Round robin tournament. 4 games of 8 minutes each. 1 field is 4v4 with GKs on big goal, another game is 4v4 on small goals.",
+  "howTo": "Set up two games simultaneously.\nPlay a round robin tournament.\n4 games of 8 minutes each.\nOne field is 4v4 with GKs on big goal; the other game is 4v4 on small goals.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 5: Session #19 - 3v3+2 and 4v4 tournament",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 5",
+   "Session 19"
+  ],
+  "dur": 70,
+  "desc": "3v3+2 and 4v4 mini tournament\n\nDrills: 3v3+2 (40 min); 4v4 Tournament (30 min).",
+  "info": "Source: Week_5__Session__19___3v3_2_and_4v4_tournament.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "3v3+2 to Two Counter Goals",
+  "kind": "drill",
+  "cat": "Finishing",
+  "tags": [
+   "Week 6",
+   "Session 20"
+  ],
+  "dur": 20,
+  "desc": "3v3 + 2 to two counter goals. 3 bouts of 4 mins.",
+  "howTo": "Play 3v3 + 2 to two counter goals.\n3 bouts of 4 minutes each.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "7v7+1 Runs in Behind",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 6",
+   "Session 20"
+  ],
+  "dur": 40,
+  "desc": "Stage II and III: 7v7+1 neutral and GKs. 2 games of 10 minutes each. Game is played in one half of the field. Nobody can enter the other half until a pass leads a player to run into the opposing half. Once that happens, everyone slides over to the other half and game continues.",
+  "howTo": "Play 7v7+1 neutral and GKs in one half of the field.\nNobody can enter the other half until a pass leads a player to run into the opposing half.\nOnce that happens, everyone slides over to the other half and the game continues.\n2 games of 10 minutes each.",
+  "info": "Coaching points:\ntiming of the runs\nreading cues\nbody posture and positioning\ncommunication\nspatial awareness",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "7v7+1 Regular Game with Offsides",
+  "kind": "drill",
+  "cat": "Finishing",
+  "tags": [
+   "Week 6",
+   "Session 20"
+  ],
+  "dur": 30,
+  "desc": "Stage IV: 7v7+1 neutral and GKs. 2 games of 10 minutes each. Regular game with offsides.",
+  "howTo": "Play 7v7+1 neutral and GKs.\nRegular game with offsides.\n2 games of 10 minutes each.",
+  "info": "Coaching points:\ntiming of the runs\nreading cues\nbody posture and positioning\ncommunication\nspatial awareness",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 6: Session 20 - creating and finishing chances in the final 3rd",
+  "kind": "drill",
+  "cat": "Finishing",
+  "tags": [
+   "Week 6",
+   "Session 20"
+  ],
+  "dur": 90,
+  "desc": "Week 6: Session #20\nCreating and finishing goal scoring opportunities in the final third\nEmphasis on penetrating runs in behind the last line of defense, timing, spatial awareness, beating the offsides trap, communication.\n\nDrills: 3v3+2 to Two Counter Goals (20 min); 7v7+1 Runs in Behind (40 min); 7v7+1 Regular Game with Offsides (30 min).",
+  "info": "Source: Week_6__Session_20___creating_and_finishing_chances_in_the_final_3rd.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Activation and 4v4+3",
+  "kind": "drill",
+  "cat": "Warm up games",
+  "tags": [
+   "Week 6",
+   "Session 21"
+  ],
+  "dur": 40,
+  "desc": "Start with a lap and then do soccer specific activation for 30 mins. Then stage II is 4v4 + 3. 3 bouts of 4 mins.",
+  "howTo": "Start with a lap.\nDo soccer specific activation for 30 minutes.\nThen play stage II: 4v4 + 3.\n3 bouts of 4 minutes each.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "5v5+GKs Round Robin Tournament",
+  "kind": "drill",
+  "cat": "Staple Drills",
+  "tags": [
+   "Week 6",
+   "Session 21"
+  ],
+  "dur": 30,
+  "desc": "Stage IV: 5v5 + GKs. Two games simultaneously. Round robin tournament. 4 games of 8 minutes each.",
+  "howTo": "Set up two games simultaneously.\nPlay a round robin tournament, 5v5 + GKs.\n4 games of 8 minutes each.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 6: Session #21 - 4v4 + 3 and 6v6 tournament to big goals",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "tags": [
+   "Week 6",
+   "Session 21"
+  ],
+  "dur": 70,
+  "desc": "Drills: Activation and 4v4+3 (40 min); 5v5+GKs Round Robin Tournament (30 min).",
+  "info": "Source: Week_6__Session__21___4v4___3_and_6v6_tournament_to_big_goals.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Activation \u2014 Tag Games and Directional Sprinting",
+  "kind": "drill",
+  "cat": "Warm up games",
+  "tags": [
+   "Week 6",
+   "Session 22"
+  ],
+  "dur": 20,
+  "desc": "Stage I: Activation. Different tag games to activate. Directional sprinting game to activate.",
+  "howTo": "Play different tag games to activate.\nPlay a directional sprinting game to activate.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "4v2 Rondo",
+  "kind": "drill",
+  "cat": "Staple Drills",
+  "tags": [
+   "Week 6",
+   "Session 22"
+  ],
+  "dur": 20,
+  "desc": "Stage II: 4v2 rondo. 1 touch on the ends, two touches on the sides. Alternate.",
+  "howTo": "Play 4v2 rondo.\n1 touch on the ends, two touches on the sides.\nAlternate.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Flying Changes \u2014 3v2 in the Attacking Third",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 6",
+   "Session 22"
+  ],
+  "dur": 30,
+  "desc": "Stage III: Flying changes with numerical advantage. When a team has possession, they get an extra player to join them from the side.",
+  "howTo": "Play flying changes with numerical advantage.\nWhen a team has possession, they get an extra player to join them from the side.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "11v11 \u2014 Attack Quickly and Exploit Numerical Advantage",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 6",
+   "Session 22"
+  ],
+  "dur": 30,
+  "desc": "Stage IV: 11v11 focus on attacking quickly and exploiting numerical advantages in the opponent's half.",
+  "howTo": "Play 11v11.\nFocus on attacking quickly and exploiting numerical advantages in the opponent's half.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 6: Session #22 - exploit numerical advantage in the final third",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 6",
+   "Session 22"
+  ],
+  "dur": 100,
+  "desc": "Week 6: Session#22 - transition from D-->A\nexploit numerical superiority by attacking quickly in the attacking third\n\nDrills: Activation \u2014 Tag Games and Directional Sprinting (20 min); 4v2 Rondo (20 min); Flying Changes \u2014 3v2 in the Attacking Third (30 min); 11v11 \u2014 Attack Quickly and Exploit Numerical Advantage (30 min).",
+  "info": "Source: Week_6__Session_22___exploit_numerical_advantage_in_the_final_third.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "4v4+3 Warm-Up",
+  "kind": "drill",
+  "cat": "Warm up games",
+  "tags": [
+   "Week 6",
+   "Session 23"
+  ],
+  "dur": 25,
+  "desc": "Dynamic warm up. 4 v4 + 3. 1 touch for the three neutrals.",
+  "howTo": "Dynamic warm up.\nPlay 4v4 + 3.\n1 touch for the three neutrals.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "11v11",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 6",
+   "Session 23"
+  ],
+  "dur": 70,
+  "desc": "Stage IV: 11v11 game. 4-3-3 formation. 2x30 mins.",
+  "howTo": "Play 11v11.\nFormation: 4-3-3.\n2 x 30 minutes.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 6: Session #23 - 4v4+3 to warm up then 11v11",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 6",
+   "Session 23"
+  ],
+  "dur": 95,
+  "desc": "Week 3: Session #12\nWarm up in 4v4+3 and then play\nAttacking principles\n\nDrills: 4v4+3 Warm-Up (25 min); 11v11 (70 min).",
+  "info": "Source: Week_6__Session__23___4v4_3_to_warm_up_then_11v11.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Activation \u2014 Tag, Penny and Reaction Games",
+  "kind": "drill",
+  "cat": "Warm up games",
+  "tags": [
+   "Week 7",
+   "Session 24"
+  ],
+  "dur": 25,
+  "desc": "Stage I: Activation. 3 players in a circle with hands held together. One player tries to go around trying to tag a player that is being protected. Tag game: grab a penny being held as a tail. The one with most pennies wins. Reaction game of running to one side or the other.",
+  "howTo": "3 players stand in a circle with hands held together; one player tries to go around trying to tag a player that is being protected.\nTag game: grab a penny being held as a tail; the one with the most pennies wins.\nReaction game: run to one side or the other.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "4v2 Four-Color Rondo",
+  "kind": "drill",
+  "cat": "Staple Drills",
+  "tags": [
+   "Week 7",
+   "Session 24"
+  ],
+  "dur": 25,
+  "desc": "4 color game. Players play 4v2, must complete 4 passes before switching it over to the next grid and shifting over two players providing new passing lanes. 4 bouts of 3 mins.",
+  "howTo": "Play 4v2 in the four-color game.\nComplete 4 passes before switching it over to the next grid.\nShift over two players, providing new passing lanes.\n4 bouts of 3 minutes each.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "4v4 to Goal \u2014 Exploit Numerical Superiority",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 7",
+   "Session 24"
+  ],
+  "dur": 30,
+  "desc": "Stage II: Exploit numerical superiority game. 3v1 in the square, after 5 passes, 2 blues advance to make it 4v3 to goal, while one red is recovering to defend. When blues score it counts as two goals, when reds score on counter goals it's 1 goal each.",
+  "howTo": "Play 3v1 in the square.\nAfter 5 passes, 2 blues advance to make it 4v3 to goal, while one red is recovering to defend.\nWhen blues score it counts as two goals; when reds score on counter goals it is 1 goal each.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Free Kicks",
+  "kind": "drill",
+  "cat": "Set pieces",
+  "tags": [
+   "Week 7",
+   "Session 24"
+  ],
+  "dur": 20,
+  "desc": "Stage IV: Practice free kicks.",
+  "howTo": "Practice free kicks.",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 7: Session #24 - transition D--A from the midfield third",
+  "kind": "drill",
+  "cat": "Transitions to the final third",
+  "tags": [
+   "Week 7",
+   "Session 24"
+  ],
+  "dur": 100,
+  "desc": "Week 7: Session#24 - transition from D-->A from the middle of the field\nexploit numerical superiority by attacking quickly\n\nDrills: Activation \u2014 Tag, Penny and Reaction Games (25 min); 4v2 Four-Color Rondo (25 min); 4v4 to Goal \u2014 Exploit Numerical Superiority (30 min); Free Kicks (20 min).",
+  "info": "Source: Week_7__Session__24___transition_D__A_from_the_midfield_third.pdf",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "cat": "Warm up games",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Stage I: 3v1 rondo activation",
+  "dur": 20,
+  "howTo": "Set up a 3v1 rondo.\nThree attackers keep possession against one defender.\nUse as the activation to start the session.",
+  "kind": "drill",
+  "name": "3v1 Rondo Activation",
+  "players": "3v1",
+  "tags": [
+   "Week 7",
+   "Session 25"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "5v5 + 3 possession. 3 bouts of 4 mins",
+  "dur": 20,
+  "howTo": "Play 5v5 with 3 neutral players supporting the team in possession.\nPlay 3 bouts of 4 minutes.",
+  "kind": "drill",
+  "name": "5v5+3 Possession",
+  "players": "5v5 + 3 neutrals",
+  "tags": [
+   "Week 7",
+   "Session 25"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Stage III: 7v6 in each half. Team in build up looks to connect passes and advance the ball into the other half to the other team building out. Attackers look to press and score. 2 bouts of 10 mins",
+  "dur": 30,
+  "howTo": "Split the field into two halves with a 7v6 in each half, playing together in their own area.\nThe team in build-up connects passes and advances the ball into the other half to the team building out.\nAttackers press and look to score.\nPlay 2 bouts of 10 minutes.",
+  "kind": "drill",
+  "name": "7v6 Build-Up in Each Half",
+  "players": "7v6",
+  "tags": [
+   "Week 7",
+   "Session 25"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Stage IV: Game. 2x12 mins regular game",
+  "dur": 25,
+  "howTo": "Play a regular 11v11 game.\nPlay 2 x 12 minutes.",
+  "kind": "drill",
+  "name": "11v11 Game",
+  "players": "11v11",
+  "tags": [
+   "Week 7",
+   "Session 25"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Week 7: Session#25 - Possession based offensive organization and implementation of principles\n\nDrills: 3v1 Rondo Activation (20 mins), 5v5+3 Possession (20 mins), 7v6 Build-Up in Each Half (30 mins), 11v11 Game (25 mins)",
+  "dur": 95,
+  "info": "Source: Week_7__Session__25___possession_based_offensive_organization_.pdf",
+  "kind": "drill",
+  "name": "Week 7: Session #25 - possession based offensive organization",
+  "tags": [
+   "Week 7",
+   "Session 25"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "3v3 + 2. 3 bouts of 4 mins",
+  "dur": 25,
+  "howTo": "Play 3v3 with 2 neutral players.\nPlay 3 bouts of 4 minutes.",
+  "kind": "drill",
+  "name": "3v3+2 Possession",
+  "players": "3v3 + 2 neutrals",
+  "tags": [
+   "Week 7",
+   "Session 26"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the final third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "6v6. 4 team round robin for points.",
+  "dur": 30,
+  "howTo": "Play 6v6 to 4 goals.\nRun a 4-team round robin for points.",
+  "kind": "drill",
+  "name": "6v6 to 4 Goals",
+  "players": "6v6",
+  "tags": [
+   "Week 7",
+   "Session 26"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "9v9 with 3 teams round robin.",
+  "dur": 25,
+  "howTo": "Play 9v9 with 3 teams in a round robin.",
+  "kind": "drill",
+  "name": "9v9 Round Robin",
+  "players": "9v9",
+  "tags": [
+   "Week 7",
+   "Session 26"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "3v3+2 and 4v4 mini tournament\n\nDrills: 3v3+2 Possession (25 mins), 6v6 to 4 Goals (30 mins), 9v9 Round Robin (25 mins)",
+  "dur": 80,
+  "info": "Source: Week_7__Session__26_positional_play_games.pdf",
+  "kind": "drill",
+  "name": "Week 7: Session #26 positional play games",
+  "tags": [
+   "Week 7",
+   "Session 26"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Warm up games",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Dynamic warm up. 3v3+2",
+  "dur": 25,
+  "howTo": "Start with a dynamic warm-up.\nPlay 3v3+2.",
+  "kind": "drill",
+  "name": "3v3+2 Dynamic Warm-Up",
+  "players": "3v3 + 2 neutrals",
+  "tags": [
+   "Week 7",
+   "Session 27"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the final third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Stage IV: 11v11 game. 4-3-3 formation. 2x30 mins",
+  "dur": 70,
+  "howTo": "Play an 11v11 game in a 4-3-3 formation.\nPlay 2 x 30 minutes.",
+  "kind": "drill",
+  "name": "11v11 Game (4-3-3)",
+  "players": "11v11",
+  "tags": [
+   "Week 7",
+   "Session 27"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the final third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Week 7: Session #27\nWarm up in 3v3+2 and then play\nAttacking principles\n\nDrills: 3v3+2 Dynamic Warm-Up (25 mins), 11v11 Game (4-3-3) (70 mins)",
+  "dur": 95,
+  "info": "Source: Week_7__Session__27_3v3_2_and_11v11.pdf",
+  "kind": "drill",
+  "name": "Week 7: Session #27 3v3+2 and 11v11",
+  "tags": [
+   "Week 7",
+   "Session 27"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Passing patterns",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Passing pattern to warm up. Play the ball and show underneath, play a far player and third man follows the pass to show underneath to advance the next pass and so on",
+  "dur": 15,
+  "howTo": "Play the ball and show underneath.\nPlay a far player.\nThe third man follows the pass to show underneath to advance the next pass.\nRepeat the pattern.",
+  "kind": "drill",
+  "name": "Passing Pattern Warm-Up",
+  "tags": [
+   "Week 8",
+   "Session 28"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "4v4+4",
+  "dur": 20,
+  "howTo": "Play 4v4 with 4 neutral players.",
+  "kind": "drill",
+  "name": "4v4+4 Possession",
+  "players": "4v4 + 4 neutrals",
+  "tags": [
+   "Week 8",
+   "Session 28"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "7v7 in tight space",
+  "dur": 45,
+  "howTo": "Play 7v7 in a tight space.",
+  "kind": "drill",
+  "name": "7v7 in a Tight Space",
+  "players": "7v7",
+  "tags": [
+   "Week 8",
+   "Session 28"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Recovery session and game replication for players that played more\n\nDrills: Passing Pattern Warm-Up (15 mins), 4v4+4 Possession (20 mins), 7v7 in a Tight Space (45 mins)",
+  "dur": 80,
+  "info": "Source: Week_8__Session_28_recovery_session.pdf",
+  "kind": "drill",
+  "name": "Week 8: Session 28 recovery session",
+  "tags": [
+   "Week 8",
+   "Session 28"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Warm up games",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "4v1 rondo",
+  "dur": 20,
+  "howTo": "Play a 4v1 rondo.",
+  "kind": "drill",
+  "name": "4v1 Rondo",
+  "players": "4v1",
+  "tags": [
+   "Week 8",
+   "Session 29",
+   "MD-1"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "6v3 always in a hexagon. The three in the middle must score a goal to then be in possession",
+  "dur": 30,
+  "howTo": "Set up a hexagon with 6 players in possession and 3 in the middle.\nThe three in the middle must score a goal to then be in possession.",
+  "kind": "drill",
+  "name": "6v3 in a Hexagon",
+  "players": "6v3",
+  "tags": [
+   "Week 8",
+   "Session 29",
+   "MD-1"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "11v11 two touch limit to small goals on either end. Three small goals on both ends.",
+  "dur": 20,
+  "howTo": "Play 11v11 in a tight space with a two-touch limit.\nPlay to small goals on either end \u2014 three small goals on both ends.",
+  "kind": "drill",
+  "name": "11v11 in a Tight Space",
+  "players": "11v11",
+  "tags": [
+   "Week 8",
+   "Session 29",
+   "MD-1"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Passing patterns",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Drills: 4v1 Rondo (20 mins), 6v3 in a Hexagon (30 mins), 11v11 in a Tight Space (20 mins)",
+  "dur": 70,
+  "info": "Source: Week_8__Session_29_MD_1_session_positional_play_activities.pdf",
+  "kind": "drill",
+  "name": "Week 8: Session #29 MD-1 session positional play activities",
+  "tags": [
+   "Week 8",
+   "Session 29",
+   "MD-1"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Passing patterns",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Stage I: Passing pattern as part of the warm up. Ball starts with pass out wide. Give and go out wide to play forward. Play square and then wide. Another give and go. Give to the start through a pivot and start over. Everyone follows their pass",
+  "dur": 25,
+  "howTo": "Ball starts with a pass out wide.\nGive and go out wide to play forward.\nPlay square and then wide.\nAnother give and go.\nGive to the start through a pivot and start over.\nEveryone follows their pass.",
+  "kind": "drill",
+  "name": "Build-Out Passing Pattern Warm-Up",
+  "tags": [
+   "Week 8",
+   "Session 30"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Possession in the middle third",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Stage II: Big space 4v4+3. 2 touch on the outside, 1 touch neutrals. Quick ball circulation, movement off the ball, passing lanes, breaking lines. Effective possession",
+  "dur": 20,
+  "howTo": "Play 4v4+3 in a big space.\nOutside players are limited to 2 touches; neutrals play 1 touch.\nFocus on quick ball circulation, movement off the ball, passing lanes, and breaking lines.",
+  "kind": "drill",
+  "name": "4v4+3 Possession",
+  "players": "4v4 + 3 neutrals",
+  "tags": [
+   "Week 8",
+   "Session 30"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Playing from back",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Stage III and IV: Building out of the back in 10v9 with advancing the ball to score on a goal in the middle. Full back pins inside, create 4v3 in the middle",
+  "dur": 35,
+  "howTo": "Build out of the back in 10v9, advancing the ball to score on a goal in the middle.\nFull back pins inside to create a 4v3 in the middle.\nProgress to 11v11.",
+  "kind": "drill",
+  "name": "10v9 Building Out of the Back to 11v11",
+  "players": "10v9 progressing to 11v11",
+  "tags": [
+   "Week 8",
+   "Session 30"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Playing from back",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Week 8: Session #30\nBuilding out of the back\n\nDrills: Build-Out Passing Pattern Warm-Up (25 mins), 4v4+3 Possession (20 mins), 10v9 Building Out of the Back to 11v11 (35 mins)",
+  "dur": 80,
+  "info": "Source: Week_8__Session__30_Building_out_of_the_back.pdf",
+  "kind": "drill",
+  "name": "Week 8: Session #30 Building out of the back",
+  "tags": [
+   "Week 8",
+   "Session 30"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Warm up games",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Warm up: Dynamic activation. Different variations of tag games, changes of directions, stretches, and some sprints",
+  "dur": 15,
+  "howTo": "Dynamic activation.\nDifferent variations of tag games.\nChanges of direction, stretches, and some sprints.",
+  "kind": "drill",
+  "name": "Dynamic Warm-Up",
+  "tags": [
+   "Week 9",
+   "Session 31",
+   "MD-1"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Passing patterns",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Stage I: Passing pattern. 2 balls start at the same time. 6 groups of 6",
+  "dur": 15,
+  "howTo": "Set up a diamond passing pattern in 6 groups of 6.\n2 balls start at the same time.",
+  "kind": "drill",
+  "name": "Diamond Passing Pattern",
+  "players": "6 groups of 6",
+  "tags": [
+   "Week 9",
+   "Session 31",
+   "MD-1"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Pressing when losing the ball",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Stage II: Positional Play game. 3 teams of 5 players. 10 players in possession occupy their exact positions in a 4-3-3 set up. 5 players work in the middle, high pressing in identified areas. Once the group of 5 win the ball, then occupy positions of the 5 that they have stolen it from and keep it with the other color. The 5 that lost possession has to touch hands in the middle before starting to defend.",
+  "dur": 20,
+  "howTo": "Three teams of 5 players; 10 in possession occupy their exact positions in a 4-3-3 set-up.\nThe 5 players in the middle work high pressing in identified areas.\nOnce the group of 5 wins the ball, they occupy the positions of the 5 they stole it from and keep it with the other color.\nThe 5 that lost possession must touch hands in the middle before starting to defend.",
+  "kind": "drill",
+  "name": "Positional Play 10v5 in Three Colors",
+  "players": "10v5 (3 teams of 5)",
+  "tags": [
+   "Week 9",
+   "Session 31",
+   "MD-1"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Pressing when losing the ball",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Stage III and IV: 11v11 game. High press against the team in build up",
+  "dur": 30,
+  "howTo": "Play an 11v11 game.\nPress high against the team in build-up.",
+  "kind": "drill",
+  "name": "11v11 Game \u2014 High Press",
+  "players": "11v11",
+  "tags": [
+   "Week 9",
+   "Session 31",
+   "MD-1"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "cat": "Pressing when losing the ball",
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo",
+  "desc": "Transitional REACTION to get the ball back once it's lost with the main emphasis in the final third of the field. Constant emphasis on reaction, no negative emotions shown when the ball is lost but entire intent to win it back.\n\nDrills: Dynamic Warm-Up (15 mins), Diamond Passing Pattern (15 mins), Positional Play 10v5 in Three Colors (20 mins), 11v11 Game \u2014 High Press (30 mins)",
+  "dur": 80,
+  "info": "Source: Week_9__Session_31___MD_1___high_press_in_the_attacking_third-2.pdf",
+  "kind": "drill",
+  "name": "Week 9: Session 31 - MD-1 - high press in the attacking third",
+  "tags": [
+   "Week 9",
+   "Session 31",
+   "MD-1"
+  ],
+  "updatedAt": "__SERVER_TIMESTAMP__"
+ },
+ {
+  "name": "3v1",
+  "kind": "drill",
+  "cat": "Warm up games",
+  "dur": 15,
+  "players": "3v1",
+  "desc": "Stage I and warm up. 3v1 rondo with a 1 touch limit.",
+  "howTo": "Play 3v1.\n1 touch limit.",
+  "info": "Body positioning and orientation.\nMovement off the ball to give passing lanes.\nDeception in passing.\nIntention and specificity of passing.\nFinding the back foot, leading into the next action.",
+  "tags": [
+   "Week 9",
+   "Session 32",
+   "MD+1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "3v3+2 (Week 9, Session 32, MD+1)",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "dur": 20,
+  "players": "3v3+2",
+  "desc": "Stage II: 3v3 + 2. 3 bouts of 3 mins. Two neutrals have a 1 touch limit, while everyone else is unlimited.",
+  "howTo": "Play 3v3 + 2.\nPlay 3 bouts of 3 mins.\nTwo neutrals have a 1 touch limit; everyone else is unlimited.",
+  "info": "Constantly look to provide passing lanes, proactive movement.\nCreate numerical superiorities, exploit them, switch the point of attack.",
+  "tags": [
+   "Week 9",
+   "Session 32",
+   "MD+1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "5v5 + 2 Offensive Bumpers",
+  "kind": "drill",
+  "cat": "Possession in the final third",
+  "dur": 30,
+  "players": "5v5+2",
+  "desc": "Stage III and IV: 5v5 in tight space + 2 bumpers on the attacking end. 3 min games and rotate teams.",
+  "howTo": "Play 5v5 in a tight space with 2 bumpers on the attacking end.\nPlay 3 min games and rotate teams.",
+  "info": "Keep it high intensity.",
+  "tags": [
+   "Week 9",
+   "Session 32",
+   "MD+1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 9: Session 32 - MD+1 session for guys that did not play",
+  "kind": "drill",
+  "cat": "Staple Drills",
+  "dur": 65,
+  "desc": "Drills: 3v1 (15 mins); 3v3+2 (20 mins); 5v5 + 2 Offensive Bumpers (30 mins).",
+  "info": "Source: Week_9__Session_32___MD_1_session_for_guys_that_did_not_play.pdf",
+  "tags": [
+   "Week 9",
+   "Session 32",
+   "MD+1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Functional Activation",
+  "kind": "drill",
+  "cat": "Warm up games",
+  "dur": 30,
+  "desc": "Stage I. Dynamic and functional activation.",
+  "howTo": "Run a dynamic and functional activation.",
+  "tags": [
+   "Week 9",
+   "Session 33",
+   "MD-1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "11v11+3 Possession",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "dur": 25,
+  "players": "11v11+3",
+  "desc": "Stage II: 11v11 + 3 Neutrals possession game in the top of the box to half way line space.",
+  "howTo": "Play 11v11 + 3 neutrals possession in the space from the top of the box to the half way line.",
+  "tags": [
+   "Week 9",
+   "Session 33",
+   "MD-1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "11v11 Positional Understanding",
+  "kind": "drill",
+  "cat": "Possession in the final third",
+  "dur": 30,
+  "players": "11v11",
+  "desc": "Stage III and IV: 11v11 top of the box one goal, the other one regular set up. Exploiting half spaces, working on positional rotations to create numerical superiorities. Build up play in the middle third to unbalance opponent and find teammates in dangerous areas.",
+  "howTo": "Set up 11v11, one goal at the top of the box and the other a regular set up.\nExploit half spaces with positional rotations to create numerical superiorities.\nBuild up play in the middle third to unbalance the opponent and find teammates in dangerous areas.",
+  "tags": [
+   "Week 9",
+   "Session 33",
+   "MD-1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 9: Session 33 - MD-1 session",
+  "kind": "drill",
+  "cat": "Possession in the final third",
+  "dur": 85,
+  "desc": "Positional understanding and attacking principles. Create and exploit numerical advantage in the attacking third and wide areas by exploiting half spaces\nDrills: Functional Activation (30 mins); 11v11+3 Possession (25 mins); 11v11 Positional Understanding (30 mins).",
+  "info": "Source: Week_9__Session_33___MD_1_session.pdf",
+  "tags": [
+   "Week 9",
+   "Session 33",
+   "MD-1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Rondo 5v2",
+  "kind": "drill",
+  "cat": "Warm up games",
+  "dur": 15,
+  "players": "5v2",
+  "desc": "Warm up and Stage I: 5v2 rondo in a 8x8 square. Go from up to two touch, one touch only. Include stretches in between bouts.",
+  "howTo": "Play 5v2 rondo in an 8x8 square.\nStart with up to two touches, then one touch only.\nInclude stretches in between bouts.",
+  "info": "Passing lanes, back foot passing, weight of the pass, quality, accuracy.",
+  "tags": [
+   "Week 9",
+   "Session 34",
+   "MD-1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "5v5+4 Positional Play",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "dur": 20,
+  "players": "5v5+4",
+  "desc": "Stage II: Positional play, 5v5 + 4. Two GKs on each end as two neutrals, and two CMs in the middle as two neutrals as well. In transition, team that wins the ball occupies outside positions.",
+  "howTo": "Play 5v5 + 4 positional play.\nTwo GKs on each end act as two neutrals, and two CMs in the middle act as two neutrals.\nIn transition, the team that wins the ball occupies outside positions.",
+  "tags": [
+   "Week 9",
+   "Session 34",
+   "MD-1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Set Pieces",
+  "kind": "drill",
+  "cat": "Set pieces",
+  "dur": 30,
+  "desc": "Stage III: Defensive and offensive set pieces.",
+  "howTo": "Work on defensive and offensive set pieces.",
+  "tags": [
+   "Week 9",
+   "Session 34",
+   "MD-1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Shooting",
+  "kind": "drill",
+  "cat": "Finishing",
+  "dur": 20,
+  "desc": "Shooting. 4 goals.",
+  "howTo": "Player on the right dribbles by the mannequin and takes a shot.\nPlayer in the middle does a give and go around a mannequin and shoots.\nPlayer on the right does a give and go around the mannequin, gets sent through for a cross, and sends a firm ball on the ground for the first two shooters to finish, who make a near post and back post runs.\nSwitch lines.",
+  "tags": [
+   "Week 9",
+   "Session 34",
+   "MD-1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Week 9: Session 34 - MD-1 Session",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "dur": 85,
+  "desc": "MD-1 session. Possession, combinations, playing quickly through the middle, reinforcing partnerships on the field. Set pieces\nDrills: Rondo 5v2 (15 mins); 5v5+4 Positional Play (20 mins); Set Pieces (30 mins); Shooting (20 mins).",
+  "info": "Source: Week_9__Session_34___MD_1_Session.pdf",
+  "tags": [
+   "Week 9",
+   "Session 34",
+   "MD-1"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "3v3+2 Warm-Up",
+  "kind": "drill",
+  "cat": "Warm up games",
+  "dur": 30,
+  "players": "3v3+2",
+  "desc": "Stage I: Part of the dynamic warm up and stretch. 3v3+2.",
+  "howTo": "Play 3v3+2 as part of the dynamic warm up and stretch.",
+  "tags": [
+   "Preseason Session 2",
+   "Playing from back"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "8v6 Build-Up to Three Counter Goals",
+  "kind": "drill",
+  "cat": "Playing from back",
+  "dur": 40,
+  "players": "8v6",
+  "desc": "Stage II and III: 8v6 to three counter goals. Working on build up. Team working on build up must be in the final zone over the line to score on one of the three counter goals. Team pressing has 10 seconds to score if they steal a ball.",
+  "howTo": "Play 8v6 to three counter goals, working on build up.\nThe build-up team must be in the final zone over the line to score on one of the three counter goals.\nThe pressing team has 10 seconds to score if they steal the ball.",
+  "info": "Find the open player and explore numerical superiority.",
+  "tags": [
+   "Preseason Session 2",
+   "Playing from back"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "11v11 Game",
+  "kind": "drill",
+  "cat": "Playing from back",
+  "dur": 30,
+  "players": "11v11",
+  "desc": "Stage IV: 11v11 game. 4-3-3 formation.",
+  "howTo": "Play an 11v11 game in a 4-3-3 formation.",
+  "tags": [
+   "Preseason Session 2",
+   "Playing from back"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Building out of the back. In possession in the defensive third of the field",
+  "kind": "drill",
+  "cat": "Playing from back",
+  "dur": 100,
+  "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\nDrills: 3v3+2 Warm-Up (30 mins); 8v6 Build-Up to Three Counter Goals (40 mins); 11v11 Game (30 mins).",
+  "info": "Source: Building_out_of_the_back__In_possession_in_the_defensive_third_of_the_field-2.pdf",
+  "tags": [
+   "Preseason Session 2",
+   "Playing from back"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Warm-Up 3v1",
+  "kind": "drill",
+  "cat": "Warm up games",
+  "dur": 20,
+  "players": "3v1",
+  "desc": "Warm up. Part of the dynamic warm up and stretch. 3v1 one touch.",
+  "howTo": "Play 3v1 one touch as part of the dynamic warm up and stretch.",
+  "tags": [
+   "Week 3",
+   "Session 10"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Passing Pattern with a Finish on Goal",
+  "kind": "drill",
+  "cat": "Passing patterns to finish",
+  "dur": 20,
+  "desc": "Stage II: Passing pattern to break a line and get in behind the defense.",
+  "howTo": "A #8 plays the ball into the #9.\nThe #9 lays it off to the #8.\nThe #8 chips it over the back line for an oncoming player from the other side to finish.",
+  "tags": [
+   "Week 3",
+   "Session 10"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "7v7 to Two Goals",
+  "kind": "drill",
+  "cat": "Possession in the final third",
+  "dur": 30,
+  "players": "7v7",
+  "desc": "Stage II and III: 7v7 to two goals. Attacking team of front three and three midfielders must unbalance the back line and two pivots, and beat the offsides trap to get in behind.",
+  "howTo": "Play 7v7 to two goals.\nThe attacking team (front three and three midfielders) must unbalance the back line and two pivots and beat the offsides trap to get in behind.\nThe defending team has 10 seconds to get a shot on goal.",
+  "info": "Timing of the runs. Synchronization. Quality of a pass. Find the open player and explore numerical superiority.",
+  "tags": [
+   "Week 3",
+   "Session 10"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "11v11 Game",
+  "kind": "drill",
+  "cat": "Possession in the final third",
+  "dur": 20,
+  "players": "11v11",
+  "desc": "Stage IV: 11v11 game. 4-3-3 formation.",
+  "howTo": "Play an 11v11 game in a 4-3-3 formation.",
+  "tags": [
+   "Week 3",
+   "Session 10"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Creating chances and finishing in the final third. Unbalancing the opponent and runs in behind",
+  "kind": "drill",
+  "cat": "Possession in the final third",
+  "dur": 90,
+  "desc": "Week 3: Session #10. Runs in behind and unbalancing the opponent in the final third\nDrills: Warm-Up 3v1 (20 mins); Passing Pattern with a Finish on Goal (20 mins); 7v7 to Two Goals (30 mins); 11v11 Game (20 mins).",
+  "info": "Source: Creating_chances_and_finishing_in_the_final_third__Unbalancing_the_opponent_and_runs_in_behind.pdf",
+  "tags": [
+   "Week 3",
+   "Session 10"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "4v1 Rondo",
+  "kind": "drill",
+  "cat": "Warm up games",
+  "dur": 15,
+  "players": "4v1",
+  "desc": "Stage I: Part of the dynamic warm up and stretch. 4v1 rondo in a tight 4yard x 4yard space. One touch limit.",
+  "howTo": "Play 4v1 rondo in a tight 4 yard x 4 yard space.\nOne touch limit.",
+  "tags": [
+   "Preseason Session 2",
+   "Middle third"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Passing Pattern Using the Mids",
+  "kind": "drill",
+  "cat": "Passing patterns",
+  "dur": 10,
+  "desc": "Stage I: Part of the dynamic warm up, passing pattern.",
+  "howTo": "Find a pivot and lay the ball off to the other runner.\nPlay the attacking mid.\nThen play to the other side.",
+  "tags": [
+   "Preseason Session 2",
+   "Middle third"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "7v6 Build-Up in the Middle",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "dur": 40,
+  "players": "7v6",
+  "desc": "Stage II and III: 7v6. Emphasis is on unbalancing the opponent and advancing the ball forward in the middle third. Emphasis team works with back 4 and three midfielders. The counter team has front three and three midfielders. Emphasis team can not use the GK in build up. Working on finding a way how to progress the ball forward through the pivot and creating numerical superiority in the back.",
+  "howTo": "Play 7v6: emphasis team with a back 4 and three midfielders, counter team with a front three and three midfielders.\nThe emphasis team can not use the GK in build up.\nProgress the ball forward through the pivot, creating numerical superiority in the back.\nThe pressing team has 10 seconds to score if they steal the ball.",
+  "info": "Identify an open player and exploit it.",
+  "tags": [
+   "Preseason Session 2",
+   "Middle third"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "11v11 Game",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "dur": 25,
+  "players": "11v11",
+  "desc": "Stage IV: 11v11 game. 4-3-3 formation for each team.",
+  "howTo": "Play an 11v11 game, 4-3-3 formation for each team.",
+  "tags": [
+   "Preseason Session 2",
+   "Middle third"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ },
+ {
+  "name": "Unbalancing the opponent and building up in the middle third",
+  "kind": "drill",
+  "cat": "Possession in the middle third",
+  "dur": 90,
+  "desc": "Preseason session #2: Passing patterns, 3rd man runs, building a fitness bass and returning back to play\nDrills: 4v1 Rondo (15 mins); Passing Pattern Using the Mids (10 mins); 7v6 Build-Up in the Middle (40 mins); 11v11 Game (25 mins).",
+  "info": "Source: Unbalancing_the_opponent_and_building_up_in_the_middle_third.pdf",
+  "tags": [
+   "Preseason Session 2",
+   "Middle third"
+  ],
+  "createdAt": "__SERVER_TIMESTAMP__",
+  "updatedAt": "__SERVER_TIMESTAMP__",
+  "createdByName": "Anthony Hidalgo"
+ }
 ]
