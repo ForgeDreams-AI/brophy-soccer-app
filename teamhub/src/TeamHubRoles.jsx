@@ -26,7 +26,6 @@ import {
 } from "firebase/firestore";
 import { auth, db, storage } from "./firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { getFunctions, httpsCallable } from "firebase/functions";
 import { useAuth } from "./hooks/useAuth";
 import { useCollection, useAudienceCollection, useDoc } from "./hooks/useCollection";
 
@@ -6260,12 +6259,13 @@ const ScheduledModal = ({ scheduled = [], onAdd, onDelete, chatGroups = [], grou
 
 // Custom push notifications — the coach composes a title + message, picks an
 // audience (whole team, groups, or specific players — same picker pattern as
-// the scheduled reminders), then either Sends now (out immediately via the
-// `sendPushNotification` callable) or Schedules it (stored in
-// `pushNotifications` for the `runScheduled` runner, with an optional
-// daily / weekly / custom repeat). Recurrence is stored as
-// {type: "none"|"daily"|"weekly", time: "HH:MM", days: [weekday numbers]} —
-// a "Custom" day pick is stored as type "weekly" with its days, since the
+// the scheduled reminders), then either Sends now or Schedules it. Both paths
+// store a doc in `pushNotifications` for the `runScheduled` runner: Send now
+// writes sendAt as now, so the sweep picks it up within a few minutes, and
+// Schedule writes a future sendAt, with an optional daily / weekly / custom
+// repeat. Recurrence is stored as
+// {type: "none"|"daily"|"weekly", time: "HH:MM", days: [weekday numbers]}.
+// A "Custom" day pick is stored as type "weekly" with its days, since the
 // runner only needs the weekday set + time.
 const PushNotificationModal = ({ pushNotifications = [], onAdd, onDelete, onSendNow, groups = [], roster = [], nameByEmail = {}, onClose }) => {
   const [busy, setBusy] = useState(false);
@@ -6293,7 +6293,7 @@ const PushNotificationModal = ({ pushNotifications = [], onAdd, onDelete, onSend
       if (sendMode === "now") {
         await onSendNow({ title: title.trim(), body: body.trim(), audienceKeys, visibleTo });
         reset();
-        toast("Notification sent.");
+        toast("Queued. It goes out within a few minutes.");
       } else {
         let at = when ? new Date(when) : null;
         if (!at || isNaN(at.getTime())) { toast("Pick a date & time."); return; }
@@ -6407,6 +6407,7 @@ const PushNotificationModal = ({ pushNotifications = [], onAdd, onDelete, onSend
           )}
 
           <button onClick={submit} disabled={busy} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{busy ? "Sending…" : sendMode === "now" ? "Send now" : "Schedule it"}</button>
+          {sendMode === "now" && <p className="text-[11px] text-slate-400 text-center">Goes out within a few minutes.</p>}
 
           {list.length > 0 && (
             <div className="pt-2 border-t border-slate-100">
@@ -9338,10 +9339,10 @@ export default function TeamHubRolesApp() {
   const deleteScheduled = (id) => deleteDoc(doc(db, "scheduled", id));
   const pinChatGroup = (id, pinned) => updateDoc(doc(db, "chatGroups", id), { pinned: !!pinned });
 
-  // Custom push notifications — coach sends one now (via the callable Cloud
-  // Function, out immediately) or schedules it (stored in `pushNotifications`
-  // for the `runScheduled` runner, which also handles the daily wellness
-  // auto-nudge). Team-scoped, same audience pattern as announcements.
+  // Custom push notifications. The coach sends one now or schedules it, and
+  // both paths store a doc in `pushNotifications` for the `runScheduled`
+  // runner, which also handles the daily wellness auto-nudge. Team-scoped,
+  // same audience pattern as announcements.
   const pushNotifications = useCollection(lockedOut ? null : (isCoach ? "pushNotifications" : null), where("teamId", "==", activeTeamId), orderBy("sendAt", "desc"));
   const addPushNotification = (data) =>
     addDoc(collection(db, "pushNotifications"), {
@@ -9353,9 +9354,13 @@ export default function TeamHubRolesApp() {
       createdAt: serverTimestamp(),
     });
   const deletePushNotification = (id) => deleteDoc(doc(db, "pushNotifications", id));
+  // "Send now" used to call the sendPushNotification callable, but the org
+  // policy blocks public calls to it, so every tap failed. It now queues the
+  // same doc the Schedule flow writes, with sendAt set to now, and the
+  // runScheduled sweep sends it within a few minutes.
   const sendPushNotificationNow = async ({ title, body, audienceKeys, visibleTo }) => {
-    const sendPush = httpsCallable(getFunctions(), "sendPushNotification");
-    await sendPush({ teamId: activeTeamId, title, body, audienceKeys, visibleTo });
+    const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; } })();
+    await addPushNotification({ title, body, audienceKeys, visibleTo, sendAt: serverTimestamp(), recurrence: { type: "none", time: "", days: [] }, tz });
   };
 
   // One-time, idempotent backfill: stamp `audienceKeys` onto any event/channel/
