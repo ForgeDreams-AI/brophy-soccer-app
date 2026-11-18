@@ -893,12 +893,15 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
   const [photoDismissed, setPhotoDismissed] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoAdded, setPhotoAdded] = useState("");
+  const [photoErr, setPhotoErr] = useState("");
   const photoInputRef = useRef(null);
   const showPhotoNudge = user.role === "player" && !user.photoURL && !photoAdded && !photoDismissed;
   const handlePhotoFile = async (file) => {
     if (!file || !onUploadPhoto) return;
     setPhotoBusy(true);
+    setPhotoErr("");
     try { const url = await onUploadPhoto(file); if (url) setPhotoAdded(url); }
+    catch (e) { setPhotoErr(e.message || "Couldn't add photo. Try again."); }
     finally { setPhotoBusy(false); }
   };
   const [wellnessOpen, setWellnessOpen] = useState(false);
@@ -931,17 +934,20 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
       </div>
 
       {showPhotoNudge && (
-        <div className="rounded-2xl p-3.5 shadow-sm flex items-center gap-3" style={{ backgroundColor: COLORS.accentSoft, border: `1px solid ${COLORS.accent}` }}>
-          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accent }}>
-            <Camera className="w-5 h-5 text-white" />
+        <div className="rounded-2xl p-3.5 shadow-sm" style={{ backgroundColor: COLORS.accentSoft, border: `1px solid ${COLORS.accent}` }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accent }}>
+              <Camera className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-bold text-slate-900">Add your face photo</div>
+              <div className="text-[11px] text-slate-600">So your coach can put you on the game day roster.</div>
+            </div>
+            <button onClick={() => photoInputRef.current?.click()} disabled={photoBusy} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider text-white flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>{photoBusy ? "Adding..." : "Add photo"}</button>
+            <button onClick={() => setPhotoDismissed(true)} className="text-slate-400 flex-shrink-0" aria-label="Dismiss"><X className="w-4 h-4" /></button>
+            <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; handlePhotoFile(f); }} />
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold text-slate-900">Add your face photo</div>
-            <div className="text-[11px] text-slate-600">So your coach can put you on the game day roster.</div>
-          </div>
-          <button onClick={() => photoInputRef.current?.click()} disabled={photoBusy} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider text-white flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>{photoBusy ? "Adding..." : "Add photo"}</button>
-          <button onClick={() => setPhotoDismissed(true)} className="text-slate-400 flex-shrink-0" aria-label="Dismiss"><X className="w-4 h-4" /></button>
-          <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; handlePhotoFile(f); }} />
+          {photoErr && <p className="text-xs text-red-600 leading-snug mt-2">{photoErr}</p>}
         </div>
       )}
 
@@ -2744,21 +2750,70 @@ const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups }) => {
    coach-extensible — type a new one and it shows up as a pill for everyone. */
 
 // Downscale an image client-side before upload (mirrors the chat uploader).
+// iPhone photos are HEIC by default, and the Image/canvas path can reject
+// on them, so try the bitmap decoder first (it handles HEIC on iOS and
+// respects the photo's orientation), then fall back to the Image path.
 const downscaleToBlob = (file, maxDim = 1600, quality = 0.86) =>
   new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-      const w = Math.round(img.width * scale);
-      const h = Math.round(img.height * scale);
-      const canvas = document.createElement("canvas");
-      canvas.width = w; canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("toBlob failed")), "image/jpeg", quality);
+    let triedImage = false;
+    const drawToBlob = (source, w, h, onFail) => {
+      try {
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        const dw = Math.round(w * scale);
+        const dh = Math.round(h * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = dw; canvas.height = dh;
+        canvas.getContext("2d").drawImage(source, 0, 0, dw, dh);
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else if (onFail) onFail();
+          else reject(new Error("Could not shrink image"));
+        }, "image/jpeg", quality);
+      } catch (e) {
+        if (onFail) onFail();
+        else reject(e);
+      }
     };
-    img.onerror = () => reject(new Error("Could not read image"));
-    img.src = URL.createObjectURL(file);
+    const loadViaImage = () => {
+      if (triedImage) { reject(new Error("Could not read image")); return; }
+      triedImage = true;
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(img.src); drawToBlob(img, img.width, img.height, null); };
+      img.onerror = () => reject(new Error("Could not read image"));
+      img.src = URL.createObjectURL(file);
+    };
+    if (typeof createImageBitmap === "function") {
+      createImageBitmap(file, { imageOrientation: "from-image" })
+        .then((bmp) => {
+          drawToBlob(bmp, bmp.width, bmp.height, () => loadViaImage());
+          if (bmp.close) bmp.close();
+        })
+        .catch(() => loadViaImage());
+    } else {
+      loadViaImage();
+    }
   });
+
+// Upload a face photo: shrink it first when the browser can read it. If the
+// shrink step fails (an iPhone HEIC photo can trip the canvas path), upload
+// the original file instead so the photo still saves. Returns the upload
+// snapshot and the Storage path.
+const uploadFacePhoto = async (pathBase, file, maxDim = 640, quality = 0.85) => {
+  let blob = null;
+  try { blob = await downscaleToBlob(file, maxDim, quality); } catch (e) { blob = null; }
+  if (blob) {
+    const path = `${pathBase}.jpg`;
+    const snap = await uploadBytes(storageRef(storage, path), blob, { contentType: "image/jpeg" });
+    return { snap, path };
+  }
+  const name = file.name || "";
+  const dot = name.lastIndexOf(".");
+  const rawExt = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+  const safeExt = /^[a-z0-9]{2,5}$/.test(rawExt) ? `.${rawExt}` : ".jpg";
+  const path = `${pathBase}${safeExt}`;
+  const snap = await uploadBytes(storageRef(storage, path), file, { contentType: file.type || "image/jpeg" });
+  return { snap, path };
+};
 
 // Swipeable, native-scroll photo carousel with dot indicators.
 const PhotoCarousel = ({ photos = [], className = "" }) => {
@@ -4224,7 +4279,7 @@ const SendLineupSheet = ({ title, formation, slots, logoUrl, teamShortName = "",
 
 // Player picker sheet — assign a roster player to the active slot, and (coach)
 // upload a photo for any player who has an account.
-const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onUploadPhoto, onClose }) => {
+const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onUploadPhoto, onClose, photoErr = "" }) => {
   const [q, setQ] = useState("");
   const uploadRef = useRef(null);
   const [target, setTarget] = useState(null);
@@ -4238,6 +4293,7 @@ const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onUploadPhoto, o
         </div>
         <div className="p-4 space-y-2">
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search roster…" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+          {photoErr && <p className="text-xs text-red-600 leading-snug px-1">{photoErr}</p>}
           <button onClick={onClear} className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-red-500 bg-red-50">Clear this position</button>
           <input ref={uploadRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (target) onUploadPhoto(target, f); setTarget(null); }} />
           {list.length === 0 && <p className="text-sm text-slate-400 italic text-center py-4">No players found.</p>}
@@ -4268,6 +4324,7 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
   const [activeSlot, setActiveSlot] = useState(null); // slot id being assigned
   const [sending, setSending] = useState(null); // lineup being sent to chat
   const [logoBusy, setLogoBusy] = useState(false);
+  const [photoErr, setPhotoErr] = useState("");
   const logoInputRef = useRef(null);
   const fieldRef = useRef(null);
   const dragRef = useRef({ id: null, moved: false, sx: 0, sy: 0 });
@@ -4327,15 +4384,18 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
   };
   const uploadForPlayer = async (player, file) => {
     if (!file || !player.uid) return;
+    setPhotoErr("");
     try {
-      const blob = await downscaleToBlob(file, 640, 0.85);
-      const path = `avatars/${user.uid}/${Date.now()}.jpg`;
-      const snap = await uploadBytes(storageRef(storage, path), blob, { contentType: "image/jpeg" });
+      const { snap, path } = await uploadFacePhoto(`avatars/${user.uid}/${Date.now()}`, file, 640, 0.85);
       const url = await getDownloadURL(snap.ref);
       await setPlayerPhoto(player.uid, url, path);
       setDraft((d) => (d ? { ...d, slots: d.slots.map((s) => (s.uid === player.uid ? { ...s, photoURL: url } : s)) } : d));
       toast(`Photo added for ${player.name}.`);
-    } catch (e) { toast("Couldn't add photo — " + (e.message || "check Storage rules.")); }
+    } catch (e) {
+      const msg = "Couldn't add photo. " + (e.message || "Try again.");
+      toast(msg);
+      setPhotoErr(msg);
+    }
   };
 
   // Drag tokens; a tap (no drag) opens the picker.
@@ -4478,7 +4538,8 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
           onPick={assignPlayer}
           onClear={clearSlot}
           onUploadPhoto={uploadForPlayer}
-          onClose={() => setActiveSlot(null)}
+          photoErr={photoErr}
+          onClose={() => { setActiveSlot(null); setPhotoErr(""); }}
         />
       )}
       {sending && <SendLineupSheet title={sending.name} formation={sending.formation} slots={sending.slots} logoUrl={logoUrl} teamShortName={teamShortName} chatGroups={chatGroups} postLineupImage={postLineupImage} onClose={() => setSending(null)} />}
@@ -7928,20 +7989,21 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdmin = fa
   const [savingName, setSavingName] = useState(false);
   const [photo, setPhoto] = useState(user.photoURL || "");
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoErr, setPhotoErr] = useState("");
   const photoInputRef = useRef(null);
   const uploadPhoto = async (file) => {
     if (!file) return;
     setPhotoBusy(true);
+    setPhotoErr("");
     try {
-      const blob = await downscaleToBlob(file, 640, 0.85);
-      const path = `avatars/${user.uid}/${Date.now()}.jpg`;
-      const r = storageRef(storage, path);
-      const snap = await uploadBytes(r, blob, { contentType: "image/jpeg" });
+      const { snap, path } = await uploadFacePhoto(`avatars/${user.uid}/${Date.now()}`, file, 640, 0.85);
       const url = await getDownloadURL(snap.ref);
       await updateDoc(doc(db, "users", user.uid), { photoURL: url, photoPath: path });
       setPhoto(url);
     } catch (e) {
-      toast("Couldn't update photo — " + (e.message || "check Storage rules."));
+      const msg = "Couldn't update photo. " + (e.message || "Try again.");
+      toast(msg);
+      setPhotoErr(msg);
     } finally {
       setPhotoBusy(false);
     }
@@ -8099,6 +8161,7 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdmin = fa
                 )}
               </div>
             </div>
+            {photoErr && <p className="text-xs text-red-600 leading-snug px-1 mt-2">{photoErr}</p>}
           </section>
 
           {/* TEAM & ROLE */}
@@ -8447,19 +8510,20 @@ export default function TeamHubRolesApp() {
   // Shared face-photo upload for the welcome tour and the Home nudge.
   // Same flow as Settings: downscale, store under avatars/{uid}/{ts}.jpg,
   // save photoURL + photoPath on the user's doc. Returns the URL (or null).
+  // On failure it toasts and throws the same message, so the caller can
+  // show the reason inline instead of failing silently.
   const uploadOwnPhoto = async (file) => {
     if (!file || !user) return null;
     try {
-      const blob = await downscaleToBlob(file, 640, 0.85);
-      const path = `avatars/${user.uid}/${Date.now()}.jpg`;
-      const snap = await uploadBytes(storageRef(storage, path), blob, { contentType: "image/jpeg" });
+      const { snap, path } = await uploadFacePhoto(`avatars/${user.uid}/${Date.now()}`, file, 640, 0.85);
       const url = await getDownloadURL(snap.ref);
       await updateDoc(doc(db, "users", user.uid), { photoURL: url, photoPath: path });
       toast("Photo added.");
       return url;
     } catch (e) {
-      toast("Couldn't add photo. " + (e.message || "Check Storage rules."));
-      return null;
+      const msg = "Couldn't add photo. " + (e.message || "Try again.");
+      toast(msg);
+      throw new Error(msg);
     }
   };
 
