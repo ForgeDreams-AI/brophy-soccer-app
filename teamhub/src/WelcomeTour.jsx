@@ -40,6 +40,7 @@ export default function WelcomeTour({ open, role, onClose, user, onUploadPhoto }
   // loaded once at sign-in, so it does not refresh after an upload).
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoErr, setPhotoErr] = useState("");
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -49,6 +50,7 @@ export default function WelcomeTour({ open, role, onClose, user, onUploadPhoto }
       setI(0);
       setPhotoUrl(user?.photoURL || "");
       setPhotoBusy(false);
+      setPhotoErr("");
     }
   }, [open]);
 
@@ -59,9 +61,12 @@ export default function WelcomeTour({ open, role, onClose, user, onUploadPhoto }
   const handlePhotoFile = async (file) => {
     if (!file || !onUploadPhoto) return;
     setPhotoBusy(true);
+    setPhotoErr("");
     try {
       const url = await onUploadPhoto(file);
       if (url) setPhotoUrl(url);
+    } catch (e) {
+      setPhotoErr(e.message || "Couldn't add photo. Try again.");
     } finally {
       setPhotoBusy(false);
     }
@@ -119,6 +124,7 @@ export default function WelcomeTour({ open, role, onClose, user, onUploadPhoto }
               )}
               <input ref={cameraInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; handlePhotoFile(f); }} />
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; handlePhotoFile(f); }} />
+              {photoErr && <p className="text-xs text-red-600 leading-snug mt-3">{photoErr}</p>}
             </div>
           )}
 
