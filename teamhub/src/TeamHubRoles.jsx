@@ -6517,6 +6517,8 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
     setViewer({ title: m.question || "Poll results", groups: grps });
   };
   const photoInputRef = useRef(null);
+  const videoInputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const feedRef = useRef(null);
   const readMarkedRef = useRef(new Set());
 
@@ -6606,6 +6608,57 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
       });
     } catch (e) {
       toast("Couldn't send photo — " + (e.message || "check Storage rules?"));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // File extension from a name, lowercased; fallback when there is none.
+  const fileExt = (name, fallback) => {
+    const parts = String(name || "").split(".");
+    const ext = parts.length > 1 ? parts.pop().toLowerCase() : "";
+    return ext || fallback;
+  };
+
+  // Upload a video file as-is (no downscaling) and post it as a new message.
+  const sendVideo = async (file) => {
+    if (!file) return;
+    if (file.size > 100 * 1024 * 1024) { toast("Video is too big. Keep it under 100 MB."); return; }
+    setUploading(true);
+    try {
+      const ext = fileExt(file.name, "mp4");
+      const path = `chat/${activeTeamId}/${effectiveChannel}/${user.uid}/${Date.now()}.${ext}`;
+      const ref = storageRef(storage, path);
+      const snap = await uploadBytes(ref, file, { contentType: file.type || "video/mp4" });
+      const url = await getDownloadURL(snap.ref);
+      await addMessage("", {
+        attachment: { type: "video", url, path, name: file.name || "video.mp4" },
+        channel: effectiveChannel,
+      });
+    } catch (e) {
+      toast("Couldn't send video: " + (e.message || "check Storage rules?"));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Upload a document as-is and post it as a new message.
+  const sendFile = async (file) => {
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) { toast("File is too big. Keep it under 25 MB."); return; }
+    setUploading(true);
+    try {
+      const ext = fileExt(file.name, "bin");
+      const path = `chat/${activeTeamId}/${effectiveChannel}/${user.uid}/${Date.now()}.${ext}`;
+      const ref = storageRef(storage, path);
+      const snap = await uploadBytes(ref, file, { contentType: file.type || "application/octet-stream" });
+      const url = await getDownloadURL(snap.ref);
+      await addMessage("", {
+        attachment: { type: "file", url, path, name: file.name || "file" },
+        channel: effectiveChannel,
+      });
+    } catch (e) {
+      toast("Couldn't send file: " + (e.message || "check Storage rules?"));
     } finally {
       setUploading(false);
     }
@@ -6772,7 +6825,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
     };
     messages.forEach((m) => {
       const id = m.channel || "team";
-      const text = m.kind === "poll" ? `📊 ${m.question || "Poll"}` : (m.attachment?.type === "image" ? "📷 Photo" : (m.text || ""));
+      const text = m.kind === "poll" ? `📊 ${m.question || "Poll"}` : (m.attachment?.type === "image" ? "📷 Photo" : m.attachment?.type === "video" ? "🎬 Video" : m.attachment?.type === "file" ? "📎 File" : (m.text || ""));
       bump(id, msOf(m.createdAt), m.createdAt, text, m.sender);
       if (m.senderUid !== user.uid && !m.readBy?.[user.uid]) meta[id].unread = (meta[id].unread || 0) + 1;
     });
@@ -6894,9 +6947,19 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
             {mediaMsgs.length === 0 ? <p className="text-xs text-slate-400 italic">No files shared yet.</p> : (
               <div className="grid grid-cols-3 gap-2">
                 {mediaMsgs.map((m) => (
-                  m.attachment?.type === "image" && m.attachment.url ? (
+                  m.attachment?.type === "video" && m.attachment.url ? (
+                    <a key={m.id} href={m.attachment.url} target="_blank" rel="noopener noreferrer" className="aspect-square rounded-xl overflow-hidden bg-slate-100 block">
+                      <video src={m.attachment.url} preload="metadata" className="w-full h-full object-cover" />
+                    </a>
+                  ) : m.attachment?.type === "image" && m.attachment.url ? (
                     <a key={m.id} href={m.attachment.url} target="_blank" rel="noopener noreferrer" className="aspect-square rounded-xl overflow-hidden bg-slate-100 block">
                       <img src={m.attachment.url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    </a>
+                  ) : m.attachment?.type === "file" && m.attachment.url ? (
+                    <a key={m.id} href={m.attachment.url} target="_blank" rel="noopener noreferrer" className="bg-white rounded-xl border border-slate-100 p-3 flex flex-col items-center text-center">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-1.5" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}><AttIcon type={m.attachment.type} /></div>
+                      <div className="text-[10px] font-semibold text-slate-700 truncate w-full">{m.attachment.name}</div>
+                      <div className="text-[9px] text-slate-400">{m.sender.split(" ")[0]}</div>
                     </a>
                   ) : (
                     <div key={m.id} className="bg-white rounded-xl border border-slate-100 p-3 flex flex-col items-center text-center">
@@ -7007,9 +7070,16 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
                               <img src={m.attachment.url} alt="" className="w-full max-h-80 object-cover" loading="lazy" />
                             </a>
                           )}
+                          {m.attachment?.type === "video" && m.attachment.url && (
+                            <video src={m.attachment.url} controls playsInline preload="metadata" className="w-full max-h-80 object-cover" />
+                          )}
                           {m.text && <p className="text-sm leading-snug break-words px-3 py-2 select-text"><Linkify>{m.text}</Linkify></p>}
-                          {m.attachment && m.attachment.type !== "image" && (
-                            <div className={`mx-3 mb-2 rounded-xl p-2 flex items-center gap-2 ${own ? "bg-white/15" : "bg-slate-100"}`}><AttIcon type={m.attachment.type} /><span className="text-[11px] font-semibold truncate">{m.attachment.name}</span></div>
+                          {m.attachment && m.attachment.type !== "image" && m.attachment.type !== "video" && (
+                            m.attachment.type === "file" && m.attachment.url ? (
+                              <a href={m.attachment.url} target="_blank" rel="noopener noreferrer" className={`mx-3 mb-2 rounded-xl p-2 flex items-center gap-2 ${own ? "bg-white/15" : "bg-slate-100"}`}><AttIcon type={m.attachment.type} /><span className="text-[11px] font-semibold truncate">{m.attachment.name}</span></a>
+                            ) : (
+                              <div className={`mx-3 mb-2 rounded-xl p-2 flex items-center gap-2 ${own ? "bg-white/15" : "bg-slate-100"}`}><AttIcon type={m.attachment.type} /><span className="text-[11px] font-semibold truncate">{m.attachment.name}</span></div>
+                            )
                           )}
                         </div>
                       )}
@@ -7097,6 +7167,27 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
                 capture="environment"
                 className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) sendImage(f); e.target.value = ""; }}
+              />
+              <button onClick={() => videoInputRef.current?.click()} disabled={uploading} aria-label="Send video" title="Send a video" className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-wait">
+                {uploading ? <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Video className="w-4 h-4" />}
+              </button>
+              <input
+                ref={videoInputRef}
+                type="file"
+                accept="video/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) sendVideo(f); e.target.value = ""; }}
+              />
+              <button onClick={() => fileInputRef.current?.click()} disabled={uploading} aria-label="Send a file" title="Send a file" className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-wait">
+                {uploading ? <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Paperclip className="w-4 h-4" />}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = ""; }}
               />
               <button onClick={() => setPollOpen(!pollOpen)} aria-label="Create poll" title="Create poll" className="w-9 h-9 rounded-full flex items-center justify-center transition-colors" style={pollOpen ? { backgroundColor: COLORS.accentSoft, color: COLORS.accent } : { color: COLORS.textSecondary }}><BarChart3 className="w-4 h-4" /></button>
               {isAdmin && (
