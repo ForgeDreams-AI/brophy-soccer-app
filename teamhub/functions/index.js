@@ -250,6 +250,31 @@ exports.onMessageCreated = onDocumentCreated("messages/{id}", async (event) => {
   });
 });
 
+// Poll votes live in messages/{id}/votes/{uid} — private to the voter and
+// the team's coach (players see totals only). Keep the public tallies on the
+// poll message: `voteCounts` (one count per option) + `voteTotal`. Recounted
+// from the votes subcollection on every vote write, so it can't drift.
+exports.onPollVoteWritten = onDocumentWritten("messages/{id}/votes/{uid}", async (event) => {
+  const msgRef = db.doc(`messages/${event.params.id}`);
+  const msg = await msgRef.get();
+  if (!msg.exists || msg.data().kind !== "poll") return;
+  const n = Array.isArray(msg.data().options) ? msg.data().options.length : 0;
+  const counts = Array.from({ length: n }, () => 0);
+  // Legacy votes stored on the message (before this change) still count,
+  // unless that person has since voted in the new subcollection.
+  const votesSnap = await msgRef.collection("votes").get();
+  const seen = new Set();
+  votesSnap.forEach((v) => {
+    const o = v.data().option;
+    seen.add(v.id);
+    if (Number.isInteger(o) && o >= 0 && o < n) counts[o] += 1;
+  });
+  Object.entries(msg.data().votes || {}).forEach(([uid, o]) => {
+    if (!seen.has(uid) && Number.isInteger(o) && o >= 0 && o < n) counts[o] += 1;
+  });
+  await msgRef.update({ voteCounts: counts, voteTotal: counts.reduce((a, b) => a + b, 0) });
+});
+
 // Direct messages: notify only the people in the thread — the player who owns
 // it (threadId) plus the coaches of that team — never the whole team, and
 // never the org admin (DMs are between a player and their own team's coach).
@@ -467,7 +492,8 @@ async function processScheduledItems(now) {
           kind: "poll",
           question: d.question || "Poll",
           options: Array.isArray(d.options) ? d.options : [],
-          votes: {},
+          voteCounts: (Array.isArray(d.options) ? d.options : []).map(() => 0),
+          voteTotal: 0,
           createdAt: Timestamp.now(),
           scheduled: true,
         });

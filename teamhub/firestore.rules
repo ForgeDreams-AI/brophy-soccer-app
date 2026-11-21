@@ -167,10 +167,10 @@ service cloud.firestore {
         && (request.resource.data.keys().hasAny(['inviteCode'])
               ? inviteLinkAllows(request.resource.data)
               : emailInviteAllows(request.resource.data));
+      // Coaches no longer edit other users' profiles at all — including the
+      // face photo: players set their own photo only (decision 2026-11-21,
+      // these are minors). Role/teams stay org-admin-only.
       allow update: if isOrgAdmin()
-        || (isAdmin() && sharesTeam(resource.data.get('teamIds', []))
-            && resource.data.get('role', 'player') != 'orgAdmin'
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['photoURL', 'photoPath']))
         || (isOwner(uid)
             && request.resource.data.diff(resource.data).affectedKeys()
                  .hasOnly(['fcmTokens', 'notificationsEnabledAt', 'name', 'initials', 'photoURL', 'photoPath']));
@@ -205,7 +205,8 @@ service cloud.firestore {
     // collection is no longer read or written by either app (its real
     // drills were migrated into `drillLibrary`; kind === "point"
     // coaching-point items were NOT migrated and stay in `drills`, unread).
-    // Public read; coaches and drill builders write (canBuildDrills) —
+    // Signed-in read only (decision 2026-11-21 — was public); coaches and
+    // drill builders write (canBuildDrills) —
     // a drillBuilder builds drills in the library but has no team
     // assignment and no team-app access. Create requires createdByUid ==
     // the caller and a non-empty name. Editing stays collaborative (any
@@ -215,7 +216,7 @@ service cloud.firestore {
     // deploy the library's file on its own (it would overwrite the app's
     // rules).
     match /drillLibrary/{drillId} {
-      allow read: if true;
+      allow read: if signedIn();
       allow create: if canBuildDrills()
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.name is string
@@ -374,16 +375,36 @@ service cloud.firestore {
         && request.resource.data.senderUid == request.auth.uid
         && (isCoachOf(wTeam()) || canPostAsPlayer(request.resource.data));
       // Coach can edit/pin/delete. Any team member can mark messages read
-      // (readBy), vote on a poll (votes) or react — but only those fields,
-      // and only on messages they're still in the audience for. Without the
-      // audience check a player removed from a channel could keep voting on
-      // and reacting to its polls using ids they collected while they were a
-      // member.
+      // (readBy) or react — but only those fields, and only on messages
+      // they're still in the audience for. Poll votes are NOT on the
+      // message any more (see votes/ below): players see totals only.
       allow update: if coachUpdate()
         || (isMemberOf(rTeam()) && inAudience() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']))
-        || (isMemberOf(rTeam()) && inAudience() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']))
         || (isMemberOf(rTeam()) && inAudience() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']));
       allow delete: if coachDelete();
+
+      // Poll votes, one private doc per voter (decision 2026-11-21: players
+      // see totals only; only the team's coach sees who voted for what).
+      // { uid, option, updatedAt }. A Cloud Function (onPollVoteWritten)
+      // keeps `voteCounts` on the message. A voter must still be in the
+      // poll's audience, and the option must exist.
+      match /votes/{voterUid} {
+        function poll() { return get(/databases/$(database)/documents/messages/$(id)).data; }
+        function canVote() {
+          let m = poll();
+          let opt = request.resource.data.option;
+          return isOwner(voterUid)
+            && m.get('kind', '') == 'poll'
+            && request.resource.data.keys().hasOnly(['uid', 'option', 'updatedAt'])
+            && request.resource.data.uid == voterUid
+            && opt is int && opt >= 0 && opt < m.get('options', []).size()
+            && (isCoachOf(m.get('teamId', ''))
+                || (isMemberOf(m.get('teamId', '')) && m.get('audienceKeys', ['*']).hasAny(myAudienceKeys())));
+        }
+        allow read: if isOwner(voterUid) || isCoachOf(poll().get('teamId', ''));
+        allow create, update: if canVote();
+        allow delete: if isOwner(voterUid);
+      }
     }
 
     // Wellness: player writes only their own, on a team they're on; coach

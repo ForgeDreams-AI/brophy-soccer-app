@@ -4354,10 +4354,10 @@ const SendLineupSheet = ({ title, formation, slots, logoUrl, teamShortName = "",
 
 // Player picker sheet — assign a roster player to the active slot, and (coach)
 // upload a photo for any player who has an account.
-const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onUploadPhoto, onClose, photoErr = "" }) => {
+// Players set their own face photo (Settings / Home); coaches can't change
+// it (decision 2026-11-21 — these are minors).
+const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onClose }) => {
   const [q, setQ] = useState("");
-  const uploadRef = useRef(null);
-  const [target, setTarget] = useState(null);
   const list = roster.filter((p) => (p.name || p.email || "").toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
@@ -4368,9 +4368,7 @@ const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onUploadPhoto, o
         </div>
         <div className="p-4 space-y-2">
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search roster…" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
-          {photoErr && <p className="text-xs text-red-600 leading-snug px-1">{photoErr}</p>}
           <button onClick={onClear} className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-red-500 bg-red-50">Clear this position</button>
-          <input ref={uploadRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (target) onUploadPhoto(target, f); setTarget(null); }} />
           {list.length === 0 && <p className="text-sm text-slate-400 italic text-center py-4">No players found.</p>}
           {list.map((p) => (
             <div key={p.uid || p.email} className={`flex items-center gap-3 px-2 py-2 rounded-xl ${usedUids.has(p.uid) && p.uid ? "opacity-40" : ""}`}>
@@ -4381,11 +4379,6 @@ const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onUploadPhoto, o
                   {p.role === "admin" && <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Coach</div>}
                 </div>
               </button>
-              {p.uid && (
-                <button onClick={() => { setTarget(p); uploadRef.current?.click(); }} aria-label={`Add photo for ${p.name}`} title="Add / change photo" className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-slate-500 bg-slate-100">
-                  <Camera className="w-4 h-4" />
-                </button>
-              )}
             </div>
           ))}
         </div>
@@ -4394,12 +4387,11 @@ const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onUploadPhoto, o
   );
 };
 
-const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup, allUsers = [], invites = [], chatGroups = [], postLineupImage, setPlayerPhoto, lineupLogo = "", setLineupLogo, teamShortName = "" }) => {
+const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup, allUsers = [], invites = [], chatGroups = [], postLineupImage, lineupLogo = "", setLineupLogo, teamShortName = "" }) => {
   const [draft, setDraft] = useState(null); // null = list view; object = editor
   const [activeSlot, setActiveSlot] = useState(null); // slot id being assigned
   const [sending, setSending] = useState(null); // lineup being sent to chat
   const [logoBusy, setLogoBusy] = useState(false);
-  const [photoErr, setPhotoErr] = useState("");
   const logoInputRef = useRef(null);
   const fieldRef = useRef(null);
   const dragRef = useRef({ id: null, moved: false, sx: 0, sy: 0 });
@@ -4462,21 +4454,6 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
   const clearSlot = () => {
     setDraft((d) => ({ ...d, slots: d.slots.map((s) => (s.id === activeSlot ? { ...s, uid: "", name: "", initials: "", photoURL: "" } : s)) }));
     setActiveSlot(null);
-  };
-  const uploadForPlayer = async (player, file) => {
-    if (!file || !player.uid) return;
-    setPhotoErr("");
-    try {
-      const { snap, path } = await uploadFacePhoto(`avatars/${user.uid}/${Date.now()}`, file, 640, 0.85);
-      const url = await getDownloadURL(snap.ref);
-      await setPlayerPhoto(player.uid, url, path);
-      setDraft((d) => (d ? { ...d, slots: d.slots.map((s) => (s.uid === player.uid ? { ...s, photoURL: url } : s)) } : d));
-      toast(`Photo added for ${player.name}.`);
-    } catch (e) {
-      const msg = "Couldn't add photo. " + (e.message || "Try again.");
-      toast(msg);
-      setPhotoErr(msg);
-    }
   };
 
   // Drag tokens; a tap (no drag) opens the picker.
@@ -4618,9 +4595,7 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
           usedUids={usedUids}
           onPick={assignPlayer}
           onClear={clearSlot}
-          onUploadPhoto={uploadForPlayer}
-          photoErr={photoErr}
-          onClose={() => { setActiveSlot(null); setPhotoErr(""); }}
+          onClose={() => setActiveSlot(null)}
         />
       )}
       {sending && <SendLineupSheet title={sending.name} formation={sending.formation} slots={sending.slots} logoUrl={logoUrl} teamShortName={teamShortName} chatGroups={chatGroups} postLineupImage={postLineupImage} onClose={() => setSending(null)} />}
@@ -5965,10 +5940,15 @@ const Linkify = ({ children, className = "" }) => {
 const REACTIONS = [["like", "👍"], ["dislike", "👎"], ["heart", "❤️"]];
 
 const PollCard = ({ message, own, myUid, onVote, isAdmin = false, onSeeVoters }) => {
-  const votes = message.votes || {};
-  const myVote = votes[myUid];
+  // My own vote doc (private); tallies come from `voteCounts` on the poll
+  // (server-maintained). Legacy polls fall back to the old votes map.
+  const myVoteDoc = useDoc(message?.id && myUid ? `messages/${message.id}/votes/${myUid}` : null);
+  const legacy = message.votes || {};
+  const myVote = myVoteDoc ? myVoteDoc.option : legacy[myUid];
   const opts = message.options || [];
-  const totals = opts.map((_, i) => Object.values(votes).filter((v) => v === i).length);
+  const totals = Array.isArray(message.voteCounts)
+    ? opts.map((_, i) => Number(message.voteCounts[i]) || 0)
+    : opts.map((_, i) => Object.values(legacy).filter((v) => v === i).length);
   const totalVotes = totals.reduce((a, b) => a + b, 0);
   const handle = (i) => { if (myVote !== i) onVote(i).catch((e) => toast("Couldn't vote — " + (e.message || ""))); };
   return (
@@ -6641,8 +6621,13 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages
       { label: `Not yet · ${notSeen.length}`, names: notSeen },
     ] });
   };
-  const openVoters = (m) => {
-    const votes = m.votes || {};
+  const openVoters = async (m) => {
+    // Coach-only: read the private vote docs (plus any legacy map entries).
+    const votes = { ...(m.votes || {}) };
+    try {
+      const snap = await getDocs(collection(db, "messages", m.id, "votes"));
+      snap.forEach((v) => { votes[v.id] = v.data().option; });
+    } catch (e) { reportError("Couldn't load the votes")(e); return; }
     const voterSet = new Set(Object.keys(votes));
     const grps = (m.options || []).map((opt, i) => ({
       label: `${opt} · ${Object.values(votes).filter((v) => v === i).length}`,
@@ -9239,11 +9224,6 @@ export default function TeamHubRolesApp() {
     });
   const updateLineup = (id, data) => updateDoc(doc(db, "lineups", id), data);
   const deleteLineup = (id) => deleteDoc(doc(db, "lineups", id));
-  // A coach can set a photo on any player's profile. The image lives in the
-  // coach's own avatars folder (Storage only lets you write your own), and the
-  // URL is stored on the target user doc (admins may edit any user doc).
-  const setPlayerPhoto = async (targetUid, url, path) =>
-    updateDoc(doc(db, "users", targetUid), { photoURL: url, photoPath: path });
 
   // Coach-authored exercises — mixed into the public Exercise Library, same
   // shape so they slot under the same equipment/muscle tags.
@@ -9652,7 +9632,9 @@ export default function TeamHubRolesApp() {
       data.kind = "poll";
       data.question = poll.question;
       data.options = poll.options;
-      data.votes = {};
+      // Totals only on the message; each vote is a private doc.
+      data.voteCounts = poll.options.map(() => 0);
+      data.voteTotal = 0;
     }
     return addDoc(collection(db, "messages"), data);
   };
@@ -9681,9 +9663,14 @@ export default function TeamHubRolesApp() {
       [`readBy.${user.uid}`]: serverTimestamp(),
     }));
   };
+  // Poll votes are private (messages/{id}/votes/{uid}): players see totals
+  // only, kept on the poll by the onPollVoteWritten function; the coach can
+  // see who voted for what.
   const voteOnPoll = (messageId, optionIndex) =>
-    updateDoc(doc(db, "messages", messageId), {
-      [`votes.${user.uid}`]: optionIndex,
+    setDoc(doc(db, "messages", messageId, "votes", user.uid), {
+      uid: user.uid,
+      option: optionIndex,
+      updatedAt: serverTimestamp(),
     });
   // React to a message (👍/👎/❤️). Passing a falsy reaction clears it (toggle).
   const reactToMessage = (messageId, reaction) =>
@@ -10010,7 +9997,7 @@ export default function TeamHubRolesApp() {
           {activeTab === "practice" && effUser.role === "admin" && (
             <CoachCenterPage
               practiceProps={{ user: { ...effUser, isOrgAdmin: user.role === "orgAdmin" }, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events }}
-              gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, setPlayerPhoto, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId) }}
+              gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId) }}
               rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", removeUser, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId }}
               calendarProps={{ user: effUser, events, practices, teamWorkouts, personalEvents, addEvent, updateEvent, addPersonalEvent, updatePersonalEvent, deleteEvent, deletePersonalEvent, importEvents, groups: groupsList, addGroup, updateGroupMembers, deleteGroup, invites, allUsers, chatGroups }}
               documentsProps={{ user: effUser, documents, rosterCount: invites.filter((i) => i.role !== "admin").length, onUpload: addDocument, onDelete: deleteDocument, onSign: signDocument }}
