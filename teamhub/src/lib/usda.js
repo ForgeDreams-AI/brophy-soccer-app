@@ -1,14 +1,14 @@
 // USDA FoodData Central search — through the app's own server route.
 //
 // The USDA API key used to be baked into the public JS bundle
-// (VITE_USDA_API_KEY), where anyone could copy it. Now the browser calls
-// the same-origin Cloudflare Worker route /api/usda (worker/index.js), which
-// adds the key from a Worker secret (USDA_API_KEY) and returns a trimmed
-// result list. No key ever reaches the browser.
+// (VITE_USDA_API_KEY), where anyone could copy it. Now the browser calls the
+// same-origin route /api/usda — a Firebase Hosting rewrite to the `api`
+// Cloud Function (functions/lib/api.js), which adds the key from the Secret
+// Manager secret USDA_API_KEY. No key ever reaches the browser.
 //
-// If the route isn't available (local `npm run dev`, or a host without the
-// Worker), USDA search is simply skipped and food search uses Open Food
-// Facts only — it never throws at the user.
+// If the route isn't available (local `npm run dev`, or the function isn't
+// deployed / has no secret), USDA search is simply skipped and food search
+// uses Open Food Facts only — it never throws at the user.
 
 const ENDPOINT = "/api/usda";
 
