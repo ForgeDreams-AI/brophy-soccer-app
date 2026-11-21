@@ -211,13 +211,21 @@ Use real accounts, or ask Batman/Anthony to do these. Record pass/fail for each:
 
 ## Rollback
 
+"Before" means the last `main` commit before PR #1: *"DMs can send photos/videos/files privately; DM push bodies"*. It is found by its message, not its ID, so these steps still work after the step 11 history rewrite, which changes every commit ID:
+
+```bash
+PRE=$(git log origin/main --format=%H -n1 --grep='^DMs can send photos/videos/files privately; DM push bodies')
+echo "$PRE"   # must print one commit id
+```
+
+
 - **Rules:**
   ```bash
-  git checkout fda7cbc -- firestore.rules storage.rules
+  git checkout "$PRE" -- firestore.rules storage.rules
   npx -y firebase-tools@14 deploy --only firestore:rules,storage --project brophy-soccer-app
   ```
   Then `git checkout -- .` to restore the files.
-- **Functions:** redeploy from the previous commit (`git checkout fda7cbc -- functions && npx -y firebase-tools@14 deploy --only functions`).
+- **Functions:** redeploy from the previous commit (`git checkout "$PRE" -- functions && npx -y firebase-tools@14 deploy --only functions`).
 - **Data:** last resort, because it overwrites changes made since the backup. Use the path noted in step 2:
   ```bash
   gcloud firestore import gs://brophy-soccer-app-backups/firestore-backups/<YYYY-MM-DD-HHMM> --project brophy-soccer-app
