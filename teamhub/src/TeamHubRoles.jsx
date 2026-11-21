@@ -285,6 +285,13 @@ const formatDateHeader = (ts) => {
 // Stable empty object (a fresh {} each render would re-run memos).
 const EMPTY_OBJ = Object.freeze({});
 
+// Staff = anyone who is not a player: team coaches ("admin"), the program
+// admin ("orgAdmin") and drill builders. People lists use this so staff are
+// never shown or counted as players.
+const STAFF_ROLES = new Set(["admin", "orgAdmin", "drillBuilder"]);
+const isStaffRole = (role) => STAFF_ROLES.has(role);
+const staffLabel = (role) => (role === "orgAdmin" ? "Admin" : role === "drillBuilder" ? "Builder" : role === "admin" ? "Coach" : "Player");
+
 const COLORS = {
   primary: "#980000",     // Brophy Red (site header)
   accent: "#A6192E",      // Brophy red (site --brophy-red variable)
@@ -5349,7 +5356,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addInvite, 
       ) : (
         <ul className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           {invites.map((inv, i) => {
-            const isCoach = inv.role === "admin";
+            const isCoach = isStaffRole(inv.role);
             const isSelf = inv.email === user.email;
             const toggleRole = async () => {
               const next = isCoach ? "player" : "admin";
@@ -5380,7 +5387,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addInvite, 
                       ? { backgroundColor: COLORS.primary, color: "white" }
                       : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
                   >
-                    {isCoach ? "Coach" : "Player"}
+                    {staffLabel(isCoach ? inv.role : "player")}
                   </button>
                 ) : (
                   <span
@@ -5390,7 +5397,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addInvite, 
                       ? { backgroundColor: COLORS.primary, color: "white" }
                       : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
                   >
-                    {isCoach ? "Coach" : "Player"}
+                    {staffLabel(isCoach ? inv.role : "player")}
                   </span>
                 )}
                 <button onClick={() => { if (confirm(`Remove ${inv.email} from the roster? They won't be able to sign up with this invite.`)) Promise.resolve(removeInvite(inv.id)).catch(reportError("Couldn't remove the invite")); }} disabled={isSelf} title={isSelf ? "You can't remove yourself." : `Remove ${inv.email}`} aria-label={`Remove ${inv.email}`} className="text-slate-300 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed">
@@ -5404,7 +5411,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addInvite, 
               "Via link" tag. Only the program admin can remove one (deletes
               their profile — firestore.rules users delete). */}
           {linkJoiners.map((u, j) => {
-            const isCoach = u.role === "admin";
+            const isCoach = isStaffRole(u.role);
             const displayName = (u.name || "").trim();
             return (
               <li key={u.id} className={`flex items-center gap-2 px-3 py-2.5 ${j < linkJoiners.length - 1 ? "border-b border-slate-100" : ""}`}>
@@ -5415,7 +5422,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addInvite, 
                 </span>
                 <span title="Joined through an invite link." className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>Via link</span>
                 <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={isCoach ? { backgroundColor: COLORS.primary, color: "white" } : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}>
-                  {isCoach ? "Coach" : "Player"}
+                  {staffLabel(isCoach ? u.role : "player")}
                 </span>
                 {isOrgAdmin && removeUser && u.id !== user.uid && (
                   <button onClick={() => { if (confirm(`Remove ${displayName || u.email} from the team? They'll lose access until invited again.`)) Promise.resolve(removeUser(u.id)).catch(reportError("Couldn't remove the player")); }} aria-label={`Remove ${displayName || u.email}`} className="text-slate-300 hover:text-red-500">
@@ -6701,7 +6708,7 @@ const ChannelModal = ({ chatGroups, groups, roster, nameByEmail = {}, onCreate, 
   const [busy, setBusy] = useState(false);
   const nameOf = (email) => nameByEmail[(email || "").toLowerCase()] || "";
   const players = (roster || [])
-    .filter((r) => r.role !== "admin")
+    .filter((r) => !isStaffRole(r.role))
     // Show players with a known name first, then alphabetically by name/email.
     .sort((a, b) => (nameOf(a.email) || a.email || "").localeCompare(nameOf(b.email) || b.email || ""));
 
@@ -6788,7 +6795,7 @@ const ScheduledModal = ({ scheduled = [], onAdd, onDelete, chatGroups = [], grou
 
   const channels = [{ id: "team", name: "Team" }, ...chatGroups.map((c) => ({ id: c.id, name: c.name }))];
   const nameOf = (email) => nameByEmail[(email || "").toLowerCase()] || "";
-  const players = (roster || []).filter((r) => r.role !== "admin");
+  const players = (roster || []).filter((r) => !isStaffRole(r.role));
   const toggle = (arr, setArr, v) => setArr(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
   const setOpt = (i, v) => setOptions((o) => o.map((x, j) => (j === i ? v : x)));
 
@@ -6976,7 +6983,7 @@ const PushNotificationModal = ({ pushNotifications = [], onAdd, onDelete, onSend
   const [emails, setEmails] = useState([]);
 
   const nameOf = (email) => nameByEmail[(email || "").toLowerCase()] || "";
-  const players = (roster || []).filter((r) => r.role !== "admin");
+  const players = (roster || []).filter((r) => !isStaffRole(r.role));
   const toggle = (arr, setArr, v) => setArr(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
   const reset = () => { setSendMode("now"); setWhen(""); setRepeat("none"); setCustomDays([]); setTitle(""); setBody(""); setAudMode("everyone"); setGroupIds([]); setEmails([]); };
 
@@ -7205,7 +7212,7 @@ export const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderM
   const nameByUid = useMemo(() => Object.fromEntries((allUsers || []).map((u) => [u.id, u.name || u.email || "Member"])), [allUsers]);
   // email → display name, for showing roster people by name instead of address.
   const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email && u.name).map((u) => [u.email.toLowerCase(), u.name])), [allUsers]);
-  const rosterPlayers = useMemo(() => (allUsers || []).filter((u) => u.role !== "admin"), [allUsers]);
+  const rosterPlayers = useMemo(() => (allUsers || []).filter((u) => !isStaffRole(u.role)), [allUsers]);
   const openSeen = (m) => {
     const seenUids = Object.keys(m.readBy || {}).filter((uid) => uid !== m.senderUid);
     const seenSet = new Set(seenUids);
@@ -10041,7 +10048,20 @@ export default function TeamHubRolesApp() {
   //    the code (a random token = the capability); shape documented in
   //    src/data/teams.js, rules in firestore.rules.
   // Coach-only: the roster's emails are not visible to players (rules).
-  const invites = useCollection(noData || !isCoach ? null : ("invitedEmails"), where("teamId", "==", activeTeamId), orderBy("email"));
+  const invitesRaw = useCollection(noData || !isCoach ? null : ("invitedEmails"), where("teamId", "==", activeTeamId), orderBy("email"));
+  // An invite keeps the role it was sent with, but the account's role is the
+  // truth (e.g. someone invited as a player and later made program admin).
+  // Use the account's role when it is staff, so staff never show as players.
+  const invites = useMemo(() => {
+    const staffByEmail = new Map((allUsers || []).filter((u) => u.email && isStaffRole(u.role)).map((u) => [u.email.toLowerCase(), u.role]));
+    if (user && isStaffRole(user.role) && user.email) staffByEmail.set(user.email.toLowerCase(), user.role);
+    if (!staffByEmail.size) return invitesRaw;
+    const out = invitesRaw.map((inv) => {
+      const r = staffByEmail.get((inv.email || inv.id || "").toLowerCase());
+      return r && inv.role !== r ? { ...inv, role: r } : inv;
+    });
+    return Object.assign(out, invitesRaw.loading ? { loading: true } : {});
+  }, [invitesRaw, allUsers, user]);
   const addInvite = (email, teamId) => {
     const e = email.trim().toLowerCase();
     if (!e.includes("@")) return Promise.reject(new Error("Invalid email."));
