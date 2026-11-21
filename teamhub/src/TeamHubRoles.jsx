@@ -9,7 +9,7 @@ import {
   Bell, Pencil, Copy, Download, Printer, Megaphone, Maximize2,
   Users, Tag, Target, Footprints, Repeat, Flag, Zap, ImagePlus, Goal, Hash, Eye,
   ClipboardList, ExternalLink, Star, Shuffle, CornerDownRight, Crosshair, Swords, LayoutGrid, SquareDashed,
-  RefreshCw,
+  RefreshCw, ArrowUp,
 } from "lucide-react";
 import {
   sendSignInLinkToEmail,
@@ -6265,6 +6265,150 @@ const Linkify = ({ children, className = "" }) => {
 // Reactions a member can leave on a message — one at a time, tap to toggle.
 const REACTIONS = [["like", "👍"], ["dislike", "👎"], ["heart", "❤️"]];
 
+/* ─── iMessage-style chat pieces ─────────────────────────────────────────── */
+const IOS_GRAY = "#E9E9EB";
+const GROUP_GAP_MS = 5 * 60 * 1000; // messages within 5 min from one sender group together
+const tsMs = (ts) => (ts?.toMillis ? ts.toMillis() : ts?.seconds ? ts.seconds * 1000 : Date.now());
+
+// Bubble corners like iMessage: fully round, with the corner nearest the
+// next/previous bubble from the same sender tightened.
+const bubbleRadius = (own, first, last) => {
+  const big = "18px", small = "6px";
+  return own
+    ? `${big} ${first ? big : small} ${last ? big : small} ${big}`
+    : `${first ? big : small} ${big} ${big} ${last ? big : small}`;
+};
+
+// Long-press (touch), right-click (mouse) or double-click opens the message
+// menu. Moving the finger (scrolling) cancels the press.
+const LongPress = ({ onLong, children, className = "", style }) => {
+  const timer = useRef(null);
+  const origin = useRef(null);
+  const clear = () => { clearTimeout(timer.current); timer.current = null; };
+  return (
+    <div
+      className={className}
+      style={{ WebkitTouchCallout: "none", ...style }}
+      onPointerDown={(e) => {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        origin.current = { x: e.clientX, y: e.clientY };
+        clear();
+        timer.current = setTimeout(() => { timer.current = null; onLong(); if (navigator.vibrate) navigator.vibrate(10); }, 420);
+      }}
+      onPointerMove={(e) => {
+        if (!timer.current || !origin.current) return;
+        if (Math.hypot(e.clientX - origin.current.x, e.clientY - origin.current.y) > 8) clear();
+      }}
+      onPointerUp={clear}
+      onPointerCancel={clear}
+      onPointerLeave={clear}
+      onContextMenu={(e) => { e.preventDefault(); clear(); onLong(); }}
+      onDoubleClick={(e) => { e.preventDefault(); onLong(); }}
+    >
+      {children}
+    </div>
+  );
+};
+
+// Tapback badge on the bubble's corner — only when someone has reacted.
+const ReactionBadge = ({ reactions = {}, myUid, own, onClick }) => {
+  const counts = REACTIONS.map(([key, emoji]) => [key, emoji, Object.values(reactions).filter((v) => v === key).length]).filter(([, , n]) => n > 0);
+  if (!counts.length) return null;
+  const total = counts.reduce((s, [, , n]) => s + n, 0);
+  const mine = Boolean(reactions[myUid]);
+  return (
+    <button onClick={onClick} aria-label={`${total} reaction${total === 1 ? "" : "s"}`}
+      className={`absolute -top-3 ${own ? "-left-2" : "-right-2"} z-10 flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[12px] leading-none shadow-sm border`}
+      style={{ backgroundColor: mine ? COLORS.accentSoft : "#fff", borderColor: mine ? COLORS.accent : "#E2E8F0" }}>
+      {counts.map(([key, emoji]) => <span key={key}>{emoji}</span>)}
+      {total > 1 && <span className="text-[10px] font-bold text-slate-500 ml-0.5">{total}</span>}
+    </button>
+  );
+};
+
+// Context menu for a message (iOS style): tapback row + actions.
+const MessageActionSheet = ({ preview, own, myReaction, onReact, actions = [], onClose }) => (
+  <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center p-6 bg-black/35 backdrop-blur-sm" onClick={onClose}>
+    <div className="w-full max-w-xs space-y-2" onClick={(e) => e.stopPropagation()}>
+      {onReact && (
+        <div className={`flex ${own ? "justify-end" : "justify-start"}`}>
+          <div className="flex items-center gap-1 bg-white rounded-full shadow-xl px-2 py-1.5">
+            {REACTIONS.map(([key, emoji]) => (
+              <button key={key} onClick={() => { onReact(myReaction === key ? null : key); onClose(); }} aria-label={key}
+                className="w-10 h-10 rounded-full flex items-center justify-center text-xl transition-transform active:scale-90"
+                style={myReaction === key ? { backgroundColor: COLORS.accentSoft } : {}}>{emoji}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className={`flex ${own ? "justify-end" : "justify-start"}`}>
+        <div className="max-w-full rounded-[18px] px-3.5 py-2 text-[15px] leading-snug shadow-xl line-clamp-6 break-words"
+          style={own ? { backgroundColor: COLORS.primary, color: "#fff" } : { backgroundColor: "#fff", color: "#0F172A" }}>{preview}</div>
+      </div>
+      <div className={`flex ${own ? "justify-end" : "justify-start"}`}>
+        <div className="w-56 bg-white/95 rounded-2xl shadow-xl overflow-hidden divide-y divide-slate-100">
+          {actions.map((a) => {
+            const Icon = a.icon;
+            return (
+              <button key={a.label} onClick={() => { a.onClick(); onClose(); }}
+                className={`w-full flex items-center justify-between px-4 py-3 text-[15px] ${a.danger ? "text-red-600" : "text-slate-900"} active:bg-slate-100`}>
+                {a.label}<Icon className="w-4 h-4" />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// Message box: one ＋ button (opens a tray of attachments/tools), a
+// full-width text field that grows to 5 lines, and the send arrow inside it.
+const ChatComposer = ({ value, onChange, onSend, placeholder, uploading = false, actions = [], banner = null }) => {
+  const [trayOpen, setTrayOpen] = useState(false);
+  const canSend = value.trim().length > 0;
+  return (
+    <div className="bg-white/95 backdrop-blur border-t border-slate-200 shrink-0">
+      {banner}
+      {trayOpen && actions.length > 0 && (
+        <div className="px-3 pt-3 pb-1 grid grid-cols-4 gap-1">
+          {actions.map((a) => {
+            const Icon = a.icon;
+            return (
+              <button key={a.key} disabled={a.disabled} onClick={() => { a.onClick(); if (!a.keepOpen) setTrayOpen(false); }}
+                className="flex flex-col items-center gap-1 py-1.5 rounded-2xl disabled:opacity-40 active:bg-slate-100">
+                <span className="w-12 h-12 rounded-full flex items-center justify-center transition-colors"
+                  style={a.active ? { backgroundColor: COLORS.primary, color: "#fff" } : { backgroundColor: "#F1F5F9", color: COLORS.primary }}>
+                  <Icon className="w-5 h-5" />
+                </span>
+                <span className="text-[11px] font-semibold text-slate-600 leading-tight text-center">{a.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="px-3 py-2 flex items-end gap-2" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
+        {actions.length > 0 && (
+          <button onClick={() => setTrayOpen((o) => !o)} aria-label={trayOpen ? "Close attachments" : "Add a photo, video, file or poll"} aria-expanded={trayOpen}
+            className="w-9 h-9 mb-[2px] rounded-full flex items-center justify-center shrink-0 transition-transform"
+            style={{ backgroundColor: "#F1F5F9", color: COLORS.textSecondary, transform: trayOpen ? "rotate(45deg)" : "none" }}>
+            {uploading ? <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Plus className="w-5 h-5" />}
+          </button>
+        )}
+        <div className="flex-1 min-w-0 flex items-end rounded-[20px] border border-slate-300 bg-white pl-3.5 pr-1 py-1 focus-within:border-slate-400">
+          <AutoGrowTextarea value={value} onChange={onChange} onSubmit={onSend} placeholder={placeholder} aria-label="Message"
+            className="flex-1 min-w-0 bg-transparent text-[15px] py-1 focus:outline-none" />
+          <button onClick={onSend} disabled={!canSend} aria-label="Send"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0 transition-opacity"
+            style={{ backgroundColor: COLORS.primary, opacity: canSend ? 1 : 0.25 }}>
+            <ArrowUp className="w-[18px] h-[18px]" strokeWidth={3} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PollCard = ({ message, own, myUid, onVote, isAdmin = false, onSeeVoters }) => {
   // My own vote doc (private); tallies come from `voteCounts` on the poll
   // (server-maintained). Legacy polls fall back to the old votes map.
@@ -6918,13 +7062,15 @@ const VideoViewer = ({ url, onClose }) => {
   );
 };
 
-const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages = false, onLoadOlder, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, markDMsRead, scheduled = [], addScheduled, deleteScheduled }) => {
+export const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages = false, onLoadOlder, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, markDMsRead, scheduled = [], addScheduled, deleteScheduled }) => {
   const isAdmin = user.role === "admin";
   const [input, setInput] = useState("");
   const [showPinned, setShowPinned] = useState(true);
   const [shared, setShared] = useState(false);
   const [pinOnSend, setPinOnSend] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
+  const [actionMsg, setActionMsg] = useState(null); // message whose long-press menu is open
+  const [dmAction, setDmAction] = useState(null);
   const [pollOpen, setPollOpen] = useState(false);
   const [pollDraft, setPollDraft] = useState({ question: "", options: ["", ""] });
   const [uploading, setUploading] = useState(false);
@@ -7253,14 +7399,12 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages
   };
   const startReply = (m) => setReplyTo({ id: m.id, sender: m.sender, text: m.text, kind: m.kind, question: m.question });
   const cancelReply = () => setReplyTo(null);
-  const [copiedId, setCopiedId] = useState(null);
   const copyMsg = async (m) => {
     const text = m.kind === "poll" ? m.question : m.text;
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
-      setCopiedId(m.id);
-      setTimeout(() => setCopiedId((c) => (c === m.id ? null : c)), 1500);
+      toast("Copied", "success");
     } catch { /* clipboard unavailable — text is still selectable manually */ }
   };
 
@@ -7491,71 +7635,65 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages
       ) : isDM ? (
         <>
           <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 min-h-0 overflow-y-auto" style={{ backgroundColor: COLORS.bg }}>
-            <div className="min-h-full flex flex-col justify-end space-y-3 px-4 py-4">
+            <div className="min-h-full flex flex-col justify-end px-3 py-4">
             {dmMessages.length === 0 && <p className="text-center text-xs text-slate-400 italic py-6">{isAdmin ? "No messages in this thread yet." : "Message your coach privately. Only you and your team's coach can see this."}</p>}
-            {dmStream.map((item) => {
-              if (item.kind === "divider") return <DateDivider key={item.id} label={item.label} />;
+            {dmStream.map((item, idx) => {
+              if (item.kind === "divider") return <div key={item.id} className="pt-3"><DateDivider label={item.label} /></div>;
               const d = item.dm;
               const own = d.senderUid === user.uid;
+              const sameSender = (o) => o && o.kind !== "divider" && o.dm?.senderUid === d.senderUid
+                && Math.abs(tsMs(o.dm.createdAt) - tsMs(d.createdAt)) < GROUP_GAP_MS;
+              const first = !sameSender(dmStream[idx - 1]);
+              const last = !sameSender(dmStream[idx + 1]);
               return (
-                <div key={d.id} className={`flex ${own ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-2xl shadow-sm overflow-hidden ${own ? "text-white" : "bg-white text-slate-900"}`} style={own ? { backgroundColor: COLORS.primary } : {}}>
-                    {!own && <div className="px-3 pt-2 text-[10px] font-bold" style={{ color: COLORS.accent }}>{d.senderName}{d.isCoach ? " · Coach" : ""}</div>}
-                    {d.attachment?.type === "image" && d.attachment.url && (
-                      <img src={d.attachment.url} alt="" className="w-full max-h-80 object-cover" loading="lazy" />
-                    )}
-                    {d.attachment?.type === "video" && d.attachment.url && (
-                      <div className="relative">
-                        <video src={d.attachment.url} controls playsInline preload="metadata" className="w-full max-h-80 object-cover" />
-                        <button onClick={() => setVideoViewer(d.attachment.url)} aria-label="Watch fullscreen" title="Watch fullscreen" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center"><Maximize2 className="w-4 h-4" /></button>
-                      </div>
-                    )}
-                    {d.attachment?.type === "file" && d.attachment.url && (
-                      <a href={d.attachment.url} target="_blank" rel="noopener noreferrer" className={`mx-3 mt-2 rounded-xl p-2 flex items-center gap-2 ${own ? "bg-white/15" : "bg-slate-100"}`}><AttIcon type={d.attachment.type} /><span className="text-[11px] font-semibold truncate">{d.attachment.name}</span></a>
-                    )}
-                    {d.text && <p className="px-3 py-2 text-sm leading-snug break-words select-text"><Linkify>{d.text}</Linkify></p>}
-                  </div>
+                <div key={d.id} className={`flex flex-col ${own ? "items-end" : "items-start"} ${first ? "mt-3" : "mt-0.5"}`}>
+                  {!own && first && <div className="px-3 mb-0.5 text-[11px] font-semibold text-slate-500">{d.senderName}{d.isCoach ? " · Coach" : ""}</div>}
+                  <LongPress onLong={() => (d.text ? setDmAction(d) : null)} className="max-w-[78%] select-none">
+                    <div className="overflow-hidden" style={{ borderRadius: bubbleRadius(own, first, last), backgroundColor: own ? COLORS.primary : IOS_GRAY, color: own ? "#fff" : "#0F172A" }}>
+                      {d.attachment?.type === "image" && d.attachment.url && (
+                        <img src={d.attachment.url} alt="" className="w-full max-h-80 object-cover" loading="lazy" />
+                      )}
+                      {d.attachment?.type === "video" && d.attachment.url && (
+                        <div className="relative">
+                          <video src={d.attachment.url} controls playsInline preload="metadata" className="w-full max-h-80 object-cover" />
+                          <button onClick={() => setVideoViewer(d.attachment.url)} aria-label="Watch fullscreen" title="Watch fullscreen" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center"><Maximize2 className="w-4 h-4" /></button>
+                        </div>
+                      )}
+                      {d.attachment?.type === "file" && d.attachment.url && (
+                        <a href={d.attachment.url} target="_blank" rel="noopener noreferrer" className={`mx-2 my-2 rounded-xl p-2 flex items-center gap-2 ${own ? "bg-white/15" : "bg-white/70"}`}><AttIcon type={d.attachment.type} /><span className="text-[12px] font-semibold truncate">{d.attachment.name}</span></a>
+                      )}
+                      {d.text && <p className="px-3.5 py-2 text-[15px] leading-snug break-words"><Linkify>{d.text}</Linkify></p>}
+                    </div>
+                  </LongPress>
+                  {last && <div className="mt-1 px-1 text-[11px] text-slate-400">{formatTime(d.createdAt)}</div>}
                 </div>
               );
             })}
             </div>
           </div>
-          <div className="bg-white border-t border-slate-200 p-3 flex items-center gap-2 shrink-0">
-            <button onClick={() => photoInputRef.current?.click()} disabled={uploading} aria-label="Send photo" title="Send a photo" className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-wait">
-              {uploading ? <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Camera className="w-4 h-4" />}
-            </button>
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) sendImage(f); e.target.value = ""; }}
+          <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) sendImage(f); e.target.value = ""; }} />
+          <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) sendVideo(f); e.target.value = ""; }} />
+          <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = ""; }} />
+          <ChatComposer
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onSend={send}
+            uploading={uploading}
+            placeholder={isAdmin ? "Reply" : "Message your coach"}
+            actions={[
+              { key: "photo", label: "Photo", icon: Camera, disabled: uploading, onClick: () => photoInputRef.current?.click() },
+              { key: "video", label: "Video", icon: Video, disabled: uploading, onClick: () => videoInputRef.current?.click() },
+              { key: "file", label: "File", icon: Paperclip, disabled: uploading, onClick: () => fileInputRef.current?.click() },
+            ]}
+          />
+          {dmAction && (
+            <MessageActionSheet
+              preview={dmAction.text}
+              own={dmAction.senderUid === user.uid}
+              actions={[{ label: "Copy", icon: Copy, onClick: () => copyMsg(dmAction) }]}
+              onClose={() => setDmAction(null)}
             />
-            <button onClick={() => videoInputRef.current?.click()} disabled={uploading} aria-label="Send video" title="Send a video" className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-wait">
-              {uploading ? <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Video className="w-4 h-4" />}
-            </button>
-            <input
-              ref={videoInputRef}
-              type="file"
-              accept="video/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) sendVideo(f); e.target.value = ""; }}
-            />
-            <button onClick={() => fileInputRef.current?.click()} disabled={uploading} aria-label="Send file" title="Send a file" className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-wait">
-              {uploading ? <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Paperclip className="w-4 h-4" />}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = ""; }}
-            />
-            <AutoGrowTextarea value={input} onChange={(e) => setInput(e.target.value)} onSubmit={send} placeholder={isAdmin ? "Reply…" : "Message your coach…"} aria-label="Message" className="flex-1 bg-slate-100 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-            <button onClick={send} disabled={!input.trim()} className="w-9 h-9 rounded-full flex items-center justify-center text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}><Send className="w-4 h-4" /></button>
-          </div>
+          )}
         </>
       ) : (
         <>
@@ -7572,18 +7710,18 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages
           )}
 
           <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 min-h-0 overflow-y-auto" style={{ backgroundColor: COLORS.bg }}>
-            <div className="min-h-full flex flex-col justify-end space-y-3 px-4 py-4">
+            <div className="min-h-full flex flex-col justify-end px-3 py-4">
             {hasOlderMessages && onLoadOlder && (
               <button onClick={onLoadOlder} className="self-center text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-500">Load older messages</button>
             )}
             {isLoading(messages) && <p className="text-center text-xs text-slate-400 py-6">Loading messages…</p>}
             {!isLoading(messages) && stream.length === 0 && <p className="text-center text-xs text-slate-400 italic py-6">No messages here yet. Say hello!</p>}
-            {stream.map((item) => {
-              if (item.kind === "divider") return <DateDivider key={item.id} label={item.label} />;
+            {stream.map((item, idx) => {
+              if (item.kind === "divider") return <div key={item.id} className="pt-3"><DateDivider label={item.label} /></div>;
               if (item.kind === "announcement") {
                 const a = item.announcement;
                 return (
-                  <div key={item.id} className="rounded-2xl p-3.5 shadow-sm border" style={{ backgroundColor: COLORS.accentSoft, borderColor: COLORS.accent }}>
+                  <div key={item.id} className="mt-3 rounded-2xl p-3.5 shadow-sm border" style={{ backgroundColor: COLORS.accentSoft, borderColor: COLORS.accent }}>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5" style={{ color: COLORS.accent }}><Bell className="w-3 h-3" /> Announcement</span>
                       {isAdmin && deleteAnnouncement && <button onClick={() => { if (confirm("Delete this announcement?")) deleteAnnouncement(a.id).catch(reportError("Couldn't delete the announcement")); }} className="text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>}
@@ -7595,27 +7733,36 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages
               }
               const m = item.message;
               const own = isOwn(m);
+              // iMessage-style grouping: consecutive messages from one sender
+              // (within 5 min) share one name, one avatar and one timestamp.
+              const sameSender = (o) => o && o.kind === "msg" && o.message.senderUid === m.senderUid
+                && Math.abs(tsMs(o.message.createdAt) - tsMs(m.createdAt)) < GROUP_GAP_MS;
+              const first = !sameSender(stream[idx - 1]);
+              const last = !sameSender(stream[idx + 1]);
               const seenN = own ? readByCount(m) : 0;
+              const reacted = m.reactions && Object.keys(m.reactions).length > 0;
+              const status = seenN ? `Read by ${seenN}` : "Delivered";
               return (
-                <div key={m.id} className={`flex gap-2 group ${own ? "flex-row-reverse" : "flex-row"}`}>
-                  {!own && <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ backgroundColor: m.isCoach ? COLORS.primary : "#94a3b8" }}>{m.initials}</div>}
-                  <div className={`max-w-[80%] flex flex-col ${own ? "items-end" : "items-start"}`}>
-                    {!own && <div className="flex items-baseline gap-1.5 mb-1"><span className="text-[10px] font-bold text-slate-700">{m.sender}</span>{m.isCoach && <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: COLORS.accent }}>Coach</span>}</div>}
-
-                    {m.replyToId && m.replyToSender && (
-                      <div className={`text-[10px] mb-1 px-2 py-1 rounded-md border-l-2 max-w-full ${own ? "self-end" : "self-start"}`} style={{ borderColor: COLORS.accent, backgroundColor: COLORS.accentSoft }}>
-                        <div className="font-bold text-slate-700">{m.replyToSender}</div>
-                        <div className="text-slate-600 truncate">{m.replyToText}</div>
+                <div key={m.id} className={`flex items-end gap-2 ${own ? "justify-end" : "justify-start"} ${first ? "mt-3" : "mt-0.5"} ${reacted ? "pt-2.5" : ""}`}>
+                  {!own && (last ? <Avatar initials={m.initials} size={28} bg={m.isCoach ? COLORS.primary : "#94a3b8"} className="flex-shrink-0" /> : <div className="w-7 flex-shrink-0" />)}
+                  <div className={`max-w-[78%] flex flex-col ${own ? "items-end" : "items-start"}`}>
+                    {!own && first && (
+                      <div className="flex items-baseline gap-1.5 mb-0.5 px-3">
+                        <span className="text-[11px] font-semibold text-slate-500">{m.sender}</span>
+                        {m.isCoach && <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: COLORS.accent }}>Coach</span>}
                       </div>
                     )}
-
-                    <div className="flex items-center gap-1.5">
-                      {own && isAdmin && <button onClick={() => togglePin(m)} className={`${m.pinned ? "text-orange-500" : "text-slate-300"} hover:text-orange-500`}><Pin className="w-3.5 h-3.5" /></button>}
-
+                    {m.replyToId && m.replyToSender && (
+                      <div className="text-[11px] mb-0.5 px-3 py-1 rounded-2xl max-w-full border border-slate-200 bg-white/70 text-slate-500 truncate">
+                        <Reply className="w-3 h-3 inline -mt-0.5 mr-1" /><span className="font-semibold text-slate-600">{m.replyToSender}</span> {m.replyToText}
+                      </div>
+                    )}
+                    <LongPress onLong={() => setActionMsg(m)} className="relative max-w-full select-none">
+                      <ReactionBadge reactions={m.reactions} myUid={user.uid} own={own} onClick={() => setActionMsg(m)} />
                       {m.kind === "poll" ? (
-                        <PollCard message={m} own={own} myUid={user.uid} onVote={(idx) => voteOnPoll(m.id, idx)} isAdmin={isAdmin} onSeeVoters={() => openVoters(m)} />
+                        <PollCard message={m} own={own} myUid={user.uid} onVote={(idx2) => voteOnPoll(m.id, idx2)} isAdmin={isAdmin} onSeeVoters={() => openVoters(m)} />
                       ) : (
-                        <div className={`rounded-2xl shadow-sm overflow-hidden ${own ? "text-white" : "bg-white text-slate-900"}`} style={own ? { backgroundColor: COLORS.primary } : {}}>
+                        <div className="overflow-hidden" style={{ borderRadius: bubbleRadius(own, first, last), backgroundColor: own ? COLORS.primary : IOS_GRAY, color: own ? "#fff" : "#0F172A" }}>
                           {m.attachment?.type === "image" && m.attachment.url && (
                             <a href={m.attachment.url} target="_blank" rel="noopener noreferrer" className="block">
                               <img src={m.attachment.url} alt="" className="w-full max-h-80 object-cover" loading="lazy" />
@@ -7627,43 +7774,24 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages
                               <button onClick={() => setVideoViewer(m.attachment.url)} aria-label="Watch fullscreen" title="Watch fullscreen" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center"><Maximize2 className="w-4 h-4" /></button>
                             </div>
                           )}
-                          {m.text && <p className="text-sm leading-snug break-words px-3 py-2 select-text"><Linkify>{m.text}</Linkify></p>}
+                          {m.text && <p className="text-[15px] leading-snug break-words px-3.5 py-2"><Linkify>{m.text}</Linkify></p>}
                           {m.attachment && m.attachment.type !== "image" && m.attachment.type !== "video" && (
                             m.attachment.type === "file" && m.attachment.url ? (
-                              <a href={m.attachment.url} target="_blank" rel="noopener noreferrer" className={`mx-3 mb-2 rounded-xl p-2 flex items-center gap-2 ${own ? "bg-white/15" : "bg-slate-100"}`}><AttIcon type={m.attachment.type} /><span className="text-[11px] font-semibold truncate">{m.attachment.name}</span></a>
+                              <a href={m.attachment.url} target="_blank" rel="noopener noreferrer" className={`mx-2 my-2 rounded-xl p-2 flex items-center gap-2 ${own ? "bg-white/15" : "bg-white/70"}`}><AttIcon type={m.attachment.type} /><span className="text-[12px] font-semibold truncate">{m.attachment.name}</span></a>
                             ) : (
-                              <div className={`mx-3 mb-2 rounded-xl p-2 flex items-center gap-2 ${own ? "bg-white/15" : "bg-slate-100"}`}><AttIcon type={m.attachment.type} /><span className="text-[11px] font-semibold truncate">{m.attachment.name}</span></div>
+                              <div className={`mx-2 my-2 rounded-xl p-2 flex items-center gap-2 ${own ? "bg-white/15" : "bg-white/70"}`}><AttIcon type={m.attachment.type} /><span className="text-[12px] font-semibold truncate">{m.attachment.name}</span></div>
                             )
                           )}
                         </div>
                       )}
-
-                      <button onClick={() => startReply(m)} aria-label="Reply" title="Reply" className="text-slate-300 hover:text-slate-600 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><Reply className="w-3.5 h-3.5" /></button>
-                      {(m.text || m.kind === "poll") && <button onClick={() => copyMsg(m)} aria-label="Copy message" title="Copy" className="text-slate-300 hover:text-slate-600 md:opacity-0 md:group-hover:opacity-100 transition-opacity">{copiedId === m.id ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}</button>}
-                      {!own && isAdmin && <button onClick={() => togglePin(m)} className={`${m.pinned ? "text-orange-500" : "text-slate-300"} hover:text-orange-500 md:opacity-0 md:group-hover:opacity-100 transition-opacity`}><Pin className="w-3.5 h-3.5" /></button>}
-                      {isAdmin && <button onClick={() => delMsg(m.id)} aria-label="Delete message" className="text-slate-300 hover:text-red-500 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><Trash2 className="w-3.5 h-3.5" /></button>}
-                    </div>
-
-                    <div className="flex items-center gap-2 mt-1 px-1">
-                      <span className="text-[9px] text-slate-400">{formatTime(m.createdAt)}</span>
-                      {own && isAdmin ? (
-                        <button onClick={() => openSeen(m)} className="text-[9px] font-semibold text-slate-500 hover:text-slate-700 underline-offset-2 hover:underline">· Seen by {seenN}</button>
-                      ) : (own && seenN > 0 && (
-                        <span className="text-[9px] font-semibold text-slate-500">· Seen by {seenN}</span>
-                      ))}
-                    </div>
-                    {reactToMessage && (
-                      <div className={`flex items-center gap-1 mt-1 ${own ? "flex-row-reverse" : ""}`}>
-                        {REACTIONS.map(([key, emoji]) => {
-                          const reax = m.reactions || {};
-                          const count = Object.values(reax).filter((v) => v === key).length;
-                          const mine = reax[user.uid] === key;
-                          return (
-                            <button key={key} onClick={() => reactToMessage(m.id, mine ? null : key).catch(reportError("Couldn't save your reaction"))} aria-label={key} className={`text-[11px] leading-none px-1.5 py-1 rounded-full border transition-colors ${mine ? "border-transparent" : "border-slate-200 bg-white hover:bg-slate-50"} ${count ? "" : "opacity-60"}`} style={mine ? { backgroundColor: COLORS.accentSoft } : {}}>
-                              {emoji}{count > 0 ? <span className="ml-0.5 font-semibold text-slate-600">{count}</span> : ""}
-                            </button>
-                          );
-                        })}
+                    </LongPress>
+                    {last && (
+                      <div className="flex items-center gap-1 mt-1 px-1 text-[11px] text-slate-400">
+                        {m.pinned && <Pin className="w-3 h-3 text-orange-500" />}
+                        <span>{formatTime(m.createdAt)}</span>
+                        {own && (isAdmin
+                          ? <button onClick={() => openSeen(m)} className="font-medium hover:underline">· {status}</button>
+                          : <span className="font-medium">· {status}</span>)}
                       </div>
                     )}
                   </div>
@@ -7697,63 +7825,55 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages
             </div>
           )}
 
-          <div className="bg-white border-t border-slate-200 shrink-0">
-            {replyTo && (
-              <div className="px-4 py-2 flex items-center gap-2 border-b border-slate-100" style={{ backgroundColor: COLORS.accentSoft }}>
-                <Reply className="w-3.5 h-3.5 flex-shrink-0" style={{ color: COLORS.primary }} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[10px] font-bold text-slate-700">Replying to {replyTo.sender}</div>
-                  <div className="text-[11px] text-slate-600 truncate">{replyTo.kind === "poll" ? `📊 ${replyTo.question}` : replyTo.text}</div>
+          <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) sendImage(f); e.target.value = ""; }} />
+          <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) sendVideo(f); e.target.value = ""; }} />
+          <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = ""; }} />
+          <ChatComposer
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onSend={send}
+            uploading={uploading}
+            placeholder={replyTo ? `Reply to ${replyTo.sender}` : "Message"}
+            actions={[
+              { key: "photo", label: "Photo", icon: Camera, disabled: uploading, onClick: () => photoInputRef.current?.click() },
+              { key: "video", label: "Video", icon: Video, disabled: uploading, onClick: () => videoInputRef.current?.click() },
+              { key: "file", label: "File", icon: Paperclip, disabled: uploading, onClick: () => fileInputRef.current?.click() },
+              { key: "poll", label: "Poll", icon: BarChart3, active: pollOpen, onClick: () => setPollOpen(!pollOpen) },
+              ...(isAdmin ? [{ key: "pin", label: "Pin next", icon: Pin, active: pinOnSend, onClick: () => setPinOnSend(!pinOnSend) }] : []),
+              ...(isAdmin && effectiveChannel === "team" ? [{ key: "announce", label: "Announce", icon: Bell, active: announceMode, onClick: () => setAnnounceMode(!announceMode) }] : []),
+            ]}
+            banner={<>
+              {replyTo && (
+                <div className="px-4 py-2 flex items-center gap-2 border-b border-slate-100" style={{ backgroundColor: COLORS.accentSoft }}>
+                  <Reply className="w-3.5 h-3.5 flex-shrink-0" style={{ color: COLORS.primary }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] font-bold text-slate-700">Replying to {replyTo.sender}</div>
+                    <div className="text-[11px] text-slate-600 truncate">{replyTo.kind === "poll" ? `📊 ${replyTo.question}` : replyTo.text}</div>
+                  </div>
+                  <button onClick={cancelReply} aria-label="Cancel reply" className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
                 </div>
-                <button onClick={cancelReply} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
-              </div>
-            )}
-            {isAdmin && pinOnSend && <div className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}><Pin className="w-3 h-3" /> Next message will be pinned</div>}
-            {isAdmin && announceMode && <div className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}><Bell className="w-3 h-3" /> Posting as an announcement to the whole team</div>}
-            <div className="p-3 flex items-center gap-2">
-              <button onClick={() => photoInputRef.current?.click()} disabled={uploading} aria-label="Send photo" title="Send a photo" className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-wait">
-                {uploading ? <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Camera className="w-4 h-4" />}
-              </button>
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) sendImage(f); e.target.value = ""; }}
-              />
-              <button onClick={() => videoInputRef.current?.click()} disabled={uploading} aria-label="Send video" title="Send a video" className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-wait">
-                {uploading ? <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Video className="w-4 h-4" />}
-              </button>
-              <input
-                ref={videoInputRef}
-                type="file"
-                accept="video/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) sendVideo(f); e.target.value = ""; }}
-              />
-              <button onClick={() => fileInputRef.current?.click()} disabled={uploading} aria-label="Send a file" title="Send a file" className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-wait">
-                {uploading ? <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Paperclip className="w-4 h-4" />}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = ""; }}
-              />
-              <button onClick={() => setPollOpen(!pollOpen)} aria-label="Create poll" title="Create poll" className="w-9 h-9 rounded-full flex items-center justify-center transition-colors" style={pollOpen ? { backgroundColor: COLORS.accentSoft, color: COLORS.accent } : { color: COLORS.textSecondary }}><BarChart3 className="w-4 h-4" /></button>
-              {isAdmin && (
-                <button onClick={() => setPinOnSend(!pinOnSend)} aria-label="Pin on send" title="Pin this message when sent" className="w-9 h-9 rounded-full flex items-center justify-center transition-colors" style={pinOnSend ? { backgroundColor: COLORS.accentSoft, color: COLORS.accent } : { color: COLORS.textSecondary }}><Pin className="w-4 h-4" /></button>
               )}
-              {isAdmin && effectiveChannel === "team" && (
-                <button onClick={() => setAnnounceMode(!announceMode)} aria-label="Announce" title="Post as an announcement" className="w-9 h-9 rounded-full flex items-center justify-center transition-colors" style={announceMode ? { backgroundColor: COLORS.accentSoft, color: COLORS.accent } : { color: COLORS.textSecondary }}><Bell className="w-4 h-4" /></button>
-              )}
-              <AutoGrowTextarea value={input} onChange={(e) => setInput(e.target.value)} onSubmit={send} placeholder={replyTo ? `Reply to ${replyTo.sender}…` : "Message the team…"} aria-label="Message" className="flex-1 bg-slate-100 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-              <button onClick={send} disabled={!input.trim()} className="w-9 h-9 rounded-full flex items-center justify-center text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}><Send className="w-4 h-4" /></button>
-            </div>
-          </div>
+              {isAdmin && pinOnSend && <div className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}><Pin className="w-3 h-3" /> Next message will be pinned</div>}
+              {isAdmin && announceMode && <div className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}><Bell className="w-3 h-3" /> Posting as an announcement to the whole team</div>}
+            </>}
+          />
+          {actionMsg && (
+            <MessageActionSheet
+              preview={actionMsg.kind === "poll" ? `📊 ${actionMsg.question}` : (actionMsg.text || (actionMsg.attachment ? `📎 ${actionMsg.attachment.name || actionMsg.attachment.type}` : ""))}
+              own={isOwn(actionMsg)}
+              myReaction={(actionMsg.reactions || {})[user.uid]}
+              onReact={reactToMessage ? (r) => reactToMessage(actionMsg.id, r).catch(reportError("Couldn't save your reaction")) : null}
+              actions={[
+                { label: "Reply", icon: Reply, onClick: () => startReply(actionMsg) },
+                ...((actionMsg.text || actionMsg.kind === "poll") ? [{ label: "Copy", icon: Copy, onClick: () => copyMsg(actionMsg) }] : []),
+                ...(isAdmin ? [{ label: actionMsg.pinned ? "Unpin" : "Pin", icon: Pin, onClick: () => togglePin(actionMsg) }] : []),
+                ...(isAdmin && actionMsg.kind === "poll" ? [{ label: "See who voted", icon: BarChart3, onClick: () => openVoters(actionMsg) }] : []),
+                ...(isAdmin && isOwn(actionMsg) ? [{ label: "Seen by", icon: Eye, onClick: () => openSeen(actionMsg) }] : []),
+                ...(isAdmin ? [{ label: "Delete", icon: Trash2, danger: true, onClick: () => delMsg(actionMsg.id) }] : []),
+              ]}
+              onClose={() => setActionMsg(null)}
+            />
+          )}
         </>
       )}
     </div>
