@@ -139,9 +139,9 @@ describe('users update + delete (F02)', () => {
     await assertFails(deleteDoc(doc(db, 'users/org')))
   })
 
-  test('coach can only update photo fields of a teammate', async () => {
+  test('coach cannot edit a teammate\'s profile, not even the photo (players set their own)', async () => {
     const db = as(env, 'coachV').firestore()
-    await assertSucceeds(updateDoc(doc(db, 'users/p1'), { photoURL: 'https://x/y.jpg', photoPath: 'avatars/coachV/y.jpg' }))
+    await assertFails(updateDoc(doc(db, 'users/p1'), { photoURL: 'https://x/y.jpg', photoPath: 'avatars/coachV/y.jpg' }))
     await assertFails(updateDoc(doc(db, 'users/p1'), { name: 'Renamed' }))
     await assertFails(updateDoc(doc(db, 'users/p1'), { fcmTokens: [] }))
     await assertFails(updateDoc(doc(db, 'users/p1'), { role: 'admin' }))
@@ -272,8 +272,10 @@ describe('drillLibrary (F27)', () => {
     await assertFails(updateDoc(doc(db, 'drillLibrary/dr1'), { createdByUid: 'coachJ' }))
     await assertFails(updateDoc(doc(as(env, 'p1').firestore(), 'drillLibrary/dr1'), { name: 'x' }))
   })
-  test('read stays public', async () => {
-    await assertSucceeds(getDoc(doc(env.unauthenticatedContext().firestore(), 'drillLibrary/dr1')))
+  test('read is signed-in only (no longer public)', async () => {
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'drillLibrary/dr1')))
+    await assertSucceeds(getDoc(doc(as(env, 'builder').firestore(), 'drillLibrary/dr1')))
+    await assertSucceeds(getDoc(doc(as(env, 'p1').firestore(), 'drillLibrary/dr1')))
   })
 })
 
@@ -295,5 +297,35 @@ describe('wellnessNudgeRuns', () => {
     await seed(env, 'wellnessNudgeRuns/2026-11-20', { ranAt: Timestamp.now() })
     await assertFails(getDoc(doc(as(env, 'org').firestore(), 'wellnessNudgeRuns/2026-11-20')))
     await assertFails(setDoc(doc(as(env, 'org').firestore(), 'wellnessNudgeRuns/2026-11-21'), { ranAt: 1 }))
+  })
+})
+
+describe('poll votes are private (players see totals only)', () => {
+  beforeEach(async () => {
+    await seed(env, 'messages/poll1', { kind: 'poll', teamId: 'varsity', channel: 'team', audienceKeys: ['*'], senderUid: 'coachV', question: 'Q', options: ['A', 'B'], voteCounts: [0, 0] })
+    await seed(env, 'messages/hidden', { kind: 'poll', teamId: 'varsity', channel: 'g1', audienceKeys: ['uid:p2'], senderUid: 'coachV', question: 'Q', options: ['A', 'B'] })
+  })
+  test('a player votes as themselves on a valid option only', async () => {
+    const db = as(env, 'p1').firestore()
+    await assertSucceeds(setDoc(doc(db, 'messages/poll1/votes/p1'), { uid: 'p1', option: 1 }))
+    await assertFails(setDoc(doc(db, 'messages/poll1/votes/p2'), { uid: 'p2', option: 1 }))
+    await assertFails(setDoc(doc(db, 'messages/poll1/votes/p1'), { uid: 'p1', option: 5 }))
+    await assertFails(setDoc(doc(db, 'messages/poll1/votes/p1'), { uid: 'p1', option: 0, extra: true }))
+  })
+  test('cannot vote on a poll outside your audience', async () => {
+    await assertFails(setDoc(doc(as(env, 'p1').firestore(), 'messages/hidden/votes/p1'), { uid: 'p1', option: 0 }))
+    await assertSucceeds(setDoc(doc(as(env, 'p2').firestore(), 'messages/hidden/votes/p2'), { uid: 'p2', option: 0 }))
+  })
+  test('players cannot see who others voted for; the team coach can', async () => {
+    await seed(env, 'messages/poll1/votes/p2', { uid: 'p2', option: 0 })
+    await assertFails(getDoc(doc(as(env, 'p1').firestore(), 'messages/poll1/votes/p2')))
+    await assertSucceeds(getDoc(doc(as(env, 'p2').firestore(), 'messages/poll1/votes/p2')))
+    await assertSucceeds(getDoc(doc(as(env, 'coachV').firestore(), 'messages/poll1/votes/p2')))
+    await assertFails(getDoc(doc(as(env, 'coachJ').firestore(), 'messages/poll1/votes/p2')))
+  })
+  test('players can no longer write votes or vote counts on the message', async () => {
+    const db = as(env, 'p1').firestore()
+    await assertFails(updateDoc(doc(db, 'messages/poll1'), { 'votes.p1': 0 }))
+    await assertFails(updateDoc(doc(db, 'messages/poll1'), { voteCounts: [9, 9] }))
   })
 })

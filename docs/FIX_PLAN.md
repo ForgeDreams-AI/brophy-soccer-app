@@ -137,7 +137,8 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
 |---|---|
 | ✅ Fixed | F01, F02, F03, F04, F05, F06, F07, F09, F10, F12, F13, F14, F16, F17, F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, F29, F30, F31, F35, F36, F37, F39, F40, F41, F42, F43, F45, F46, F48, F49, F51, F52, F53, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F68, F69, F70, F71, F72, F73, F74, F75, F76, F77, F78, F79, F80, F83, F84 (root demo), F85, F86, F87 |
 | 🟡 Partial | F11: loading states on the coach readiness list and chat feed only. F38: signatures are append-own only and coaches can't edit them; no audit trail or document hash. F15: undo exists in the Nutrition hero; the Today checklist row is still +1 only. F54: duplicate folder names are blocked; folders are still linked by name. |
-| ⏸ Needs decision (unchanged) | F28, F34, F44, F47, F50, F62, F81, F82, F84 (`drill-bank.json`), F08, F32 |
+| ✅ Decided 2026-11-21 + done | F28 drill library is signed-in only · F62 players see poll totals only (private vote docs + `voteCounts`; run `functions/scripts/migrate-poll-votes.js` once) · F34 players set their own photo only (coach photo upload removed, rules deny) |
+| ⏸ Needs decision (unchanged) | F38 (e-signature design), F44, F47, F50, F81, F82, F84 (`drill-bank.json`), F08, F32 |
 | ⏸ Not done | F33 (Storage orphan cleanup): the Storage rules don't allow deletes on these paths, so cleanup needs a rules change or a scheduled function. |
 
 **Behaviour changes to tell coaches about:**
@@ -149,3 +150,21 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
 - Deleting events, videos, drills, announcements, messages or invite links now asks for confirmation.
 - A drill can only be deleted by the coach who created it, or by the program admin.
 - Wellness, water and meal days roll over at midnight Arizona time (not 5 PM). The wellness reminder goes out once a day at 8 AM.
+
+## 10. Round 2 (requested 2026-11-21)
+
+- **Instant notifications:** "Send now" is sent by the `onPushNotificationCreated` trigger the moment it's saved. On the emulator it went out in about 1.4 s; before, it waited up to 60 s for the sweep. Chat, DM, announcement and event pushes were already instant.
+- **Diagram board:**
+  - Neutral (light grey) player token.
+  - A **Blank field** preset.
+  - Custom grids: 1–8 **columns × rows** sections on the Grid and Blank presets, with snapping to the section lines.
+  - **Line** and **Dashed line** tools, with no arrowhead and no number badge.
+- **Practice PDF pictures:**
+  - The cause: the Storage bucket sends no CORS header (confirmed), so the PDF renderer silently dropped photos.
+  - Pictures are now inlined before rendering. The app tries a direct fetch, then the same-origin `/api/img` Worker proxy, and warns about any picture it still can't load.
+  - The full fix is turning on bucket CORS (`DEPLOY_PLAN.md` step 6).
+- **Text boxes:**
+  - Chat, DM and form text areas grow to 5 lines, then scroll.
+  - Enter sends on a keyboard. Shift+Enter, or the Enter key on a phone, adds a new line.
+  - The chat feed stays pinned to the newest message.
+- **Deploying:** see `docs/DEPLOY_PLAN.md`. It is written for an agent to follow step by step.
