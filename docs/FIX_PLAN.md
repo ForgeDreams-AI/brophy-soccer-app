@@ -138,7 +138,7 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
 | ✅ Fixed | F01, F02, F03, F04, F05, F06, F07, F09, F10, F12, F13, F14, F16, F17, F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, F29, F30, F31, F35, F36, F37, F39, F40, F41, F42, F43, F45, F46, F48, F49, F51, F52, F53, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F68, F69, F70, F71, F72, F73, F74, F75, F76, F77, F78, F79, F80, F83, F84 (root demo), F85, F86, F87 |
 | 🟡 Partial | F11: loading states on the coach readiness list and chat feed only. F38: signatures are append-own only and coaches can't edit them; no audit trail or document hash. F15: undo exists in the Nutrition hero; the Today checklist row is still +1 only. F54: duplicate folder names are blocked; folders are still linked by name. |
 | ✅ Decided 2026-11-21 + done | F28 drill library is signed-in only · F62 players see poll totals only (private vote docs + `voteCounts`; run `functions/scripts/migrate-poll-votes.js` once) · F34 players set their own photo only (coach photo upload removed, rules deny) |
-| ⏸ Needs decision (unchanged) | F38 (e-signature design), F44, F47, F50, F81, F82, F84 (`drill-bank.json`), F08, F32 |
+| ⏸ Needs decision (unchanged) | F44, F47, F81, F84 (`drill-bank.json`), F08, F32 |
 | ⏸ Not done | F33 (Storage orphan cleanup): the Storage rules don't allow deletes on these paths, so cleanup needs a rules change or a scheduled function. |
 
 **Behaviour changes to tell coaches about:**
@@ -168,3 +168,19 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
   - Enter sends on a keyboard. Shift+Enter, or the Enter key on a phone, adds a new line.
   - The chat feed stays pinned to the newest message.
 - **Deploying:** see `docs/DEPLOY_PLAN.md`. It is written for an agent to follow step by step.
+
+## 11. Round 3 (requested 2026-11-21)
+
+- **F38, e-signatures redesigned:**
+  - Each signature is its own record, `documents/{id}/signatures/{uid}`. It can't be edited once written; only the org admin can delete one.
+  - Each record holds: the typed legal name, a drawn signature (PNG), the verified account email, the server time (enforced: `signedAt == request.time`), the exact consent wording and its version, the SHA-256 hash of the signed file, and the device.
+  - Once a document is uploaded, its file can't be swapped (`url`, `path` and `sha256` are locked).
+  - Coaches see the full log and can download it as CSV. Legacy typed-name signatures still display.
+  - 5 new rules tests.
+- **F50, the USDA key is out of the browser bundle:**
+  - The app calls `/api/usda`. The Worker adds the key from the secret `USDA_API_KEY`, accepts same-site requests only, and caches results for a day.
+  - The build also emits `dist/_worker.js`, so this works on Cloudflare Pages too.
+  - Rotate the old key, since it was public (deploy plan step 9).
+- **F82, repo size:**
+  - The 89 MB of intermediate WAVs are removed from the files and gitignored. They can be rebuilt from the MP3s (`videos/walkthrough/README.md`).
+  - Purging them from history needs a force-push; it is deploy plan step 11 and needs Batman's explicit go.

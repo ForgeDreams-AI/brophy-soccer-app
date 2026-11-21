@@ -45,9 +45,8 @@ CI (`.github/workflows/ci.yml`) runs all of the above on every pull request.
 The "Log Something Else" form has built-in auto-fill search powered by USDA's free API.
 
 1. Get a key (instant, no card): <https://fdc.nal.usda.gov/api-key-signup.html>
-2. Paste it into `.env` (gitignored — never commit a real key): `VITE_USDA_API_KEY=...`
-3. Restart `npm run dev`.
-4. For Cloudflare Pages: add the same variable in **Pages project → Settings → Environment variables** (a build secret — the deploy needs it or food search falls back to Open Food Facts only).
+2. Store it as a **Worker secret**, never in the app bundle: `npx wrangler secret put USDA_API_KEY` (from `teamhub/`). The browser calls `/api/usda` and the Worker adds the key.
+3. Without the secret (or in local `npm run dev`, where there's no Worker), food search uses Open Food Facts only.
 
 Values are per 100g — adjust calories/protein after autofill if your portion was different.
 
@@ -77,7 +76,7 @@ A profile can only be created from a matching roster invite (`invitedEmails/{ema
    - **Build command:** `npm run build`
    - **Build output directory:** `dist`
    - **Root directory:** `teamhub` ← important (since this folder is nested in the repo)
-   - **Environment variables (production AND preview):** `VITE_USDA_API_KEY=<your USDA key>`, `VITE_FIREBASE_VAPID_KEY=<your VAPID key>`
+   - **Environment variables (production AND preview):** `VITE_FIREBASE_VAPID_KEY=<your VAPID key>` (the USDA key is a Worker secret now — see "Food search")
      (VAPID key: generate in the Brophy Firebase console → Project Settings → Cloud Messaging → Web Push certificates.)
 
    Click **Save and Deploy**. First build takes ~2 min.

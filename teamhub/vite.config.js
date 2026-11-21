@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -14,8 +15,21 @@ const emitVersion = () => ({
   },
 })
 
+// The /api/usda and /api/img routes live in worker/index.js. A Cloudflare
+// Worker deploy (wrangler.toml) runs that file directly. For a Cloudflare
+// PAGES deploy, the same code is copied to dist/_worker.js ("advanced mode"
+// — Pages runs it with the same env.ASSETS binding). `.assetsignore` keeps
+// the Worker deploy from serving _worker.js as a public static file.
+const emitPagesWorker = () => ({
+  name: 'emit-pages-worker',
+  generateBundle() {
+    this.emitFile({ type: 'asset', fileName: '_worker.js', source: readFileSync(new URL('./worker/index.js', import.meta.url), 'utf8') })
+    this.emitFile({ type: 'asset', fileName: '.assetsignore', source: '_worker.js\n' })
+  },
+})
+
 // https://vite.dev/config/
 export default defineConfig({
   define: { __BUILD_ID__: JSON.stringify(buildId) },
-  plugins: [react(), emitVersion()],
+  plugins: [react(), emitVersion(), emitPagesWorker()],
 })

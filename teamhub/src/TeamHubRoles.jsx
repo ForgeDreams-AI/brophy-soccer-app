@@ -22,7 +22,7 @@ import {
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc,
   orderBy, where, query, getDocs, limit,
-  serverTimestamp, writeBatch, arrayUnion, deleteField,
+  serverTimestamp, writeBatch, deleteField,
 } from "firebase/firestore";
 import { auth, db, storage } from "./firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -48,7 +48,7 @@ const audienceKeysFor = (visibleTo, groupsList = []) => {
   });
   return keys.size ? Array.from(keys) : ["uid:__none__"];
 };
-import { searchFoods, hasUsdaKey } from "./lib/usda";
+import { searchFoods, usdaAvailable } from "./lib/usda";
 import { loadExercises, exerciseImageUrl } from "./lib/exercises";
 import { searchExercises } from "./lib/exerciseSearch";
 import { lookupBarcode, searchProducts } from "./lib/openfoodfacts";
@@ -813,16 +813,152 @@ const DocumentUploadCard = ({ onUpload }) => {
 // One document row — icon + title + signed status, with the coach's
 // who-signed view + delete, and the player's sign flow. Carries its own
 // expanded state so it works flat (Home) and grouped (Coach Tools folders).
+// ─── E-signatures ──────────────────────────────────────────────────────────
+// Each signature is its own immutable record: documents/{id}/signatures/{uid}
+// (see firestore.rules). It captures the typed legal name, a drawn
+// signature, the signer's verified account email, SERVER time, the exact
+// consent wording shown, and the SHA-256 of the file that was signed, so a
+// signature always proves who agreed to which version, and when. Coaches
+// can read (and export) the log but never edit it.
+const SIGN_CONSENT_VERSION = "v1-2026-11-21";
+const signConsentText = (title) =>
+  `I have read "${title}". By typing my name and signing below I agree that this is my electronic signature, `
+  + "that it is legally binding to the same extent as a handwritten signature, and that I am signing with my own account.";
+
+// SHA-256 of a File/Blob as hex (Web Crypto). "" when unavailable.
+const sha256Hex = async (blob) => {
+  try {
+    const buf = await blob.arrayBuffer();
+    const hash = await crypto.subtle.digest("SHA-256", buf);
+    return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch { return ""; }
+};
+
+// Finger / mouse signature pad. Calls onChange(dataUrl | "") as you draw.
+const SignaturePad = ({ onChange }) => {
+  const canvasRef = useRef(null);
+  const drawing = useRef(false);
+  const hasInk = useRef(false);
+  useEffect(() => {
+    const c = canvasRef.current;
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    const w = c.clientWidth, h = c.clientHeight;
+    c.width = w * ratio; c.height = h * ratio;
+    const ctx = c.getContext("2d");
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#0F172A";
+  }, []);
+  const pos = (e) => { const r = canvasRef.current.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  const down = (e) => {
+    e.preventDefault();
+    canvasRef.current.setPointerCapture?.(e.pointerId);
+    drawing.current = true;
+    const ctx = canvasRef.current.getContext("2d"); const p = pos(e);
+    ctx.beginPath(); ctx.moveTo(p.x, p.y);
+  };
+  const move = (e) => {
+    if (!drawing.current) return;
+    const ctx = canvasRef.current.getContext("2d"); const p = pos(e);
+    ctx.lineTo(p.x, p.y); ctx.stroke(); hasInk.current = true;
+  };
+  const up = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    if (hasInk.current) onChange(canvasRef.current.toDataURL("image/png"));
+  };
+  const clear = () => {
+    const c = canvasRef.current; c.getContext("2d").clearRect(0, 0, c.width, c.height);
+    hasInk.current = false; onChange("");
+  };
+  return (
+    <div>
+      <canvas ref={canvasRef} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={up}
+        className="w-full h-32 rounded-xl border border-dashed border-slate-300 bg-slate-50 touch-none" aria-label="Draw your signature" />
+      <div className="flex items-center justify-between mt-1">
+        <span className="text-[10px] text-slate-400">Sign with your finger or mouse</span>
+        <button type="button" onClick={clear} className="text-[11px] font-semibold text-slate-500">Clear</button>
+      </div>
+    </div>
+  );
+};
+
+export const SignDocumentModal = ({ user, d, onSign, onClose }) => {
+  const [typedName, setTypedName] = useState(user.name || "");
+  const [drawing, setDrawing] = useState("");
+  const [agree, setAgree] = useState(false);
+  const [opened, setOpened] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const consent = signConsentText(d.title);
+  const ready = typedName.trim().length >= 2 && drawing && agree && !busy;
+  const submit = async () => {
+    if (!ready) return;
+    setBusy(true);
+    try {
+      await onSign(d, { typedName: typedName.trim(), drawing, consentText: consent });
+      toast("Signed. A copy of your signature record is saved.", "success");
+      onClose();
+    } catch (e) {
+      toast("Couldn't sign — " + (e?.code === "permission-denied" ? "the document may have changed; reload and try again." : (e.message || "try again.")));
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-bold text-base text-slate-900 leading-tight">Sign: {d.title}</h3>
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0"><X className="w-4 h-4" /></button>
+        </div>
+        <a href={d.url} target="_blank" rel="noopener noreferrer" onClick={() => setOpened(true)} className="flex items-center gap-2 text-sm font-semibold rounded-xl border border-slate-200 px-3 py-2.5" style={{ color: COLORS.primary }}>
+          <FileText className="w-4 h-4" /> {opened ? "Opened — read it before signing" : "Open the document to read it"} <ExternalLink className="w-3.5 h-3.5 ml-auto" />
+        </a>
+        <label className="block">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Full legal name</span>
+          <input value={typedName} onChange={(e) => setTypedName(e.target.value)} placeholder="First and last name" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+        </label>
+        <div>
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Signature</span>
+          <div className="mt-1"><SignaturePad onChange={setDrawing} /></div>
+        </div>
+        <label className="flex items-start gap-2 text-[12px] text-slate-600 leading-snug">
+          <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5" />
+          <span>{consent}</span>
+        </label>
+        <p className="text-[10px] text-slate-400">Signing as {user.email}. The date and time come from the server, and the record is tied to this exact file — it can't be edited afterwards.</p>
+        <button onClick={submit} disabled={!ready} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{busy ? "Signing…" : "Agree & Sign"}</button>
+      </div>
+    </div>
+  );
+};
+
+// CSV of a document's signature log (coach export).
+const downloadSignatureLog = (d, sigs) => {
+  const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const when = (ts) => (ts?.toDate ? ts.toDate().toISOString() : (ts || ""));
+  const rows = [["Document", "Typed name", "Account email", "Signed at (UTC)", "File SHA-256", "Consent version", "Drawn signature", "Device"]];
+  sigs.forEach((s) => rows.push([d.title, s.typedName || s.name, s.email || "", when(s.signedAt || s.ts), s.sha256 || "", s.consentVersion || "legacy (typed name only)", s.drawing ? "yes" : "no", s.userAgent || ""]));
+  const blob = new Blob([rows.map((r) => r.map(esc).join(",")).join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${(d.title || "document").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "document"}-signatures.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+};
+
 const DocumentRow = ({ user, d, isAdmin, rosterCount = 0, onDelete, onSign }) => {
   const [whoOpen, setWhoOpen] = useState(false);
   const [signOpen, setSignOpen] = useState(false);
-  const [signName, setSignName] = useState(user.name || "");
-  const sigs = d.signatures || [];
-  const mine = sigs.some((s) => s.uid === user.uid);
-  const submitSign = async () => {
-    if (!signName.trim()) return;
-    try { await onSign(d.id, signName.trim()); setSignOpen(false); }
-    catch (e) { toast("Couldn't sign — " + (e.message || "")); }
+  // Coach: the signature log (private records). Player: only their own.
+  const sigDocs = useCollection(isAdmin ? `documents/${d.id}/signatures` : null);
+  const mySig = useDoc(!isAdmin ? `documents/${d.id}/signatures/${user.uid}` : null);
+  // Legacy typed-name signatures (before the redesign) still count, unless
+  // that person has since signed with the new record.
+  const legacy = (d.signatures || []).filter((s) => !sigDocs.some((x) => x.id === s.uid));
+  const sigs = [...sigDocs, ...legacy];
+  const mine = Boolean(mySig) || (d.signatures || []).some((s) => s.uid === user.uid);
+  const fmtWhen = (s) => {
+    const t = s.signedAt?.toDate ? s.signedAt.toDate() : (s.ts ? new Date(s.ts) : null);
+    return t ? t.toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
   };
   return (
     <li className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -830,36 +966,38 @@ const DocumentRow = ({ user, d, isAdmin, rosterCount = 0, onDelete, onSign }) =>
         <div className="w-9 h-9 rounded-xl flex flex-col items-center justify-center flex-shrink-0 gap-0.5" style={{ backgroundColor: COLORS.accentSoft }}><FileText className="w-3.5 h-3.5" style={{ color: COLORS.accent }} /><span className="text-[7px] font-black leading-none tracking-tight" style={{ color: COLORS.accent }}>{docTypeLabel(d)}</span></div>
         <a href={d.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-slate-900 truncate">{d.title}</div>
-          <div className="text-[10px] text-slate-500">{isAdmin ? `${sigs.length}${rosterCount ? `/${rosterCount}` : ""} signed` : (mine ? "You've signed" : "Tap to read")}</div>
+          <div className="text-[10px] text-slate-500">{isAdmin ? `${sigs.length}${rosterCount ? `/${rosterCount}` : ""} signed` : (mine ? `You signed${mySig ? ` · ${fmtWhen(mySig)}` : ""}` : "Tap to read")}</div>
         </a>
         {isAdmin ? (
           <div className="flex items-center gap-2 flex-shrink-0">
             <button onClick={() => setWhoOpen(!whoOpen)} className="text-[11px] font-semibold" style={{ color: COLORS.primary }}>{whoOpen ? "Hide" : "Who"}</button>
-            <button onClick={async () => { if (confirm(`Delete "${d.title}"?`)) { try { await onDelete(d.id); } catch (e) { toast("Couldn't delete — " + (e.message || "")); } } }} className="text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+            <button onClick={async () => { if (confirm(`Delete "${d.title}"? Players will no longer see it. Its signature records are kept on file (Firebase console).`)) { try { await onDelete(d.id); } catch (e) { toast("Couldn't delete — " + (e.message || "")); } } }} className="text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
           </div>
         ) : (
           mine
             ? <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 flex-shrink-0" style={{ color: COLORS.success }}><Check className="w-3.5 h-3.5" /> Signed</span>
-            : <button onClick={() => { setSignOpen(true); setSignName(user.name || ""); }} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider text-white flex-shrink-0" style={{ backgroundColor: COLORS.primary }}>Sign</button>
+            : <button onClick={() => setSignOpen(true)} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider text-white flex-shrink-0" style={{ backgroundColor: COLORS.primary }}>Sign</button>
         )}
       </div>
       {isAdmin && whoOpen && (
-        <div className="px-3 pb-3 border-t border-slate-100 pt-2">
-          {sigs.length === 0 ? <p className="text-[11px] text-slate-400 italic">No signatures yet.</p> : (
-            <ul className="space-y-1">{sigs.map((s, i) => (<li key={i} className="text-[11px] text-slate-600 flex items-center gap-1.5"><Check className="w-3 h-3" style={{ color: COLORS.success }} /> {s.name} <span className="text-slate-400">· {new Date(s.ts).toLocaleDateString()}</span></li>))}</ul>
-          )}
-        </div>
-      )}
-      {!isAdmin && signOpen && !mine && (
         <div className="px-3 pb-3 border-t border-slate-100 pt-2 space-y-2">
-          <p className="text-[11px] text-slate-500">Type your full name to sign. This records your agreement with a timestamp.</p>
-          <input value={signName} onChange={(e) => setSignName(e.target.value)} placeholder="Your full name" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <div className="flex gap-2">
-            <button onClick={() => setSignOpen(false)} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button>
-            <button onClick={submitSign} disabled={!signName.trim()} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>Agree &amp; Sign</button>
-          </div>
+          {sigs.length === 0 ? <p className="text-[11px] text-slate-400 italic">No signatures yet.</p> : (
+            <ul className="space-y-1.5">{sigs.map((s, i) => (
+              <li key={s.id || s.uid || i} className="text-[11px] text-slate-600 flex items-center gap-2">
+                <Check className="w-3 h-3 flex-shrink-0" style={{ color: COLORS.success }} />
+                <span className="min-w-0 flex-1">
+                  <span className="font-semibold text-slate-800">{s.typedName || s.name}</span>
+                  {s.email ? <span className="text-slate-400"> · {s.email}</span> : null}
+                  <span className="block text-[10px] text-slate-400">{fmtWhen(s)}{s.consentVersion ? "" : " · legacy (typed name only)"}</span>
+                </span>
+                {s.drawing && <img src={s.drawing} alt={`Signature of ${s.typedName}`} className="h-8 w-20 object-contain bg-slate-50 rounded border border-slate-100" />}
+              </li>
+            ))}</ul>
+          )}
+          {sigs.length > 0 && <button onClick={() => downloadSignatureLog(d, sigs)} className="text-[11px] font-bold" style={{ color: COLORS.primary }}>Download signature log (CSV)</button>}
         </div>
       )}
+      {!isAdmin && signOpen && !mine && <SignDocumentModal user={user} d={d} onSign={onSign} onClose={() => setSignOpen(false)} />}
     </li>
   );
 };
@@ -5295,7 +5433,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
       // Query Open Food Facts (no key) + USDA (if a key is set) at once, then
       // merge and de-dupe by name so one box searches everything.
       const tasks = [searchProducts(q, ctl.signal)];
-      if (hasUsdaKey()) tasks.unshift(searchFoods(q, ctl.signal));
+      if (usdaAvailable()) tasks.unshift(searchFoods(q, ctl.signal));
       const settled = await Promise.allSettled(tasks);
       if (ctl.signal.aborted) return;
       const merged = [];
@@ -5722,7 +5860,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
               <button onClick={() => saveFood(manual)} disabled={!manual.name.trim()} title="Save to favorites" className="px-4 py-2 rounded-full text-xs font-bold border-2 bg-white flex items-center gap-1.5 disabled:opacity-40" style={{ borderColor: COLORS.primary, color: COLORS.primary }}><Star className="w-3.5 h-3.5" fill={isSaved(manual.name) ? COLORS.primary : "none"} /> Save</button>
               <button onClick={addManual} className="flex-1 py-2 rounded-full text-xs font-bold text-white" style={{ backgroundColor: COLORS.primary }}>Add to Log</button>
             </div>
-            {!hasUsdaKey() && <p className="text-[10px] text-slate-400 px-1">Searching Open Food Facts. Add a USDA API key for whole-food results too (see README → Food search).</p>}
+
           </div>
         )}
 
@@ -9403,18 +9541,33 @@ export default function TeamHubRolesApp() {
     if (!file) throw new Error("No file selected.");
     const path = `documents/${activeTeamId}/${user.uid}/${Date.now()}-${file.name}`;
     const r = storageRef(storage, path);
+    // Fingerprint of the exact file: every signature records it, and the
+    // rules lock url/path/sha256 so a signed document can't be swapped.
+    const sha256 = await sha256Hex(file);
     const snap = await uploadBytes(r, file, { contentType: file.type || "application/octet-stream" });
     const url = await getDownloadURL(snap.ref);
     return addDoc(collection(db, "documents"), {
       teamId: activeTeamId,
       title: (title || "").trim() || file.name,
-      url, path, name: file.name || "", fileType: file.type || "",
-      createdByName: user.name, signatures: [], createdAt: serverTimestamp(),
+      url, path, sha256, name: file.name || "", fileType: file.type || "",
+      createdByName: user.name, createdAt: serverTimestamp(),
     });
   };
   const deleteDocument = (id) => deleteDoc(doc(db, "documents", id));
-  const signDocument = (id, name) =>
-    updateDoc(doc(db, "documents", id), { signatures: arrayUnion({ uid: user.uid, name, ts: new Date().toISOString() }) });
+  // E-signature: one immutable record per signer (rules check every field).
+  const signDocument = (d, { typedName, drawing, consentText }) =>
+    setDoc(doc(db, "documents", d.id, "signatures", user.uid), {
+      uid: user.uid,
+      typedName,
+      email: (auth.currentUser?.email || user.email || "").toLowerCase(),
+      signedAt: serverTimestamp(),
+      sha256: d.sha256 || "",
+      consentVersion: SIGN_CONSENT_VERSION,
+      consentText,
+      drawing,
+      documentTitle: (d.title || "").slice(0, 300),
+      userAgent: (navigator.userAgent || "").slice(0, 500),
+    });
 
 
 
