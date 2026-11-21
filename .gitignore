@@ -1,1 +1,3 @@
 .claude/worktrees/
+# Intermediate audio renders (regenerate from the MP3s — see videos/walkthrough/README.md)
+videos/**/*.wav

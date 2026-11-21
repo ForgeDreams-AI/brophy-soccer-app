@@ -116,13 +116,24 @@ cd ..
 The repo has **two** possible Cloudflare setups, and it isn't known which one serves `BrophySoccer.forgedreams.ai`. Find out first:
 
 1. Check the Cloudflare dashboard → Workers & Pages → find the project for `BrophySoccer.forgedreams.ai`.
-2. **If it is a Pages project connected to Git:** merge PR #1 into `main` on GitHub. Pages builds and deploys automatically, using build command `npm run build`, output `dist`, root `teamhub`.
-3. **If it is a Worker (`brophy-soccer-app`, using `wrangler.toml`):** merge PR #1, then from `teamhub/` run:
+2. **Food-search key (both hosting types).** The USDA key used to ship inside the public app, so treat the old one as leaked:
+   - Get a **new** free key at https://fdc.nal.usda.gov/api-key-signup.html.
+   - Store it **server-side only** (step 3 or 4 below).
+   - **Remove** any `VITE_USDA_API_KEY` build variable from Cloudflare.
+3. **If it is a Pages project connected to Git:**
+   - In Pages → Settings → Environment variables, delete `VITE_USDA_API_KEY` and add **`USDA_API_KEY`** as an *encrypted secret* (Production + Preview).
+   - Then merge PR #1 into `main` on GitHub. Pages builds and deploys automatically (build command `npm run build`, output `dist`, root `teamhub`).
+   - The build emits `dist/_worker.js`, so Pages also serves `/api/usda` and `/api/img`.
+4. **If it is a Worker (`brophy-soccer-app`, using `wrangler.toml`):** merge PR #1, then from `teamhub/` run:
    ```bash
+   npx -y wrangler@3 secret put USDA_API_KEY      # paste the NEW key when prompted
    npm run build && npx -y wrangler@3 deploy
    ```
-   This also enables the `/api/img` picture proxy, a backup for PDF pictures.
-4. Report which one it was.
+5. Check food search: open `https://brophysoccer.forgedreams.ai/api/usda?q=chicken` in a browser.
+   - **Expected:** JSON with `foods`.
+   - `{"error":"USDA search is not configured"}` means the secret is missing.
+   - `{"error":"forbidden"}` from curl is expected. The route only answers same-site browser requests.
+6. Report which hosting type it was.
 
 ## 10. Smoke test (production)
 
@@ -135,8 +146,49 @@ Use real accounts, or ask Batman/Anthony to do these. Record pass/fail for each:
 5. **Poll:** a player sees totals only; the coach's "See who voted" lists names.
 6. **Practice → Export / PDF:** drill pictures appear in the PDF.
 7. **Diagram board:** Neutral player, Blank field, Sections (cols × rows), Line / Dashed line all work and save.
-8. **Wellness check-in after 5 PM Arizona time:** it shows on the coach's list for *today*.
-9. **The Drill Library website** (`brophy-drill-library.web.app`) still loads drills for a **signed-in** user. Drills are no longer public. If the site shows drills before sign-in, it needs a sign-in gate; report it.
+8. **E-signature:**
+   - The coach uploads a test document.
+   - A player opens it, types their name, draws a signature, ticks the agreement and taps Sign.
+   - The coach's "Who" list shows the name, email, time and signature image, and "Download signature log (CSV)" works.
+   - The player can't sign twice.
+9. **Food search:** typing "chicken" in the food log shows USDA results, not only packaged products.
+10. **Wellness check-in after 5 PM Arizona time:** it shows on the coach's list for *today*.
+11. **The Drill Library website** (`brophy-drill-library.web.app`) still loads drills for a **signed-in** user. Drills are no longer public. If the site shows drills before sign-in, it needs a sign-in gate; report it.
+
+## 11. Shrink the git repository (DESTRUCTIVE — get Batman's explicit "go" first)
+
+**What this does and why:**
+- About 89 MB of intermediate WAV audio was committed in `videos/walkthrough/`. PR #1 removes it from the files and gitignores it, but it is still in the git **history**, so every clone downloads it (`.git` is about 57 MB).
+- Removing it from history rewrites every commit hash and needs a **force-push to all branches**. Every collaborator must re-clone afterwards.
+- The audio isn't lost. Each WAV has an MP3 next to it, and `videos/walkthrough/README.md` has the commands to rebuild them.
+
+**Do it only after:**
+- PR #1 is merged.
+- No other PRs are open, or their authors have agreed to re-create them.
+- Batman has said "go".
+
+1. **Full backup first:**
+   ```bash
+   git clone --mirror https://github.com/ForgeDreams-AI/brophy-soccer-app.git brophy-backup-$(date +%Y%m%d).git
+   ```
+   Keep this folder until everyone confirms things are fine. It is a complete copy, including the WAVs.
+2. **Rewrite:**
+   ```bash
+   pip install git-filter-repo
+   git clone https://github.com/ForgeDreams-AI/brophy-soccer-app.git brophy-clean && cd brophy-clean
+   git fetch origin '+refs/heads/*:refs/remotes/origin/*'
+   for b in $(git branch -r | grep -v HEAD | sed 's#origin/##'); do git branch -f "$b" "origin/$b"; done
+   git filter-repo --force --path-glob 'videos/walkthrough/*.wav' --path-glob 'videos/walkthrough/sections/*.wav' --invert-paths
+   git count-objects -vH   # size-pack should now be ~10 MB
+   ```
+3. **Push the rewritten history.** If GitHub branch protection blocks force-pushes to `main`, a repo admin must allow them temporarily.
+   ```bash
+   git remote add origin https://github.com/ForgeDreams-AI/brophy-soccer-app.git
+   git push --force --all origin && git push --force --tags origin
+   ```
+4. **Tell everyone (Anthony, any agents) to delete their local copy and re-clone.** Pulling into an old clone would bring the WAVs back.
+5. GitHub keeps unreferenced objects for a while. For immediate removal, ask GitHub Support to run garbage collection on the repo.
+6. Report the before/after `size-pack`.
 
 ## Rollback
 

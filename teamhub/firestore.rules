@@ -260,25 +260,48 @@ service cloud.firestore {
     }
     match /customExercises/{id} { allow read: if hasTeamRole(); allow write: if isAdmin(); }
 
-    // Team documents: coach of the team uploads/edits/deletes, but never
-    // touches `signatures`. Any member of the team may APPEND exactly one
-    // signature — their own (uid == caller) — to the end of the list;
-    // existing signatures can't be removed, reordered or rewritten.
-    function signatureAppendOnly() {
-      let old = resource.data.get('signatures', []);
-      let nu = request.resource.data.get('signatures', []);
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signatures'])
-        && nu is list
-        && nu.size() == old.size() + 1
-        && nu.hasAll(old)
-        && nu[nu.size() - 1].uid == request.auth.uid;
-    }
+    // Team documents + e-signatures (redesign 2026-11-21).
+    // The coach of the team uploads and deletes documents. A document's FILE
+    // is fixed once uploaded: url / path / sha256 can't change (upload a new
+    // document instead), so every signature points at exactly one version.
+    // The legacy `signatures` array is read-only now.
     match /documents/{id} {
       allow read:   if isMemberOf(rTeam());
       allow create: if coachCreate();
       allow delete: if coachDelete();
-      allow update: if (coachUpdate() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['signatures']))
-        || (isMemberOf(rTeam()) && signatureAppendOnly());
+      allow update: if coachUpdate()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['signatures', 'url', 'path', 'sha256']);
+
+      // One signature per member: documents/{id}/signatures/{uid}.
+      // Create-only and immutable — nobody (coach included) can edit it;
+      // only the org admin can remove one (e.g. a legal correction).
+      // Captures: typed legal name, optional drawn signature (PNG data URL),
+      // the verified account email, SERVER time (signedAt == request.time),
+      // the consent wording version, and the SHA-256 of the exact file.
+      match /signatures/{signerUid} {
+        function parentDoc() { return get(/databases/$(database)/documents/documents/$(id)).data; }
+        function validSignature() {
+          let d = request.resource.data;
+          let p = parentDoc();
+          return isOwner(signerUid)
+            && isMemberOf(p.get('teamId', ''))
+            && d.keys().hasOnly(['uid', 'typedName', 'email', 'signedAt', 'sha256', 'consentVersion', 'consentText', 'drawing', 'documentTitle', 'userAgent'])
+            && d.keys().hasAll(['uid', 'typedName', 'email', 'signedAt', 'sha256', 'consentVersion', 'consentText'])
+            && d.uid == signerUid
+            && d.typedName is string && d.typedName.size() >= 2 && d.typedName.size() <= 100
+            && request.auth.token.email is string && d.email == request.auth.token.email.lower()
+            && d.signedAt == request.time
+            && d.sha256 == p.get('sha256', '')
+            && d.consentVersion is string && d.consentText is string && d.consentText.size() <= 2000
+            && (!d.keys().hasAny(['drawing']) || (d.drawing is string && d.drawing.size() < 200000 && d.drawing.matches('^data:image/png;base64,.*')))
+            && (!d.keys().hasAny(['documentTitle']) || (d.documentTitle is string && d.documentTitle.size() <= 300))
+            && (!d.keys().hasAny(['userAgent']) || (d.userAgent is string && d.userAgent.size() <= 500));
+        }
+        allow read: if isOwner(signerUid) || isCoachOf(parentDoc().get('teamId', ''));
+        allow create: if validSignature();
+        allow update: if false;
+        allow delete: if isOrgAdmin();
+      }
     }
 
     // Group chats (channels): coach of the team creates/deletes + sets

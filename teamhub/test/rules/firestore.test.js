@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, test } from 'vitest'
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing'
 import {
-  Timestamp, deleteDoc, doc, getDoc, increment, setDoc, updateDoc, writeBatch,
+  Timestamp, serverTimestamp, deleteDoc, doc, getDoc, increment, setDoc, updateDoc, writeBatch,
 } from 'firebase/firestore'
 import { as, makeEnv, seed, seedUsers } from './helpers.js'
 
@@ -206,29 +206,49 @@ describe('wellness / water / mealLogActivity (F10)', () => {
   })
 })
 
-describe('documents signatures (F38)', () => {
-  const sig = (uid) => ({ uid, name: uid, signedAt: '2026-11-20' })
+describe('e-signatures (F38 redesign)', () => {
+  const SHA = 'a'.repeat(64)
+  const good = (uid, extra = {}) => ({
+    uid, typedName: 'Player One', email: `${uid}@example.com`, signedAt: serverTimestamp(),
+    sha256: SHA, consentVersion: 'v1', consentText: 'I agree.', drawing: 'data:image/png;base64,AAAA', ...extra,
+  })
   beforeEach(async () => {
-    await seed(env, 'documents/d1', { teamId: 'varsity', title: 'Waiver', signatures: [sig('p2')] })
+    await seed(env, 'documents/d1', { teamId: 'varsity', title: 'Waiver', url: 'https://x/w.pdf', path: 'documents/varsity/coachV/w.pdf', sha256: SHA, signatures: [{ uid: 'p2', name: 'legacy' }] })
   })
-  test('member can append only their own signature', async () => {
+  test('a member signs once, as themselves, with server time and the file hash', async () => {
     const db = as(env, 'p1').firestore()
-    await assertFails(updateDoc(doc(db, 'documents/d1'), { signatures: [sig('p2'), sig('p3')] }))
-    await assertFails(updateDoc(doc(db, 'documents/d1'), { signatures: [sig('p1')] }))
-    await assertFails(updateDoc(doc(db, 'documents/d1'), { signatures: [sig('p2'), sig('p1'), sig('p1')] }))
-    await assertSucceeds(updateDoc(doc(db, 'documents/d1'), { signatures: [sig('p2'), sig('p1')] }))
+    await assertSucceeds(setDoc(doc(db, 'documents/d1/signatures/p1'), good('p1')))
+    await assertFails(setDoc(doc(db, 'documents/d1/signatures/p1'), good('p1', { typedName: 'Changed Name' }))) // immutable
   })
-  test('first signature on a doc with no signatures field', async () => {
-    await seed(env, 'documents/d2', { teamId: 'varsity', title: 'Medical' })
-    await assertSucceeds(updateDoc(doc(as(env, 'p1').firestore(), 'documents/d2'), { signatures: [sig('p1')] }))
+  test('rejects forged identity, client time, wrong hash, bad drawing, extra fields', async () => {
+    const db = as(env, 'p1').firestore()
+    await assertFails(setDoc(doc(db, 'documents/d1/signatures/p2'), good('p2', { email: 'p1@example.com' })))
+    await assertFails(setDoc(doc(db, 'documents/d1/signatures/p1'), good('p1', { email: 'someone@example.com' })))
+    await assertFails(setDoc(doc(db, 'documents/d1/signatures/p1'), good('p1', { signedAt: Timestamp.fromDate(new Date('2020-01-01')) })))
+    await assertFails(setDoc(doc(db, 'documents/d1/signatures/p1'), good('p1', { sha256: 'b'.repeat(64) })))
+    await assertFails(setDoc(doc(db, 'documents/d1/signatures/p1'), good('p1', { drawing: 'javascript:alert(1)' })))
+    await assertFails(setDoc(doc(db, 'documents/d1/signatures/p1'), good('p1', { approvedByCoach: true })))
   })
-  test('coach cannot edit signatures but can edit other fields', async () => {
-    const db = as(env, 'coachV').firestore()
-    await assertFails(updateDoc(doc(db, 'documents/d1'), { signatures: [] }))
-    await assertSucceeds(updateDoc(doc(db, 'documents/d1'), { title: 'Waiver v2' }))
+  test('other team cannot sign; coach cannot edit or delete a signature; org admin can delete', async () => {
+    await assertFails(setDoc(doc(as(env, 'coachJ').firestore(), 'documents/d1/signatures/coachJ'), good('coachJ')))
+    await seed(env, 'documents/d1/signatures/p2', { uid: 'p2', typedName: 'Player Two' })
+    await assertFails(updateDoc(doc(as(env, 'coachV').firestore(), 'documents/d1/signatures/p2'), { typedName: 'x' }))
+    await assertFails(deleteDoc(doc(as(env, 'coachV').firestore(), 'documents/d1/signatures/p2')))
+    await assertSucceeds(deleteDoc(doc(as(env, 'org').firestore(), 'documents/d1/signatures/p2')))
   })
-  test('other team cannot sign', async () => {
-    await assertFails(updateDoc(doc(as(env, 'coachJ').firestore(), 'documents/d1'), { signatures: [sig('p2'), sig('coachJ')] }))
+  test('signatures are private to the signer and the team coach', async () => {
+    await seed(env, 'documents/d1/signatures/p2', { uid: 'p2', typedName: 'Player Two' })
+    await assertFails(getDoc(doc(as(env, 'p1').firestore(), 'documents/d1/signatures/p2')))
+    await assertSucceeds(getDoc(doc(as(env, 'p2').firestore(), 'documents/d1/signatures/p2')))
+    await assertSucceeds(getDoc(doc(as(env, 'coachV').firestore(), 'documents/d1/signatures/p2')))
+  })
+  test('the signed file is fixed; legacy signatures array is read-only', async () => {
+    const coach = as(env, 'coachV').firestore()
+    await assertSucceeds(updateDoc(doc(coach, 'documents/d1'), { title: 'Waiver v2' }))
+    await assertFails(updateDoc(doc(coach, 'documents/d1'), { url: 'https://x/other.pdf' }))
+    await assertFails(updateDoc(doc(coach, 'documents/d1'), { sha256: 'c'.repeat(64) }))
+    await assertFails(updateDoc(doc(coach, 'documents/d1'), { signatures: [] }))
+    await assertFails(updateDoc(doc(as(env, 'p1').firestore(), 'documents/d1'), { signatures: [{ uid: 'p2', name: 'legacy' }, { uid: 'p1', name: 'p1' }] }))
   })
 })
 
