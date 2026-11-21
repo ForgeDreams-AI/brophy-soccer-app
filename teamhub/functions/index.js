@@ -506,36 +506,80 @@ async function processScheduledItems(now) {
 // sendAt = now). This sweeps the queue for anything due. A one-off is marked
 // sent; a recurring one advances to its next occurrence (same timezone-aware
 // recurrence as scheduled items) instead of finishing.
+// Claim one queued push (status "scheduled" → "sending") in a transaction so
+// the instant trigger and the 1-minute sweep can never both send it.
+// Returns the claimed data, or null when it isn't due / was already taken.
+async function claimPush(ref, nowMs) {
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return null;
+    const d = snap.data();
+    const sendMs = d.sendAt?.toMillis ? d.sendAt.toMillis() : 0;
+    if (d.status !== "scheduled" || !sendMs || sendMs > nowMs) return null;
+    tx.update(ref, { status: "sending", claimedAt: Timestamp.now() });
+    return d;
+  });
+}
+
+// Send one claimed push and settle its status: a one-off becomes "sent", a
+// recurring one goes back to "scheduled" at its next occurrence. On failure
+// it returns to "scheduled" (retried by the sweep) until the retry cap.
+async function deliverPush(doc, d) {
+  try {
+    const bundle = await tokensForAudienceKeys(d.audienceKeys, { teamId: d.teamId });
+    await sendToTokens(bundle, {
+      title: d.title || "Team notification",
+      body: trunc(d.body || "Tap to open the app."),
+      link: "/?tab=home",
+      tag: `push-${doc.id}`,
+    });
+    const r = d.recurrence || {};
+    const days = Array.isArray(r.days) ? r.days : [];
+    if (r.type && r.type !== "none" && days.length) {
+      const tz = d.tz || TEAM_TZ;
+      const [hh, mm] = String(r.time || "08:00").split(":").map((n) => parseInt(n, 10) || 0);
+      const next = nextRecurring(Date.now(), days, hh, mm, tz);
+      if (next) await doc.ref.update({ status: "scheduled", sendAt: Timestamp.fromMillis(next), lastSentAt: Timestamp.now() });
+      else await doc.ref.update({ status: "sent", sentAt: Timestamp.now() });
+    } else {
+      await doc.ref.update({ status: "sent", sentAt: Timestamp.now() });
+    }
+  } catch (e) {
+    console.error("push notification failed:", doc.id, e);
+    await doc.ref.update({ status: "scheduled" }).catch(() => { /* recorded below */ });
+    await recordFailure(doc, e, { status: "failed" });
+  }
+}
+
+// Instant "Send now": the coach's composer writes a pushNotifications doc
+// with sendAt = now. Send it the moment it's created instead of waiting for
+// the next 1-minute sweep. Future-dated (scheduled) items are left for
+// runScheduled.
+exports.onPushNotificationCreated = onDocumentCreated("pushNotifications/{id}", async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+  // A few seconds of slack for clock skew between the client and the server.
+  const d = await claimPush(snap.ref, Date.now() + 5000);
+  if (!d) return;
+  await deliverPush(snap, d);
+});
+
+// Custom push notifications: sweep the queue for anything due (scheduled
+// items and recurring occurrences; "Send now" is normally sent instantly by
+// onPushNotificationCreated, this is the safety net). Items stuck in
+// "sending" for 5+ minutes (a crashed run) go back to the queue.
 async function processPushNotifications(now) {
+  const stuck = await db.collection("pushNotifications").where("status", "==", "sending").get();
+  const staleMs = Date.now() - 5 * 60 * 1000;
+  await Promise.all(stuck.docs
+    .filter((doc) => (doc.data().claimedAt?.toMillis?.() || 0) < staleMs)
+    .map((doc) => doc.ref.update({ status: "scheduled" })));
   // Only queued items (composite index pushNotifications(status, sendAt)).
   const snap = await db.collection("pushNotifications").where("status", "==", "scheduled").where("sendAt", "<=", now).get();
-  const due = snap.docs;
-  if (!due.length) { console.log("No push notifications due."); return; }
-  for (const doc of due) {
-    const d = doc.data();
-    try {
-      const bundle = await tokensForAudienceKeys(d.audienceKeys, { teamId: d.teamId });
-      await sendToTokens(bundle, {
-        title: d.title || "Team notification",
-        body: trunc(d.body || "Tap to open the app."),
-        link: "/?tab=home",
-        tag: `push-${doc.id}`,
-      });
-      const r = d.recurrence || {};
-      const days = Array.isArray(r.days) ? r.days : [];
-      if (r.type && r.type !== "none" && days.length) {
-        const tz = d.tz || TEAM_TZ;
-        const [hh, mm] = String(r.time || "08:00").split(":").map((n) => parseInt(n, 10) || 0);
-        const next = nextRecurring(Date.now(), days, hh, mm, tz);
-        if (next) await doc.ref.update({ sendAt: Timestamp.fromMillis(next), lastSentAt: Timestamp.now() });
-        else await doc.ref.update({ status: "sent", sentAt: Timestamp.now() });
-      } else {
-        await doc.ref.update({ status: "sent", sentAt: Timestamp.now() });
-      }
-    } catch (e) {
-      console.error("push notification failed:", doc.id, e);
-      await recordFailure(doc, e, { status: "failed" });
-    }
+  if (!snap.size) { console.log("No push notifications due."); return; }
+  for (const doc of snap.docs) {
+    const d = await claimPush(doc.ref, now.toMillis());
+    if (d) await deliverPush(doc, d);
   }
 }
 

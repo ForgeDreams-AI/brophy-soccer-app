@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
 import {
   Home, Calendar as CalendarIcon, Video, Apple, MessageCircle,
   Pin, Clock, MapPin, Plus, X, Trash2, Send, Paperclip,
@@ -590,6 +590,42 @@ export const NoAccessScreen = ({ user }) => (
 );
 
 /* ── shared bits ── */
+// Text box that grows with what you type, up to `maxRows` lines (default 5),
+// then scrolls inside itself so you can review everything before sending.
+// `onSubmit` (chat): Enter sends on a keyboard device, Shift+Enter adds a
+// line; on phones (coarse pointer) Enter adds a line and the Send button
+// sends. Never sends mid-IME composition.
+const isCoarsePointer = () => {
+  try { return window.matchMedia("(pointer: coarse)").matches; } catch { return false; }
+};
+export const AutoGrowTextarea = ({ value, onChange, onSubmit, minRows = 1, maxRows = 5, className = "", ...rest }) => {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const cs = window.getComputedStyle(el);
+    const line = parseFloat(cs.lineHeight) || 20;
+    const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const border = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+    el.style.height = "auto";
+    const max = line * maxRows + pad + border;
+    const min = line * minRows + pad + border;
+    const next = Math.max(min, Math.min(el.scrollHeight + border, max));
+    el.style.height = `${next}px`;
+    el.style.overflowY = el.scrollHeight + border > max ? "auto" : "hidden";
+  }, [value, minRows, maxRows]);
+  const onKeyDown = (e) => {
+    if (onSubmit && e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !isCoarsePointer()) {
+      e.preventDefault();
+      onSubmit();
+    }
+    rest.onKeyDown?.(e);
+  };
+  return (
+    <textarea ref={ref} rows={minRows} value={value} onChange={onChange} {...rest} onKeyDown={onKeyDown}
+      className={`resize-none leading-5 ${className}`} />
+  );
+};
 // Circular profile photo, falling back to initials on a colored tile. Used
 // everywhere a person is shown (header, settings, line-up tokens).
 const Avatar = ({ photoURL, initials = "", size = 36, bg = COLORS.primary, color = "white", className = "" }) =>
@@ -2307,7 +2343,7 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
                 <option value="">No workout attached</option>
                 {teamWorkouts.map((w) => <option key={w.id} value={w.id}>{w.name || "Untitled workout"}</option>)}
               </select>
-              <textarea value={form.coachNotes} onChange={(e) => setForm({ ...form, coachNotes: e.target.value })} rows={2} placeholder="Notes for the coach running this — focus, intensity, reminders…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              <AutoGrowTextarea value={form.coachNotes} onChange={(e) => setForm({ ...form, coachNotes: e.target.value })} minRows={2} placeholder="Notes for the coach running this — focus, intensity, reminders…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
             </div>
           )}
 
@@ -3239,10 +3275,10 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
               <label className="text-[11px] font-semibold text-slate-600">Mannequins<input type="number" min={0} value={form.setupMannequins} onChange={(e) => setForm({ ...form, setupMannequins: e.target.value })} placeholder="0" className="w-full mt-0.5 border border-slate-200 rounded-lg px-2 py-2 text-xs text-center" /></label>
             </div>
           </div>
-          <textarea value={form.howTo} onChange={(e) => setForm({ ...form, howTo: e.target.value })} rows={3} placeholder="How to run it — instructions" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={form.objectives} onChange={(e) => setForm({ ...form, objectives: e.target.value })} rows={2} placeholder="Look for — one goal per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} rows={2} placeholder="Description" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={form.info} onChange={(e) => setForm({ ...form, info: e.target.value })} rows={2} placeholder="How to run it" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <AutoGrowTextarea value={form.howTo} onChange={(e) => setForm({ ...form, howTo: e.target.value })} minRows={3} placeholder="How to run it — instructions" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <AutoGrowTextarea value={form.objectives} onChange={(e) => setForm({ ...form, objectives: e.target.value })} minRows={2} placeholder="Look for — one goal per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <AutoGrowTextarea value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} minRows={2} placeholder="Description" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <AutoGrowTextarea value={form.info} onChange={(e) => setForm({ ...form, info: e.target.value })} minRows={2} placeholder="How to run it" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <input value={form.videoUrl} onChange={(e) => setForm({ ...form, videoUrl: e.target.value })} placeholder="Video URL (optional)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
 
           {/* Photo carousel uploads */}
@@ -5021,7 +5057,7 @@ const AnnouncementsPage = ({ announcements, addAnnouncement, updateAnnouncement,
       {adding && (
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2">
           <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Announcement title" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="Details…" rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <AutoGrowTextarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="Details…" minRows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <div className="flex gap-2"><button onClick={cancelEdit} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button><button onClick={add} className="flex-1 py-2 rounded-full text-xs font-bold text-white" style={{ backgroundColor: COLORS.primary }}>{editingAnnouncementId ? "Save Changes" : "Post to Team"}</button></div>
         </div>
       )}
@@ -6245,7 +6281,7 @@ const ScheduledModal = ({ scheduled = [], onAdd, onDelete, chatGroups = [], grou
           {kind === "reminder" ? (
             <div className="space-y-2">
               <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Reminder title (e.g. Bring both jerseys)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-              <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message (optional)" rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
+              <AutoGrowTextarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message (optional)" minRows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
               <div>
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Send to</p>
                 <div className="flex gap-2">
@@ -6439,7 +6475,7 @@ const PushNotificationModal = ({ pushNotifications = [], onAdd, onDelete, onSend
 
           <div className="space-y-2">
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (e.g. Practice time change)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-            <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message" rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
+            <AutoGrowTextarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message" minRows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
             <div>
               <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Send to</p>
               <div className="flex gap-2">
@@ -6817,6 +6853,11 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages
     const t = setTimeout(toBottom, 120);
     return () => { cancelAnimationFrame(r1); clearTimeout(t); };
   }, [channelMessages, dmMessages, shared, activeConv]);
+  // As the message box grows (up to 5 lines) the feed gets shorter; keep the
+  // newest messages in view if the user was already at the bottom.
+  useLayoutEffect(() => {
+    if (nearBottomRef.current && feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
+  }, [input]);
   // Track whether the user is near the bottom of the feed, so new messages
   // only pull the view down when they're already reading the newest ones.
   const onFeedScroll = (e) => {
@@ -7201,7 +7242,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages
               className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = ""; }}
             />
-            <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder={isAdmin ? "Reply…" : "Message your coach…"} className="flex-1 bg-slate-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+            <AutoGrowTextarea value={input} onChange={(e) => setInput(e.target.value)} onSubmit={send} placeholder={isAdmin ? "Reply…" : "Message your coach…"} aria-label="Message" className="flex-1 bg-slate-100 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
             <button onClick={send} disabled={!input.trim()} className="w-9 h-9 rounded-full flex items-center justify-center text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}><Send className="w-4 h-4" /></button>
           </div>
         </>
@@ -7398,7 +7439,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages
               {isAdmin && effectiveChannel === "team" && (
                 <button onClick={() => setAnnounceMode(!announceMode)} aria-label="Announce" title="Post as an announcement" className="w-9 h-9 rounded-full flex items-center justify-center transition-colors" style={announceMode ? { backgroundColor: COLORS.accentSoft, color: COLORS.accent } : { color: COLORS.textSecondary }}><Bell className="w-4 h-4" /></button>
               )}
-              <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder={replyTo ? `Reply to ${replyTo.sender}…` : "Message the team…"} className="flex-1 bg-slate-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+              <AutoGrowTextarea value={input} onChange={(e) => setInput(e.target.value)} onSubmit={send} placeholder={replyTo ? `Reply to ${replyTo.sender}…` : "Message the team…"} aria-label="Message" className="flex-1 bg-slate-100 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
               <button onClick={send} disabled={!input.trim()} className="w-9 h-9 rounded-full flex items-center justify-center text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}><Send className="w-4 h-4" /></button>
             </div>
           </div>
@@ -7499,7 +7540,7 @@ const CustomExerciseForm = ({ item, uid, equipmentOptions = [], muscleOptions = 
             <input list="ex-mech" value={mechanic} onChange={(e) => setMechanic(e.target.value)} placeholder="Mechanic (e.g. compound)" className="border border-slate-200 rounded-lg px-3 py-2 text-xs" />
             <datalist id="ex-mech"><option value="compound" /><option value="isolation" /></datalist>
           </div>
-          <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={4} placeholder="How to do it — one step per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <AutoGrowTextarea value={instructions} onChange={(e) => setInstructions(e.target.value)} minRows={4} placeholder="How to do it — one step per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
 
           {photos.length > 0 && (
             <div className="flex gap-2 overflow-x-auto py-1">
@@ -9708,10 +9749,9 @@ export default function TeamHubRolesApp() {
       createdAt: serverTimestamp(),
     });
   const deletePushNotification = (id) => deleteDoc(doc(db, "pushNotifications", id));
-  // "Send now" used to call the sendPushNotification callable, but the org
-  // policy blocks public calls to it, so every tap failed. It now queues the
-  // same doc the Schedule flow writes, with sendAt set to now, and the
-  // runScheduled sweep sends it within a few minutes.
+  // "Send now" queues a pushNotifications doc with sendAt = now; the
+  // onPushNotificationCreated Cloud Function sends it the moment it's
+  // written (the 1-minute sweep is only a safety net).
   const sendPushNotificationNow = async ({ title, body, audienceKeys, visibleTo }) => {
     const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; } })();
     await addPushNotification({ title, body, audienceKeys, visibleTo, sendAt: serverTimestamp(), recurrence: { type: "none", time: "", days: [] }, tz });
