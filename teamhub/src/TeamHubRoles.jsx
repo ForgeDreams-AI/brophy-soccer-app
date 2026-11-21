@@ -1,12 +1,12 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
 import {
   Home, Calendar as CalendarIcon, Video, Apple, MessageCircle,
   Pin, Clock, MapPin, Plus, X, Trash2, Send, Paperclip,
-  ShoppingCart, Check, Droplet, Flame, Shield, Lock, Play,
+  Check, Droplet, Flame, Shield, Lock, Play,
   Link as LinkIcon, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Wind, Activity, Dumbbell, Snowflake, StretchHorizontal, FileText,
   Image as ImageIcon, Mail, ArrowRight, Layers, Reply, BarChart3, ScanLine, Camera,
-  Bell, BellOff, Pencil, Copy, Download, Printer, Megaphone, Maximize2,
+  Bell, Pencil, Copy, Download, Printer, Megaphone, Maximize2,
   Users, Tag, Target, Footprints, Repeat, Flag, Zap, ImagePlus, Goal, Hash, Eye,
   ClipboardList, ExternalLink, Star, Shuffle, CornerDownRight, Crosshair, Swords, LayoutGrid, SquareDashed,
   RefreshCw,
@@ -21,13 +21,13 @@ import {
 } from "firebase/auth";
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc,
-  orderBy, where, query, getDocs,
-  serverTimestamp, writeBatch, arrayUnion, deleteField,
+  orderBy, where, query, getDocs, limit,
+  serverTimestamp, writeBatch, deleteField,
 } from "firebase/firestore";
 import { auth, db, storage } from "./firebase";
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { useAuth } from "./hooks/useAuth";
-import { useCollection, useAudienceCollection, useDoc } from "./hooks/useCollection";
+import { useCollection, useAudienceCollection, useDoc, isLoading } from "./hooks/useCollection";
 
 // Turn a `visibleTo` audience ({ groupIds, uids|emails }) into the flat
 // `audienceKeys` array we store on each doc so security rules can enforce
@@ -48,16 +48,42 @@ const audienceKeysFor = (visibleTo, groupsList = []) => {
   });
   return keys.size ? Array.from(keys) : ["uid:__none__"];
 };
-import { searchFoods, hasUsdaKey } from "./lib/usda";
+import { searchFoods, usdaAvailable } from "./lib/usda";
 import { loadExercises, exerciseImageUrl } from "./lib/exercises";
 import { searchExercises } from "./lib/exerciseSearch";
 import { lookupBarcode, searchProducts } from "./lib/openfoodfacts";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import {
   notificationsSupported, currentPermission,
-  enablePushNotifications, clearAllPushTokens, onForegroundMessage,
+  enablePushNotifications, disablePushOnThisDevice, pushEnabledOnThisDevice, onForegroundMessage,
 } from "./lib/notifications";
 import { toast } from "./lib/toast";
+import { teamDateKey, teamDateKeyOf, zonedDate } from "./lib/dates";
+
+// Sign out, first removing THIS device's push token so a shared phone stops
+// receiving the previous user's notifications.
+const signOutUser = async (uid) => {
+  try { await disablePushOnThisDevice(uid); } catch { /* offline — still sign out */ }
+  await signOut(auth);
+};
+
+// Error reporter for fire-and-forget actions (delete, pin, rate…): a failed
+// write must never look like it worked. Replaces the old `.catch(() => {})`.
+const reportError = (what = "That didn't save") => (e) => {
+  console.error(what, e);
+  toast(`${what} — ${e?.code === "permission-denied" ? "you don't have permission." : (e?.message || "try again.")}`);
+};
+
+// Unique-ish file stamp for upload paths.
+const uploadStamp = () => Date.now();
+
+// Batched writes in chunks (Firestore allows at most 500 ops per batch).
+const commitInChunks = async (items, apply, size = 450) => {
+  for (let i = 0; i < items.length; i += size) {
+    const batch = writeBatch(db);
+    items.slice(i, i + size).forEach((it) => apply(batch, it));
+    await batch.commit();
+  }
+};
 import WelcomeTour from "./WelcomeTour";
 import {
   newEntry, formatPrescription, groupBySuperset, SUPERSET_LABELS,
@@ -123,6 +149,18 @@ const prettyAuthError = (e) => {
   }
 };
 
+// YouTube start offsets: "90", "90s", "1m30s", "1h2m3s" → seconds.
+const parseYouTubeStart = (t) => {
+  if (!t) return null;
+  if (/^\d+s?$/.test(t)) return parseInt(t, 10) || null;
+  const m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(t);
+  if (!m || (!m[1] && !m[2] && !m[3])) return null;
+  return (+(m[1] || 0)) * 3600 + (+(m[2] || 0)) * 60 + (+(m[3] || 0)) || null;
+};
+// Embedded players get a sandbox (scripts + same-origin are needed by
+// YouTube/Vimeo/Instagram players; no top navigation, no forms).
+const EMBED_SANDBOX = "allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox";
+
 const toEmbedUrl = (url) => {
   if (!url) return null;
   try {
@@ -131,8 +169,7 @@ const toEmbedUrl = (url) => {
     if (host === "youtube.com" || host === "m.youtube.com") {
       const v = u.searchParams.get("v");
       if (v) {
-        const t = u.searchParams.get("t") || u.searchParams.get("start");
-        const start = t ? parseInt(t, 10) : null;
+        const start = parseYouTubeStart(u.searchParams.get("t") || u.searchParams.get("start"));
         return `https://www.youtube.com/embed/${v}${start ? `?start=${start}` : ""}`;
       }
       if (u.pathname.startsWith("/embed/")) return url;
@@ -143,8 +180,7 @@ const toEmbedUrl = (url) => {
     if (host === "youtu.be") {
       const v = u.pathname.replace(/^\//, "");
       if (v) {
-        const t = u.searchParams.get("t");
-        const start = t ? parseInt(t, 10) : null;
+        const start = parseYouTubeStart(u.searchParams.get("t"));
         return `https://www.youtube.com/embed/${v}${start ? `?start=${start}` : ""}`;
       }
     }
@@ -223,13 +259,8 @@ const computeStreak = (entries) => {
 };
 
 // Local YYYY-MM-DD used as a grouping key for date dividers.
-const formatDayKey = (ts) => {
-  const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : new Date());
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-};
+// Team-clock (America/Phoenix) YYYY-MM-DD — see lib/dates.js.
+const formatDayKey = (ts) => teamDateKeyOf(ts);
 
 const formatDateHeader = (ts) => {
   const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : new Date());
@@ -262,6 +293,8 @@ const COLORS = {
 // Production domain (decided 2026-11-08, §11).
 const APP_DOMAIN = "BrophySoccer.forgedreams.ai";
 const TOUR_SEEN_KEY = "teamhub_tour_seen_v1";
+// Sub-pages of the Train hub (also valid ?tab= deep links).
+const TRAIN_VIEWS = ["gym", "nutrition", "videos", "library"];
 
 // Toast host — renders transient messages dispatched via toast(). Rendered once
 // at the app root; aria-live so screen readers announce them.
@@ -293,8 +326,6 @@ const Toaster = () => {
    SEED DATA  (real app → Firestore)
    ────────────────────────────────────────────── */
 // Starts clean for Brophy — no sample announcements; coaches post real ones.
-const seedAnnouncements = [];
-const seedEvents = [];
 const VIDEO_CATS = ["Film", "Breathing", "Stretching", "Mobility", "Strength", "Cooldown"];
 const CAT_ICON = { Film: Video, Breathing: Wind, Stretching: StretchHorizontal, Mobility: Activity, Strength: Dumbbell, Cooldown: Snowflake };
 
@@ -314,44 +345,6 @@ const DRILL_CAT_ICON = {
 };
 // Session phases — suggested tags on the drill form (how Anthony runs practices).
 const DRILL_PHASES = ["Warmup", "Team game", "Small rondo", "Bigger rondo / passing pattern", "Possession game", "Play / structured play", "Finishing pattern", "Passing pattern"];
-const seedVideos = [
-  { id: "v2", title: "4-7-8 Breathing Technique", cat: "Breathing", type: "video", dur: "5 min", diff: "Easy", desc: "Inhale 4, hold 7, exhale 8. Drops your heart rate before lights out.", url: "https://youtube.com/..." },
-  { id: "v3", title: "Box Breathing Reset", cat: "Breathing", type: "audio", dur: "8 min", diff: "Easy", desc: "Navy SEAL go-to. Use before games and high-pressure moments.", url: "" },
-  { id: "v4", title: "Full-Body Static Stretch", cat: "Stretching", type: "video", dur: "15 min", diff: "Easy", desc: "End-of-day flow. Hold each position 45 seconds.", url: "https://youtube.com/..." },
-  { id: "v5", title: "Explosive Hip Mobility", cat: "Mobility", type: "video", dur: "8 min", diff: "Medium", desc: "Dynamic warm-up. Get loose before sprints.", url: "https://youtube.com/..." },
-  { id: "v6", title: "Thoracic Spine Series", cat: "Mobility", type: "video", dur: "6 min", diff: "Easy", desc: "Unlock your upper back. Critical for overhead athletes.", url: "https://youtube.com/..." },
-  { id: "v7", title: "Posterior Chain Strength", cat: "Strength", type: "video", dur: "20 min", diff: "Hard", desc: "Hamstrings, glutes, lower back. Bodyweight or banded.", url: "https://youtube.com/..." },
-  { id: "v8", title: "Cold Plunge Protocol", cat: "Cooldown", type: "external", dur: "11 min", diff: "Hard", desc: "Evidence-based cold exposure framework.", url: "https://youtube.com/..." },
-  { id: "v9", title: "Post-Practice Foam Rolling", cat: "Cooldown", type: "video", dur: "10 min", diff: "Easy", desc: "Quads, IT band, calves, glutes. Slow and intentional.", url: "https://youtube.com/..." },
-];
-const workoutPlans = [
-  { id: "wp1", title: "Pre-Game Activation", dur: "20 min" },
-  { id: "wp2", title: "Post-Practice Mobility", dur: "15 min" },
-  { id: "wp3", title: "Off-Day Recovery Flow", dur: "30 min" },
-];
-const seedMessages = [
-  { id: "m1", sender: "Coach Cameron", initials: "CC", text: "Film session moved to 6 PM in Team Room A.", time: "9:14 AM", isCoach: true },
-  { id: "m2", sender: "Maya Patel", initials: "MP", text: "Got it — bringing the clips from Saturday.", time: "9:16 AM" },
-  { id: "m3", sender: "Coach Cameron", initials: "CC", text: "Scouting report attached — read before film.", time: "11:48 AM", isCoach: true, attachment: { type: "pdf", name: "Scouting_Report.pdf" } },
-  { id: "m4", sender: "Devin Wallace", initials: "DW", text: "This set play is clean: https://youtube.com/watch?v=abc", time: "12:15 PM" },
-  { id: "m5", sender: "Coach Cameron", initials: "CC", text: "Proud of this group.", time: "1:02 PM", isCoach: true, attachment: { type: "image", name: "team_huddle.jpg" } },
-];
-const seedWellness = [
-  { name: "Maya Patel", initials: "MP", energy: 4, soreness: 4, tiredness: 4, time: "8:10 AM" },
-  { name: "Alex Chen", initials: "AC", energy: 2, soreness: 2, tiredness: 2, time: "7:52 AM" },
-  { name: "Devin Wallace", initials: "DW", energy: 5, soreness: 5, tiredness: 4, time: "9:01 AM" },
-  { name: "Sam Okafor", initials: "SO", energy: 3, soreness: 3, tiredness: 3, time: "8:34 AM" },
-  { name: "Riley Brooks", initials: "RB", energy: 4, soreness: 4, tiredness: 3, time: "8:20 AM" },
-];
-const seedMeals = [
-  { id: "b1", name: "Overnight Oats & Berries", cat: "Breakfast", cal: 380, p: 18, c: 58, f: 9, prep: "5 min" },
-  { id: "b2", name: "Veggie Scramble & Toast", cat: "Breakfast", cal: 420, p: 26, c: 32, f: 22, prep: "10 min" },
-  { id: "l1", name: "Grilled Chicken & Quinoa", cat: "Lunch", cal: 580, p: 45, c: 58, f: 14, prep: "20 min" },
-  { id: "l2", name: "Turkey Avocado Wrap", cat: "Lunch", cal: 510, p: 38, c: 42, f: 20, prep: "8 min" },
-  { id: "d1", name: "Steak & Sweet Potato", cat: "Dinner", cal: 680, p: 50, c: 56, f: 22, prep: "30 min" },
-  { id: "s1", name: "Protein Shake", cat: "Snacks", cal: 280, p: 28, c: 28, f: 6, prep: "3 min" },
-];
-const seedMealCategories = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 const CSV_TEMPLATE = "name,category,calories,protein,carbs,fat,prep\nGreek Yogurt Power Bowl,Breakfast,390,28,45,10,5 min\nGame-Day Pasta,Pre-Game,620,24,98,12,25 min";
 
 const splitCSVLine = (line) => {
@@ -389,16 +382,26 @@ const FEELING_COLOR = { Sluggish: "#EF4444", OK: "#F59E0B", Good: "#10B981", Ene
    ────────────────────────────────────────────── */
 const EMAIL_FOR_SIGNIN_KEY = "emailForSignIn";
 
-const LoginScreen = ({ externalError, clearExternalError }) => {
+const LoginScreen = ({ externalError, clearExternalError, emailLinkPending = false, onCompleteEmailLink }) => {
   const [email, setEmail] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
 
-  // Surface auth-gate errors (e.g. "email not on roster") from useAuth.
-  useEffect(() => {
-    if (externalError) setErr(externalError);
-  }, [externalError]);
+  // Auth-gate errors (e.g. "email not on roster") from useAuth win over
+  // local ones; typing clears both.
+  const shownErr = externalError || err;
+
+  // Magic link opened on another device/browser: ask for the email inline
+  // (the old code used a blocking window.prompt).
+  const confirmEmailLink = async () => {
+    const e = email.trim().toLowerCase();
+    if (!e.includes("@")) { setErr("Enter the email the link was sent to."); return; }
+    setErr(""); setBusy(true);
+    try { await onCompleteEmailLink(e); }
+    catch (ex) { setErr(prettyAuthError(ex)); }
+    finally { setBusy(false); }
+  };
 
   const sendLink = async () => {
     const e = email.trim().toLowerCase();
@@ -471,6 +474,25 @@ const LoginScreen = ({ externalError, clearExternalError }) => {
     );
   }
 
+  if (emailLinkPending) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
+        {bgLayer}
+        <div className="w-full max-w-sm relative z-10 space-y-3">
+          <h1 className="text-white font-black text-2xl tracking-tight text-center">Finish signing in</h1>
+          <p className="text-white/80 text-sm text-center">Confirm the email address the sign-in link was sent to.</p>
+          <input value={email} onChange={(e) => { setEmail(e.target.value); setErr(""); clearExternalError?.(); }} onKeyDown={(e) => e.key === "Enter" && confirmEmailLink()}
+            type="email" placeholder="Email" autoComplete="email" disabled={busy}
+            className="w-full bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60" />
+          {shownErr && <p className="text-red-300 text-xs font-medium px-1 leading-snug">{shownErr}</p>}
+          <button onClick={confirmEmailLink} disabled={busy} className="w-full py-3 rounded-xl font-bold text-sm text-white hover:opacity-90 disabled:opacity-60" style={{ backgroundColor: COLORS.primary }}>
+            {busy ? "Signing in…" : "Continue"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
       {bgLayer}
@@ -492,7 +514,7 @@ const LoginScreen = ({ externalError, clearExternalError }) => {
               type="email" placeholder="Email" autoComplete="email" disabled={busy}
               className="w-full bg-white rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60" />
           </div>
-          {err && <p className="text-red-300 text-xs font-medium px-1 leading-snug">{err}</p>}
+          {shownErr && <p className="text-red-300 text-xs font-medium px-1 leading-snug">{shownErr}</p>}
           <button onClick={sendLink} disabled={busy} className="w-full py-3 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-60" style={{ backgroundColor: COLORS.primary }}>
             {busy ? "Sending…" : <>Email me a sign-in link <ArrowRight className="w-4 h-4" /></>}
           </button>
@@ -570,6 +592,42 @@ export const NoAccessScreen = ({ user }) => (
 );
 
 /* ── shared bits ── */
+// Text box that grows with what you type, up to `maxRows` lines (default 5),
+// then scrolls inside itself so you can review everything before sending.
+// `onSubmit` (chat): Enter sends on a keyboard device, Shift+Enter adds a
+// line; on phones (coarse pointer) Enter adds a line and the Send button
+// sends. Never sends mid-IME composition.
+const isCoarsePointer = () => {
+  try { return window.matchMedia("(pointer: coarse)").matches; } catch { return false; }
+};
+export const AutoGrowTextarea = ({ value, onChange, onSubmit, minRows = 1, maxRows = 5, className = "", ...rest }) => {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const cs = window.getComputedStyle(el);
+    const line = parseFloat(cs.lineHeight) || 20;
+    const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const border = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+    el.style.height = "auto";
+    const max = line * maxRows + pad + border;
+    const min = line * minRows + pad + border;
+    const next = Math.max(min, Math.min(el.scrollHeight + border, max));
+    el.style.height = `${next}px`;
+    el.style.overflowY = el.scrollHeight + border > max ? "auto" : "hidden";
+  }, [value, minRows, maxRows]);
+  const onKeyDown = (e) => {
+    if (onSubmit && e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !isCoarsePointer()) {
+      e.preventDefault();
+      onSubmit();
+    }
+    rest.onKeyDown?.(e);
+  };
+  return (
+    <textarea ref={ref} rows={minRows} value={value} onChange={onChange} {...rest} onKeyDown={onKeyDown}
+      className={`resize-none leading-5 ${className}`} />
+  );
+};
 // Circular profile photo, falling back to initials on a colored tile. Used
 // everywhere a person is shown (header, settings, line-up tokens).
 const Avatar = ({ photoURL, initials = "", size = 36, bg = COLORS.primary, color = "white", className = "" }) =>
@@ -757,16 +815,152 @@ const DocumentUploadCard = ({ onUpload }) => {
 // One document row — icon + title + signed status, with the coach's
 // who-signed view + delete, and the player's sign flow. Carries its own
 // expanded state so it works flat (Home) and grouped (Coach Tools folders).
+// ─── E-signatures ──────────────────────────────────────────────────────────
+// Each signature is its own immutable record: documents/{id}/signatures/{uid}
+// (see firestore.rules). It captures the typed legal name, a drawn
+// signature, the signer's verified account email, SERVER time, the exact
+// consent wording shown, and the SHA-256 of the file that was signed, so a
+// signature always proves who agreed to which version, and when. Coaches
+// can read (and export) the log but never edit it.
+const SIGN_CONSENT_VERSION = "v1-2026-11-21";
+const signConsentText = (title) =>
+  `I have read "${title}". By typing my name and signing below I agree that this is my electronic signature, `
+  + "that it is legally binding to the same extent as a handwritten signature, and that I am signing with my own account.";
+
+// SHA-256 of a File/Blob as hex (Web Crypto). "" when unavailable.
+const sha256Hex = async (blob) => {
+  try {
+    const buf = await blob.arrayBuffer();
+    const hash = await crypto.subtle.digest("SHA-256", buf);
+    return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch { return ""; }
+};
+
+// Finger / mouse signature pad. Calls onChange(dataUrl | "") as you draw.
+const SignaturePad = ({ onChange }) => {
+  const canvasRef = useRef(null);
+  const drawing = useRef(false);
+  const hasInk = useRef(false);
+  useEffect(() => {
+    const c = canvasRef.current;
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    const w = c.clientWidth, h = c.clientHeight;
+    c.width = w * ratio; c.height = h * ratio;
+    const ctx = c.getContext("2d");
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#0F172A";
+  }, []);
+  const pos = (e) => { const r = canvasRef.current.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  const down = (e) => {
+    e.preventDefault();
+    canvasRef.current.setPointerCapture?.(e.pointerId);
+    drawing.current = true;
+    const ctx = canvasRef.current.getContext("2d"); const p = pos(e);
+    ctx.beginPath(); ctx.moveTo(p.x, p.y);
+  };
+  const move = (e) => {
+    if (!drawing.current) return;
+    const ctx = canvasRef.current.getContext("2d"); const p = pos(e);
+    ctx.lineTo(p.x, p.y); ctx.stroke(); hasInk.current = true;
+  };
+  const up = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    if (hasInk.current) onChange(canvasRef.current.toDataURL("image/png"));
+  };
+  const clear = () => {
+    const c = canvasRef.current; c.getContext("2d").clearRect(0, 0, c.width, c.height);
+    hasInk.current = false; onChange("");
+  };
+  return (
+    <div>
+      <canvas ref={canvasRef} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={up}
+        className="w-full h-32 rounded-xl border border-dashed border-slate-300 bg-slate-50 touch-none" aria-label="Draw your signature" />
+      <div className="flex items-center justify-between mt-1">
+        <span className="text-[10px] text-slate-400">Sign with your finger or mouse</span>
+        <button type="button" onClick={clear} className="text-[11px] font-semibold text-slate-500">Clear</button>
+      </div>
+    </div>
+  );
+};
+
+export const SignDocumentModal = ({ user, d, onSign, onClose }) => {
+  const [typedName, setTypedName] = useState(user.name || "");
+  const [drawing, setDrawing] = useState("");
+  const [agree, setAgree] = useState(false);
+  const [opened, setOpened] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const consent = signConsentText(d.title);
+  const ready = typedName.trim().length >= 2 && drawing && agree && !busy;
+  const submit = async () => {
+    if (!ready) return;
+    setBusy(true);
+    try {
+      await onSign(d, { typedName: typedName.trim(), drawing, consentText: consent });
+      toast("Signed. A copy of your signature record is saved.", "success");
+      onClose();
+    } catch (e) {
+      toast("Couldn't sign — " + (e?.code === "permission-denied" ? "the document may have changed; reload and try again." : (e.message || "try again.")));
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-bold text-base text-slate-900 leading-tight">Sign: {d.title}</h3>
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0"><X className="w-4 h-4" /></button>
+        </div>
+        <a href={d.url} target="_blank" rel="noopener noreferrer" onClick={() => setOpened(true)} className="flex items-center gap-2 text-sm font-semibold rounded-xl border border-slate-200 px-3 py-2.5" style={{ color: COLORS.primary }}>
+          <FileText className="w-4 h-4" /> {opened ? "Opened — read it before signing" : "Open the document to read it"} <ExternalLink className="w-3.5 h-3.5 ml-auto" />
+        </a>
+        <label className="block">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Full legal name</span>
+          <input value={typedName} onChange={(e) => setTypedName(e.target.value)} placeholder="First and last name" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+        </label>
+        <div>
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Signature</span>
+          <div className="mt-1"><SignaturePad onChange={setDrawing} /></div>
+        </div>
+        <label className="flex items-start gap-2 text-[12px] text-slate-600 leading-snug">
+          <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5" />
+          <span>{consent}</span>
+        </label>
+        <p className="text-[10px] text-slate-400">Signing as {user.email}. The date and time come from the server, and the record is tied to this exact file — it can't be edited afterwards.</p>
+        <button onClick={submit} disabled={!ready} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{busy ? "Signing…" : "Agree & Sign"}</button>
+      </div>
+    </div>
+  );
+};
+
+// CSV of a document's signature log (coach export).
+const downloadSignatureLog = (d, sigs) => {
+  const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const when = (ts) => (ts?.toDate ? ts.toDate().toISOString() : (ts || ""));
+  const rows = [["Document", "Typed name", "Account email", "Signed at (UTC)", "File SHA-256", "Consent version", "Drawn signature", "Device"]];
+  sigs.forEach((s) => rows.push([d.title, s.typedName || s.name, s.email || "", when(s.signedAt || s.ts), s.sha256 || "", s.consentVersion || "legacy (typed name only)", s.drawing ? "yes" : "no", s.userAgent || ""]));
+  const blob = new Blob([rows.map((r) => r.map(esc).join(",")).join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${(d.title || "document").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "document"}-signatures.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+};
+
 const DocumentRow = ({ user, d, isAdmin, rosterCount = 0, onDelete, onSign }) => {
   const [whoOpen, setWhoOpen] = useState(false);
   const [signOpen, setSignOpen] = useState(false);
-  const [signName, setSignName] = useState(user.name || "");
-  const sigs = d.signatures || [];
-  const mine = sigs.some((s) => s.uid === user.uid);
-  const submitSign = async () => {
-    if (!signName.trim()) return;
-    try { await onSign(d.id, signName.trim()); setSignOpen(false); }
-    catch (e) { toast("Couldn't sign — " + (e.message || "")); }
+  // Coach: the signature log (private records). Player: only their own.
+  const sigDocs = useCollection(isAdmin ? `documents/${d.id}/signatures` : null);
+  const mySig = useDoc(!isAdmin ? `documents/${d.id}/signatures/${user.uid}` : null);
+  // Legacy typed-name signatures (before the redesign) still count, unless
+  // that person has since signed with the new record.
+  const legacy = (d.signatures || []).filter((s) => !sigDocs.some((x) => x.id === s.uid));
+  const sigs = [...sigDocs, ...legacy];
+  const mine = Boolean(mySig) || (d.signatures || []).some((s) => s.uid === user.uid);
+  const fmtWhen = (s) => {
+    const t = s.signedAt?.toDate ? s.signedAt.toDate() : (s.ts ? new Date(s.ts) : null);
+    return t ? t.toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
   };
   return (
     <li className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -774,36 +968,38 @@ const DocumentRow = ({ user, d, isAdmin, rosterCount = 0, onDelete, onSign }) =>
         <div className="w-9 h-9 rounded-xl flex flex-col items-center justify-center flex-shrink-0 gap-0.5" style={{ backgroundColor: COLORS.accentSoft }}><FileText className="w-3.5 h-3.5" style={{ color: COLORS.accent }} /><span className="text-[7px] font-black leading-none tracking-tight" style={{ color: COLORS.accent }}>{docTypeLabel(d)}</span></div>
         <a href={d.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-slate-900 truncate">{d.title}</div>
-          <div className="text-[10px] text-slate-500">{isAdmin ? `${sigs.length}${rosterCount ? `/${rosterCount}` : ""} signed` : (mine ? "You've signed" : "Tap to read")}</div>
+          <div className="text-[10px] text-slate-500">{isAdmin ? `${sigs.length}${rosterCount ? `/${rosterCount}` : ""} signed` : (mine ? `You signed${mySig ? ` · ${fmtWhen(mySig)}` : ""}` : "Tap to read")}</div>
         </a>
         {isAdmin ? (
           <div className="flex items-center gap-2 flex-shrink-0">
             <button onClick={() => setWhoOpen(!whoOpen)} className="text-[11px] font-semibold" style={{ color: COLORS.primary }}>{whoOpen ? "Hide" : "Who"}</button>
-            <button onClick={async () => { if (confirm(`Delete "${d.title}"?`)) { try { await onDelete(d.id); } catch (e) { toast("Couldn't delete — " + (e.message || "")); } } }} className="text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+            <button onClick={async () => { if (confirm(`Delete "${d.title}"? Players will no longer see it. Its signature records are kept on file (Firebase console).`)) { try { await onDelete(d.id); } catch (e) { toast("Couldn't delete — " + (e.message || "")); } } }} className="text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
           </div>
         ) : (
           mine
             ? <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 flex-shrink-0" style={{ color: COLORS.success }}><Check className="w-3.5 h-3.5" /> Signed</span>
-            : <button onClick={() => { setSignOpen(true); setSignName(user.name || ""); }} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider text-white flex-shrink-0" style={{ backgroundColor: COLORS.primary }}>Sign</button>
+            : <button onClick={() => setSignOpen(true)} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider text-white flex-shrink-0" style={{ backgroundColor: COLORS.primary }}>Sign</button>
         )}
       </div>
       {isAdmin && whoOpen && (
-        <div className="px-3 pb-3 border-t border-slate-100 pt-2">
-          {sigs.length === 0 ? <p className="text-[11px] text-slate-400 italic">No signatures yet.</p> : (
-            <ul className="space-y-1">{sigs.map((s, i) => (<li key={i} className="text-[11px] text-slate-600 flex items-center gap-1.5"><Check className="w-3 h-3" style={{ color: COLORS.success }} /> {s.name} <span className="text-slate-400">· {new Date(s.ts).toLocaleDateString()}</span></li>))}</ul>
-          )}
-        </div>
-      )}
-      {!isAdmin && signOpen && !mine && (
         <div className="px-3 pb-3 border-t border-slate-100 pt-2 space-y-2">
-          <p className="text-[11px] text-slate-500">Type your full name to sign. This records your agreement with a timestamp.</p>
-          <input value={signName} onChange={(e) => setSignName(e.target.value)} placeholder="Your full name" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <div className="flex gap-2">
-            <button onClick={() => setSignOpen(false)} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button>
-            <button onClick={submitSign} disabled={!signName.trim()} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>Agree &amp; Sign</button>
-          </div>
+          {sigs.length === 0 ? <p className="text-[11px] text-slate-400 italic">No signatures yet.</p> : (
+            <ul className="space-y-1.5">{sigs.map((s, i) => (
+              <li key={s.id || s.uid || i} className="text-[11px] text-slate-600 flex items-center gap-2">
+                <Check className="w-3 h-3 flex-shrink-0" style={{ color: COLORS.success }} />
+                <span className="min-w-0 flex-1">
+                  <span className="font-semibold text-slate-800">{s.typedName || s.name}</span>
+                  {s.email ? <span className="text-slate-400"> · {s.email}</span> : null}
+                  <span className="block text-[10px] text-slate-400">{fmtWhen(s)}{s.consentVersion ? "" : " · legacy (typed name only)"}</span>
+                </span>
+                {s.drawing && <img src={s.drawing} alt={`Signature of ${s.typedName}`} className="h-8 w-20 object-contain bg-slate-50 rounded border border-slate-100" />}
+              </li>
+            ))}</ul>
+          )}
+          {sigs.length > 0 && <button onClick={() => downloadSignatureLog(d, sigs)} className="text-[11px] font-bold" style={{ color: COLORS.primary }}>Download signature log (CSV)</button>}
         </div>
       )}
+      {!isAdmin && signOpen && !mine && <SignDocumentModal user={user} d={d} onSign={onSign} onClose={() => setSignOpen(false)} />}
     </li>
   );
 };
@@ -906,7 +1102,7 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
   };
   const [wellnessOpen, setWellnessOpen] = useState(false);
   const [saved, setSaved] = useState(false);
-  const todayStr = fmtLocalDate(new Date());
+  const todayStr = teamDateKey();
   const todays = events.filter((e) => e.date === todayStr).sort((a, b) => (a.start || "").localeCompare(b.start || ""));
   const hero = todays[0];
   const upcoming = !hero ? [...events].filter((e) => e.date > todayStr).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))[0] : null;
@@ -1072,6 +1268,7 @@ const TrainHub = ({ onPick }) => {
     ["gym", "Workouts", Dumbbell, "Your lifts & exercises"],
     ["nutrition", "Nutrition", Apple, "Meals, recipes & water"],
     ["videos", "Videos", Video, "Film, drills & guides"],
+    ["library", "Documents", FileText, "Playbooks, forms & plans"],
   ];
   return (
     <div className="px-5 pt-5 pb-4 space-y-3">
@@ -1088,14 +1285,25 @@ const TrainHub = ({ onPick }) => {
 };
 
 /* ─── HOME ─── */
-const HomePage = ({ user, practices = [], announcements, events, checkin, setCheckin, wellness, submitWellness, invites, mealLogActivityToday = [], groups = [], addGroup, updateGroupMembers, deleteGroup, documents = [], addDocument, deleteDocument, signDocument, allUsers = [], pushNotifications = [], addPushNotification, deletePushNotification, sendPushNotificationNow, activeTeamId, todayQuote, addQuote }) => {
+// Coach Home. (Players get PlayerTodayPage — this component is only mounted
+// for coaches; see the tab router in TeamHubRolesApp.)
+const HomePage = ({ user, practices = [], announcements = [], events = [], wellness = [], wellnessLoading = false, invites = [], mealLogActivityToday = [], groups = [], addGroup, updateGroupMembers, deleteGroup, allUsers = [], pushNotifications = [], addPushNotification, deletePushNotification, sendPushNotificationNow, activeTeamId, todayQuote, addQuote }) => {
   const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email, u.name])), [allUsers]);
-  const [saved, setSaved] = useState(false);
+  const uidByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email.toLowerCase(), u.id])), [allUsers]);
+  const emailByUid = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.id, u.email])), [allUsers]);
+  // Unique players on the team: signed-up players plus invited emails that
+  // haven't signed up yet (coaches excluded) — one denominator everywhere.
+  const playersTotal = useMemo(() => {
+    const keys = new Set();
+    (allUsers || []).filter((u) => u.role === "player").forEach((u) => keys.add((u.email || u.id).toLowerCase()));
+    (invites || []).filter((i) => i.role !== "admin" && i.role !== "orgAdmin").forEach((i) => keys.add((i.email || i.id).toLowerCase()));
+    return keys.size;
+  }, [allUsers, invites]);
   const [openPlayer, setOpenPlayer] = useState(null);
   const [showPlayers, setShowPlayers] = useState(false);
   const [annOpen, setAnnOpen] = useState(false);
   const [pushModalOpen, setPushModalOpen] = useState(false);
-  const [pushPerm, setPushPerm] = useState(currentPermission());
+  const [pushPerm, setPushPerm] = useState(() => (pushEnabledOnThisDevice() ? "granted" : currentPermission() === "denied" ? "denied" : "default"));
   const [pushBusy, setPushBusy] = useState(false);
   const [pushErr, setPushErr] = useState("");
   const enablePush = async () => {
@@ -1116,25 +1324,20 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
   const isAdmin = user.role === "admin";
 
 
-  const now = new Date();
+  // "Now" refreshes every minute so the next-event card doesn't go stale.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
   const nextEvent = useMemo(() => {
     return [...events]
-      .filter((e) => new Date(e.date + "T" + e.start) >= now)
-      .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))[0];
-  }, [events]);
+      .filter((e) => (zonedDate(e.date, e.start || "00:00")?.getTime() ?? 0) >= nowMs)
+      .sort((a, b) => ((a.date || "") + (a.start || "")).localeCompare((b.date || "") + (b.start || "")))[0];
+  }, [events, nowMs]);
 
   const sorted = [...announcements].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
-  const setMetric = (k, v) => { setCheckin({ ...checkin, [k]: v }); setSaved(false); };
-  const submitCheckin = async () => {
-    if (!checkin.energy || !checkin.soreness || !checkin.tiredness) return;
-    try {
-      await submitWellness(checkin);
-      setSaved(true);
-    } catch (e) {
-      toast("Couldn't submit check-in — " + (e.message || "check Firestore rules."));
-    }
-  };
 
   const avg = (k) => (wellness.length ? wellness.reduce((s, w) => s + w[k], 0) / wellness.length : 0);
   const bars = (value, color) => (
@@ -1145,14 +1348,14 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
   const greeting = (
     <div>
       <p className="text-xs font-medium uppercase tracking-wider text-slate-400">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
-      <h2 className="text-2xl font-bold text-slate-900 mt-1">Welcome,<br /><span style={{ color: COLORS.primary }}>{user.name.split(" ")[0]}.</span></h2>
+      <h2 className="text-2xl font-bold text-slate-900 mt-1">Welcome,<br /><span style={{ color: COLORS.primary }}>{(user.name || "Coach").split(" ")[0]}.</span></h2>
       <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>{getTeam(activeTeamId).name}</span>
     </div>
   );
 
   // Today first: today's session (with its practice plan + drill count) —
   // otherwise the next upcoming event. This is the big card at the top.
-  const todayStr = fmtLocalDate(new Date());
+  const todayStr = teamDateKey();
   const todays = [...events].filter((e) => e.date === todayStr).sort((a, b) => (a.start || "").localeCompare(b.start || ""));
   const hero = todays[0] || null;
   const heroPlan = hero?.practiceId ? practices.find((pl) => pl.id === hero.practiceId) : null;
@@ -1188,27 +1391,6 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
     </section>
   );
 
-  const checkinSection = (
-    <section className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-sm text-slate-900">How are you feeling today?</h3>
-        {saved && <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color: COLORS.success }}><Check className="w-3 h-3" /> Sent</span>}
-      </div>
-      <div className="space-y-3">
-        <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Energy</div><Scale value={checkin.energy} onChange={(v) => setMetric("energy", v)} lowLabel="Wiped out" highLabel="Full tank" /></div>
-        <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Soreness</div><Scale value={checkin.soreness} onChange={(v) => setMetric("soreness", v)} lowLabel="Very sore" highLabel="Feeling great" /></div>
-        <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Tiredness</div><Scale value={checkin.tiredness} onChange={(v) => setMetric("tiredness", v)} lowLabel="Exhausted" highLabel="Fresh" /></div>
-      </div>
-      <button onClick={submitCheckin} disabled={!checkin.energy || !checkin.soreness || !checkin.tiredness}
-        className="w-full mt-3 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>
-        Log wellness
-      </button>
-      <p className="text-[10px] text-slate-400 mt-2 text-center">1 = worst, 5 = ready to go. Your coach sees the team's daily readiness.</p>
-    </section>
-  );
-
-  // News for the team — read-only here. Coaches post, edit, pin and
-  // delete from Coach Tools → Announcements (§9 Option B).
   const announcementsSection = (
     <section>
       <div className="flex items-center justify-between mb-3">
@@ -1272,7 +1454,7 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
       </button>
       {showPlayers && (
       <ul className="space-y-2">
-        {wellness.length === 0 && <p className="text-sm text-slate-400 italic">No check-ins yet today.</p>}
+        {wellness.length === 0 && <p className="text-sm text-slate-400 italic">{wellnessLoading ? "Loading check-ins…" : "No check-ins yet today."}</p>}
         {wellnessSorted.map((w) => {
           const vStyle = VERDICTS[w.verdict] || VERDICTS.Modified;
           const open = openPlayer === w.name;
@@ -1336,7 +1518,11 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
     const toggleMember = (group, uid) => {
       const set = new Set(group.memberUids || []);
       if (set.has(uid)) set.delete(uid); else set.add(uid);
-      updateGroupMembers(group.id, [...set]).catch(() => {});
+      // Store the uid once the player has signed in; drop any legacy email
+      // key for the same player so membership isn't double-counted.
+      const email = emailByUid[uid];
+      if (email) set.delete(email);
+      updateGroupMembers(group.id, [...set]).catch(reportError("Couldn't update the group"));
     };
     return (
       <section>
@@ -1380,8 +1566,11 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
                             // Use email as id for ones without a uid; here we don't know uid for not-yet-signed-in players.
                             // We'll fall back to the doc id (email) — works for filter once player signs in and uid is known.
                             // Better future: resolve email→uid via users collection.
-                            const memberKey = inv.email;
-                            const isMember = members.has(memberKey);
+                            // uid when the player has signed in (preferred),
+                            // else the invite email until they do.
+                            const uid = uidByEmail[(inv.email || "").toLowerCase()];
+                            const memberKey = uid || inv.email;
+                            const isMember = members.has(memberKey) || members.has(inv.email);
                             return (
                               <li key={inv.id} className="flex items-center gap-2 py-1.5">
                                 <button onClick={() => toggleMember(g, memberKey)} className="flex-1 text-left text-xs font-mono text-slate-700 truncate">{inv.email}</button>
@@ -1391,15 +1580,12 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
                           })}
                         </ul>
                       )}
-                      <button onClick={() => { if (confirm(`Delete group "${g.name}"?`)) deleteGroup(g.id).catch(() => {}); }} className="w-full py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 border border-red-100 rounded-full">Delete group</button>
+                      <button onClick={() => { if (confirm(`Delete group "${g.name}"?`)) deleteGroup(g.id).catch(reportError("Couldn't delete the group")); }} className="w-full py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 border border-red-100 rounded-full">Delete group</button>
                     </div>
                   )}
                 </div>
               );
             })}
-            <p className="text-[10px] text-slate-400 px-1 leading-relaxed">
-              Note: group membership is currently keyed by email. Once a player signs in their uid is known and group filtering takes effect. Full uid-based assignment is a v1.1 polish.
-            </p>
           </div>
         )}
       </section>
@@ -1409,7 +1595,7 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
   const nutritionComplianceSection = (() => {
     if (!isAdmin) return null;
     const loggedUids = new Set(mealLogActivityToday.map((a) => a.uid));
-    const rosterEmails = invites?.length || 0;
+    const rosterEmails = playersTotal;
     const loggedCount = loggedUids.size;
     const pct = rosterEmails ? Math.round((loggedCount / rosterEmails) * 100) : 0;
     return (
@@ -1432,7 +1618,6 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
     );
   })();
 
-  const documentsSection = <DocumentsSection user={user} documents={documents} isAdmin={isAdmin} rosterCount={(invites || []).filter((i) => i.role !== "admin").length} onUpload={addDocument} onDelete={deleteDocument} onSign={signDocument} defaultCollapsed />;
 
   // Custom push notifications — the coach's way to reach the team directly
   // (send now, schedule, or set a recurring reminder). The full composer
@@ -1458,12 +1643,12 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
 
   // Compact at-a-glance dashboard so the coach gets the key numbers without
   // scrolling; the full management sections sit collapsed below.
-  const playersTotal = invites.filter((i) => i.role !== "admin").length;
+  const readyCount = wellness.length - restCount - modifiedCount;
   const dashStats = [
-    ["Readiness", wellness.length ? avg("energy").toFixed(1) : "—", "/5"],
+    ["Ready", wellness.length ? readyCount : "—", wellness.length ? `/${wellness.length}` : ""],
     ["Logged", wellness.length, `/${playersTotal}`],
-    ["Meals", mealLogActivityToday.length, `/${playersTotal}`],
-    ["Roster", invites.length, ""],
+    ["Meals", new Set(mealLogActivityToday.map((a) => a.uid)).size, `/${playersTotal}`],
+    ["Players", playersTotal, ""],
   ];
   const coachDashboard = (
     <div className="grid grid-cols-2 gap-2">
@@ -1478,7 +1663,7 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
 
   // Sessions this coach has been delegated to run (assigned on the calendar),
   // surfaced with the head coach's plan + notes so they know what to deliver.
-  const todayKey = fmtLocalDate(new Date());
+  const todayKey = teamDateKey();
   const myRuns = (events || [])
     .filter((e) => e.runByUid === user.uid && (e.date || "") >= todayKey)
     .sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")))
@@ -1527,9 +1712,7 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
       {greeting}
       {notificationsSection}
       {todaySection}
-      {isAdmin
-        ? (<>{youRunningSection}{coachDashboard}{playersSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{pushSection}{groupsSection}{nutritionComplianceSection}</>)
-        : (<>{checkinSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{documentsSection}</>)}
+      {youRunningSection}{coachDashboard}{playersSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{pushSection}{groupsSection}{nutritionComplianceSection}
       {pushModalOpen && (
         <PushNotificationModal
           pushNotifications={pushNotifications}
@@ -1576,7 +1759,7 @@ const parseScheduleCSV = (text) => {
   const hasHeader = first.includes("date") && first.includes("title");
   const rows = hasHeader ? lines.slice(1) : lines;
   const validType = (t) => ["Practice", "Game", "Strength", "Recovery", "Meeting"].includes(t) ? t : "Practice";
-  return rows.map((line) => {
+  const parsed = rows.map((line) => {
     const c = splitCSVLine(line);
     return {
       date: (c[0] || "").trim(),
@@ -1586,15 +1769,14 @@ const parseScheduleCSV = (text) => {
       location: (c[4] || "").trim(),
       type: validType((c[5] || "").trim()),
     };
-  }).filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.title);
+  });
+  const kept = parsed.filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.title
+    && /^\d{1,2}:\d{2}$/.test(r.start) && /^\d{1,2}:\d{2}$/.test(r.end) && r.end > r.start);
+  // Rows that were dropped (bad date/time, no title, end before start) are
+  // counted so the import message can say so instead of hiding them.
+  kept.skipped = parsed.length - kept.length;
+  return kept;
 };
-
-// Compact event chip for Month/Week views.
-const EventChip = ({ ev, onClick }) => (
-  <button onClick={onClick} className={`block w-full text-left rounded-md px-1.5 py-0.5 text-[9px] font-semibold leading-tight truncate ${EVENT_STYLE[ev.type] || "bg-slate-100 text-slate-700"} ${ev.isPrivate ? "ring-1 ring-slate-400 ring-inset" : ""}`} title={`${ev.title} · ${formatHourTime(ev.start)}`}>
-    {ev.isPrivate && "🔒 "}{formatHourTime(ev.start).replace(/:00 /, "")} {ev.title}
-  </button>
-);
 
 // Full card for Day/List views.
 const EventCard = ({ ev, isAdmin, onEdit, onDelete, onOpen, nameByUid = {}, practices = [], teamWorkouts = [] }) => {
@@ -1727,7 +1909,6 @@ const GroupsModal = ({ groups, allUsers, invites, onClose, addGroup, updateGroup
 
   // Players already signed in (have uids). Plus optionally those still
   // invited-only (key by email until they sign in once).
-  const signedInUids = new Set(allUsers.map((u) => u.id));
   const signedInEmails = new Set(allUsers.map((u) => (u.email || "").toLowerCase()).filter(Boolean));
   const invitedOnly = (invites || []).filter((i) => !signedInEmails.has((i.email || "").toLowerCase()));
 
@@ -1805,7 +1986,7 @@ const GroupsModal = ({ groups, allUsers, invites, onClose, addGroup, updateGroup
                       </details>
                     )}
 
-                    <button onClick={() => { if (confirm(`Delete group "${g.name}"?`)) deleteGroup(g.id).catch(() => {}); }} className="w-full py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 border border-red-100 rounded-full">Delete group</button>
+                    <button onClick={() => { if (confirm(`Delete group "${g.name}"?`)) deleteGroup(g.id).catch(reportError("Couldn't delete the group")); }} className="w-full py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 border border-red-100 rounded-full">Delete group</button>
                   </div>
                 )}
               </div>
@@ -1893,7 +2074,7 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
   const [silentImport, setSilentImport] = useState(true);
   const [view, setView] = useState("list"); // month | week | day | list
   const [cursor, setCursor] = useState(new Date());
-  const todayStr = fmtLocalDate(new Date());
+  const todayStr = teamDateKey();
   const blank = { title: "", date: todayStr, start: "15:00", end: "17:00", location: "", type: "Practice", runByUid: "", practiceId: "", workoutId: "", coachNotes: "", reminders: [] };
   const [form, setForm] = useState(blank);
   const isAdmin = user.role === "admin";
@@ -1923,7 +2104,7 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
     if (!rows.length) { setImportMsg("No valid rows — needs date,start,end,title,location,type."); return; }
     try {
       await importEvents(rows, { notify: !silentImport });
-      setImportMsg(`Imported ${rows.length} event${rows.length === 1 ? "" : "s"}.`);
+      setImportMsg(`Imported ${rows.length} event${rows.length === 1 ? "" : "s"}.${rows.skipped ? ` Skipped ${rows.skipped} row${rows.skipped === 1 ? "" : "s"} with a bad date, time or title.` : ""}`);
       setCsvText("");
     } catch (e) {
       setImportMsg("Couldn't import — " + (e.message || "check rules?"));
@@ -1941,7 +2122,11 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
         delete data.runByUid; delete data.practiceId; delete data.workoutId; delete data.coachNotes;
         delete data.reminders; delete data.startAt;
         if (editingEvent && editingEvent.isPrivate) await updatePersonalEvent(editingEvent.id, data);
-        else await addPersonalEvent(data);
+        else {
+          await addPersonalEvent(data);
+          // Switched a team event to personal while editing: move it.
+          if (editingEvent && !editingEvent.isPrivate) await deleteEvent(editingEvent.id);
+        }
       } else {
         // Delegation: which coach runs this session + the plan/workout/notes.
         data.runByUid = form.runByUid || null;
@@ -1959,7 +2144,11 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
           type: "reminder",
           offsetMin: Math.max(1, Math.round(Number(r.offsetMin) || 0)),
         }));
-        data.startAt = form.date && form.start ? new Date(`${form.date}T${form.start}:00`) : null;
+        // Team time (America/Phoenix), not the coach's device timezone.
+        data.startAt = zonedDate(form.date, form.start);
+        if (isAdmin && visibility.mode === "custom" && !visibility.groupIds.length && !visibility.uids.length) {
+          toast("Pick at least one group or player, or choose Everyone."); return;
+        }
         if (isAdmin && visibility.mode === "custom" && (visibility.groupIds.length || visibility.uids.length)) {
           data.visibleTo = { groupIds: visibility.groupIds, uids: visibility.uids };
         } else if (editingEvent) {
@@ -1967,7 +2156,11 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
           data.visibleTo = null;
         }
         if (editingEvent && !editingEvent.isPrivate) await updateEvent(editingEvent.id, data);
-        else await addEvent(data);
+        else {
+          await addEvent(data);
+          // Switched a personal event to team while editing: move it.
+          if (editingEvent && editingEvent.isPrivate) await deletePersonalEvent(editingEvent.id);
+        }
       }
       setForm(blank);
       setVisibility({ mode: "everyone", groupIds: [], uids: [] });
@@ -2011,8 +2204,9 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
     setAdding(false);
   };
   const del = (ev) => {
-    if (ev.isPrivate) deletePersonalEvent(ev.id).catch(() => {});
-    else deleteEvent(ev.id).catch(() => {});
+    if (!confirm(`Delete "${ev.title || "this event"}"?${ev.isPrivate ? "" : " Players will no longer see it."}`)) return;
+    if (ev.isPrivate) deletePersonalEvent(ev.id).catch(reportError("Couldn't delete the event"));
+    else deleteEvent(ev.id).catch(reportError("Couldn't delete the event"));
   };
 
   // ── View navigation ───────────────────────────────────────────────────
@@ -2290,7 +2484,7 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
                 <option value="">No workout attached</option>
                 {teamWorkouts.map((w) => <option key={w.id} value={w.id}>{w.name || "Untitled workout"}</option>)}
               </select>
-              <textarea value={form.coachNotes} onChange={(e) => setForm({ ...form, coachNotes: e.target.value })} rows={2} placeholder="Notes for the coach running this — focus, intensity, reminders…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+              <AutoGrowTextarea value={form.coachNotes} onChange={(e) => setForm({ ...form, coachNotes: e.target.value })} minRows={2} placeholder="Notes for the coach running this — focus, intensity, reminders…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
             </div>
           )}
 
@@ -2348,8 +2542,194 @@ const parseVideoCSV = (text) => {
   }).filter((r) => r.title && r.url);
 };
 
+/* ─── DOCUMENTS LIBRARY (Train → Documents, next to Videos) ───────────────
+   Coach-shared files and links (playbooks, scouting reports, forms, training
+   plans…), filed in folders. Each item is shared with ALL three teams or with
+   one team (firestore.rules libraryItems + storage.rules library/). Players
+   open/download; coaches add, edit and delete. Different from Coach Center →
+   Documents, which is for documents players must SIGN. */
+const LIBRARY_FOLDERS = ["Playbook", "Scouting", "Forms", "Training plans", "Nutrition", "Recovery"];
+const LIBRARY_MIME_BY_EXT = {
+  pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  txt: "text/plain", csv: "text/csv", rtf: "application/rtf",
+  pages: "application/vnd.apple.pages", key: "application/vnd.apple.keynote", numbers: "application/vnd.apple.numbers",
+  odt: "application/vnd.oasis.opendocument.text", ods: "application/vnd.oasis.opendocument.spreadsheet", odp: "application/vnd.oasis.opendocument.presentation",
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", heic: "image/heic",
+};
+const fileSizeLabel = (n) => (!n ? "" : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`);
+const isHttpUrl = (u) => { try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:"; } catch { return false; } };
+
+const LibraryItemForm = ({ initial, activeTeamId, folders, onSave, onClose }) => {
+  const editing = Boolean(initial?.id);
+  const [kind, setKind] = useState(initial?.kind || "file");
+  const [file, setFile] = useState(null);
+  const [url, setUrl] = useState(initial?.url && initial?.kind === "link" ? initial.url : "");
+  const [title, setTitle] = useState(initial?.title || "");
+  const [folder, setFolder] = useState(initial?.folder || "");
+  const [desc, setDesc] = useState(initial?.desc || "");
+  const [scope, setScope] = useState(initial?.teamId || "all");
+  const [notify, setNotify] = useState(!editing);
+  const [progress, setProgress] = useState(null);
+  const [err, setErr] = useState("");
+  const submit = async () => {
+    setErr("");
+    if (!editing && kind === "file" && !file) { setErr("Pick a file to upload."); return; }
+    if (kind === "link" && !isHttpUrl(url.trim())) { setErr("Enter a full link starting with https://"); return; }
+    if (!editing && kind === "file" && file.size > 50 * 1024 * 1024) { setErr("That file is over 50 MB. Share it as a link (e.g. Google Drive) instead."); return; }
+    const t = (title.trim() || file?.name || url.trim()).slice(0, 200);
+    try {
+      setProgress(0);
+      await onSave({ kind, file, url: url.trim(), title: t, folder: folder.trim(), desc: desc.trim(), scope, notify }, setProgress);
+      onClose();
+    } catch (e) {
+      setProgress(null);
+      setErr((e?.code === "storage/unauthorized" || e?.code === "permission-denied") ? "You don't have permission to share to that team." : (e?.message || "Couldn't save — try again."));
+    }
+  };
+  const busy = progress !== null;
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={busy ? undefined : onClose}>
+      <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-base text-slate-900">{editing ? "Edit document" : "Share a document"}</h3>
+          <button onClick={onClose} disabled={busy} aria-label="Close" className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        {!editing && (
+          <div className="grid grid-cols-2 gap-1 bg-slate-100 rounded-full p-1">
+            {[["file", "Upload a file"], ["link", "Share a link"]].map(([k, label]) => (
+              <button key={k} onClick={() => setKind(k)} className={`py-1.5 rounded-full text-xs font-bold ${kind === k ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`}>{label}</button>
+            ))}
+          </div>
+        )}
+        {!editing && kind === "file" && (
+          <label className="block border border-dashed border-slate-300 rounded-xl px-3 py-4 text-center cursor-pointer">
+            <input type="file" accept={DOC_ACCEPT} className="hidden" onChange={(e) => { const f = e.target.files?.[0] || null; setFile(f); if (f && !title.trim()) setTitle(f.name.replace(/\.[^.]+$/, "")); }} />
+            {file ? <span className="text-sm font-semibold text-slate-800">{file.name} <span className="text-slate-400 font-normal">· {fileSizeLabel(file.size)}</span></span>
+              : <span className="text-sm text-slate-500"><Paperclip className="w-4 h-4 inline mr-1" />PDF, Word, PowerPoint, Excel, images… up to 50 MB</span>}
+          </label>
+        )}
+        {kind === "link" && (
+          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://drive.google.com/…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        )}
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (e.g. Set-piece playbook)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        <div>
+          <input value={folder} onChange={(e) => setFolder(e.target.value)} list="library-folders" placeholder="Folder (pick or type a new one)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          <datalist id="library-folders">{folders.map((f) => <option key={f} value={f} />)}</datalist>
+        </div>
+        <AutoGrowTextarea value={desc} onChange={(e) => setDesc(e.target.value)} minRows={2} placeholder="Short note for the team (optional)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        {!editing && (
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Share with</span>
+            <div className="grid grid-cols-2 gap-1 bg-slate-100 rounded-full p-1">
+              {[["all", "All teams"], [activeTeamId, `${getTeamShortName(activeTeamId)} only`]].map(([k, label]) => (
+                <button key={k} onClick={() => setScope(k)} className={`py-1.5 rounded-full text-xs font-bold ${scope === k ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`}>{label}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {!editing && (
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} /> Notify players
+          </label>
+        )}
+        {err && <p className="text-xs text-red-600">{err}</p>}
+        {busy && kind === "file" && !editing && (
+          <div className="h-2 rounded-full bg-slate-100 overflow-hidden"><div className="h-full transition-all" style={{ width: `${progress}%`, backgroundColor: COLORS.success }} /></div>
+        )}
+        <button onClick={submit} disabled={busy} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>
+          {busy ? (kind === "file" && !editing ? `Uploading… ${progress}%` : "Saving…") : editing ? "Save changes" : "Share"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export const LibraryPage = ({ user, items = [], activeTeamId, addItem, updateItem, deleteItem }) => {
+  const isAdmin = user.role === "admin";
+  const [folder, setFolder] = useState("All");
+  const [q, setQ] = useState("");
+  const [form, setForm] = useState(null); // null | {} (new) | item (edit)
+  const usedFolders = [...new Set(items.map((i) => i.folder).filter(Boolean))];
+  const folders = [...new Set([...usedFolders, ...LIBRARY_FOLDERS])];
+  const pills = ["All", ...usedFolders.sort((a, b) => a.localeCompare(b))];
+  const activeFolder = pills.includes(folder) ? folder : "All";
+  const needle = q.trim().toLowerCase();
+  const shown = items.filter((i) => (activeFolder === "All" || i.folder === activeFolder)
+    && (!needle || [i.title, i.desc, i.folder, i.name].some((v) => (v || "").toLowerCase().includes(needle))));
+  const fmtDate = (ts) => (ts?.toDate ? ts.toDate().toLocaleDateString([], { month: "short", day: "numeric" }) : "");
+  const remove = (i) => {
+    if (!confirm(`Delete "${i.title}"? ${i.teamId === "all" ? "All three teams" : "The team"} will lose it.`)) return;
+    Promise.resolve(deleteItem(i.id)).catch(reportError("Couldn't delete the document"));
+  };
+  return (
+    <div className="px-5 pt-3 pb-6 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-base font-bold text-slate-900">Documents</h3>
+          <p className="text-xs text-slate-500">Playbooks, scouting, forms and plans from your coaches</p>
+        </div>
+        {isAdmin && <button onClick={() => setForm({})} className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full text-white flex items-center gap-1 flex-shrink-0" style={{ backgroundColor: COLORS.primary }}><Plus className="w-3 h-3" /> Share</button>}
+      </div>
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search documents…" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white" />
+      {pills.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto -mx-5 px-5 pb-1">
+          {pills.map((f) => (
+            <button key={f} onClick={() => setFolder(f)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold" style={{ backgroundColor: activeFolder === f ? COLORS.primary : "white", color: activeFolder === f ? "#fff" : COLORS.textSecondary, border: `1px solid ${activeFolder === f ? COLORS.primary : COLORS.border}` }}>{f}</button>
+          ))}
+        </div>
+      )}
+      {isLoading(items) ? <p className="text-sm text-slate-400 text-center py-8">Loading documents…</p>
+        : shown.length === 0 ? (
+          <div className="text-center py-10 text-slate-400">
+            <FileText className="w-8 h-8 mx-auto mb-2" />
+            <p className="text-sm">{items.length ? "No documents match." : isAdmin ? "Nothing shared yet. Tap Share to add a playbook, form or link." : "Nothing shared yet."}</p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {shown.map((i) => {
+              const isLink = i.kind === "link";
+              const isImg = !isLink && (i.fileType || "").startsWith("image/");
+              return (
+                <li key={i.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 flex items-center gap-3">
+                  {isImg ? <img src={i.url} alt="" loading="lazy" className="w-11 h-11 rounded-xl object-cover flex-shrink-0" />
+                    : <div className="w-11 h-11 rounded-xl flex flex-col items-center justify-center flex-shrink-0 gap-0.5" style={{ backgroundColor: COLORS.accentSoft }}>
+                      {isLink ? <LinkIcon className="w-4 h-4" style={{ color: COLORS.accent }} /> : <FileText className="w-4 h-4" style={{ color: COLORS.accent }} />}
+                      <span className="text-[7px] font-black leading-none" style={{ color: COLORS.accent }}>{isLink ? "LINK" : docTypeLabel(i)}</span>
+                    </div>}
+                  <a href={i.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 truncate">{i.title}</div>
+                    <div className="text-[10px] text-slate-500 truncate">
+                      {[i.folder, i.teamId === "all" ? "All teams" : getTeamShortName(i.teamId), fileSizeLabel(i.size), fmtDate(i.createdAt)].filter(Boolean).join(" · ")}
+                    </div>
+                    {i.desc && <div className="text-[11px] text-slate-600 line-clamp-2 mt-0.5">{i.desc}</div>}
+                  </a>
+                  <a href={i.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${i.title}`} className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.bg, color: COLORS.primary }}>
+                    {isLink ? <ExternalLink className="w-4 h-4" /> : <Download className="w-4 h-4" />}
+                  </a>
+                  {isAdmin && (
+                    <div className="flex flex-col gap-1 flex-shrink-0">
+                      <button onClick={() => setForm(i)} aria-label={`Edit ${i.title}`} className="text-slate-300 hover:text-slate-600"><Pencil className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => remove(i)} aria-label={`Delete ${i.title}`} className="text-slate-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      {form && (
+        <LibraryItemForm initial={form} activeTeamId={activeTeamId} folders={folders}
+          onSave={(data, onProgress) => (form.id ? updateItem(form.id, { title: data.title, folder: data.folder, desc: data.desc, ...(form.kind === "link" ? { url: data.url } : {}) }) : addItem(data, onProgress))}
+          onClose={() => setForm(null)} />
+      )}
+    </div>
+  );
+};
+
 const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVideos, videoFolders = [], addVideoFolder, renameVideoFolder, deleteVideoFolder }) => {
-  const [cat, setCat] = useState("Film");
+  const [catPref, setCat] = useState("Film");
   const [adding, setAdding] = useState(false);
   const [editingVideoId, setEditingVideoId] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -2371,7 +2751,9 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
     return out;
   }, [customCats]);
   // If the open folder was deleted elsewhere, fall back to the first folder.
-  useEffect(() => { if (!effectiveCats.includes(cat) && effectiveCats.length) setCat(effectiveCats[0]); }, [effectiveCats, cat]);
+  // If the open folder was deleted elsewhere, fall back to the first folder
+  // (derived during render — no state-syncing effect).
+  const cat = effectiveCats.includes(catPref) ? catPref : (effectiveCats[0] || catPref);
 
   // Subfolders in the open folder: coach-created ones plus any typed on a
   // video already (so old videos keep their subfolder pills).
@@ -2470,8 +2852,10 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
     // same as recipe categories on import.
     const newCats = [...new Set(rows.map((r) => r.cat))].filter((c) => c && !effectiveCats.some((e) => e.toLowerCase() === c.toLowerCase()));
     try {
-      for (const c of newCats) await addVideoFolder(c, null);
+      // Import the videos first; only then create any new folders, so a failed
+      // import never leaves empty folders behind.
       await importVideos(rows);
+      for (const c of newCats) await addVideoFolder(c, null);
       setImportMsg(`Imported ${rows.length} video${rows.length === 1 ? "" : "s"}${newCats.length ? `, added ${newCats.length} new folder${newCats.length === 1 ? "" : "s"}` : ""}.`);
       setCsvText("");
     } catch (e) {
@@ -2492,7 +2876,10 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
       toast("Couldn't save video — " + (e.message || "check Firestore rules."));
     }
   };
-  const del = (id) => deleteVideo(id).catch(() => {});
+  const del = (id) => {
+    if (!confirm("Delete this video from the library? All three teams will lose it.")) return;
+    deleteVideo(id).catch(reportError("Couldn't delete the video"));
+  };
 
   return (
     <div className="pt-5 pb-4 space-y-5">
@@ -2652,6 +3039,7 @@ const VideoModal = ({ item, onClose }) => {
                 title={item.title}
                 className="w-full h-full"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                sandbox={EMBED_SANDBOX}
                 allowFullScreen
               />
             </div>
@@ -2672,15 +3060,15 @@ const VideoModal = ({ item, onClose }) => {
 };
 
 /* ─── NUTRITION (log presets + custom food + post-meal rating) ─── */
+const HeroBar = ({ value, target, color }) => {
+  const pct = Math.min(100, target ? (value / target) * 100 : 0);
+  return (
+    <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(255,255,255,0.18)" }}>
+      <div className="h-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+    </div>
+  );
+};
 const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups }) => {
-  const Bar = ({ value, target, color }) => {
-    const pct = Math.min(100, target ? (value / target) * 100 : 0);
-    return (
-      <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(255,255,255,0.18)" }}>
-        <div className="h-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
-      </div>
-    );
-  };
   const waterDots = Array.from({ length: WATER_CUPS_GOAL }, (_, i) => i < waterCups);
   return (
     <div className="rounded-2xl p-4 text-white shadow-md" style={{ background: `linear-gradient(135deg, ${COLORS.primary}, #6E0000)` }}>
@@ -2701,7 +3089,7 @@ const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups }) => {
             </div>
             {goal?.cal > 0 && <span className="text-[10px] font-semibold opacity-70">{Math.round((totals.cal / goal.cal) * 100)}%</span>}
           </div>
-          {goal?.cal > 0 && <Bar value={totals.cal} target={goal.cal} color={COLORS.accent} />}
+          {goal?.cal > 0 && <HeroBar value={totals.cal} target={goal.cal} color={COLORS.accent} />}
         </div>
         <div>
           <div className="flex items-baseline justify-between mb-1">
@@ -2711,7 +3099,7 @@ const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups }) => {
             </div>
             {goal?.protein > 0 && <span className="text-[10px] font-semibold opacity-70">{Math.round((totals.p / goal.protein) * 100)}%</span>}
           </div>
-          {goal?.protein > 0 && <Bar value={totals.p} target={goal.protein} color={COLORS.success} />}
+          {goal?.protein > 0 && <HeroBar value={totals.p} target={goal.protein} color={COLORS.success} />}
         </div>
         <div className="grid grid-cols-2 gap-2 pt-1">
           <div className="rounded-xl px-3 py-2" style={{ backgroundColor: "rgba(255,255,255,0.10)" }}>
@@ -2753,7 +3141,7 @@ const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups }) => {
 // iPhone photos are HEIC by default, and the Image/canvas path can reject
 // on them, so try the bitmap decoder first (it handles HEIC on iOS and
 // respects the photo's orientation), then fall back to the Image path.
-const downscaleToBlob = (file, maxDim = 1600, quality = 0.86) =>
+const downscaleToBlob = (file, maxDim = 1600, quality = 0.86, type = "image/jpeg") =>
   new Promise((resolve, reject) => {
     let triedImage = false;
     const drawToBlob = (source, w, h, onFail) => {
@@ -2768,7 +3156,7 @@ const downscaleToBlob = (file, maxDim = 1600, quality = 0.86) =>
           if (blob) resolve(blob);
           else if (onFail) onFail();
           else reject(new Error("Could not shrink image"));
-        }, "image/jpeg", quality);
+        }, type, quality);
       } catch (e) {
         if (onFail) onFail();
         else reject(e);
@@ -2800,7 +3188,7 @@ const downscaleToBlob = (file, maxDim = 1600, quality = 0.86) =>
 // snapshot and the Storage path.
 const uploadFacePhoto = async (pathBase, file, maxDim = 640, quality = 0.85) => {
   let blob = null;
-  try { blob = await downscaleToBlob(file, maxDim, quality); } catch (e) { blob = null; }
+  try { blob = await downscaleToBlob(file, maxDim, quality); } catch { /* fall back to the original file */ }
   if (blob) {
     const path = `${pathBase}.jpg`;
     const snap = await uploadBytes(storageRef(storage, path), blob, { contentType: "image/jpeg" });
@@ -2841,12 +3229,6 @@ const PhotoCarousel = ({ photos = [], className = "" }) => {
     </div>
   );
 };
-
-const DrillChip = ({ icon: Icon, children }) => (
-  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 rounded-full px-2.5 py-1">
-    <Icon className="w-3 h-3" style={{ color: COLORS.accent }} /> {children}
-  </span>
-);
 
 // Uniform drill diagram: Brophy logo watermark at exactly 20% opacity behind the
 // drill's diagram photo (or behind the category icon tile when no diagram yet).
@@ -2996,7 +3378,7 @@ export const DrillModal = ({ item, onClose }) => {
           {item.photos?.length > 0 && <PhotoCarousel photos={item.photos} />}
           {embedUrl && (
             <div className="aspect-video rounded-2xl bg-slate-900 overflow-hidden">
-              <iframe src={embedUrl} title={title} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+              <iframe src={embedUrl} title={title} className="w-full h-full" sandbox={EMBED_SANDBOX} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
             </div>
           )}
           {item.tags?.length > 0 && (
@@ -3150,7 +3532,10 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
     try { await addDrill(copy); toast("Duplicated — edit the copy for the progression."); }
     catch (e) { toast("Couldn't duplicate — " + (e.message || "check Firestore rules.")); }
   };
-  const del = (id) => deleteDrill(id).catch(() => {});
+  const del = (id) => {
+    if (!confirm("Delete this drill from the shared library? Practices that use it will show it as missing.")) return;
+    deleteDrill(id).catch(reportError("Couldn't delete the drill (only its creator or the program admin can)"));
+  };
 
   return (
     <div className="pt-1 pb-4 space-y-5">
@@ -3217,10 +3602,10 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
               <label className="text-[11px] font-semibold text-slate-600">Mannequins<input type="number" min={0} value={form.setupMannequins} onChange={(e) => setForm({ ...form, setupMannequins: e.target.value })} placeholder="0" className="w-full mt-0.5 border border-slate-200 rounded-lg px-2 py-2 text-xs text-center" /></label>
             </div>
           </div>
-          <textarea value={form.howTo} onChange={(e) => setForm({ ...form, howTo: e.target.value })} rows={3} placeholder="How to run it — instructions" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={form.objectives} onChange={(e) => setForm({ ...form, objectives: e.target.value })} rows={2} placeholder="Look for — one goal per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} rows={2} placeholder="Description" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={form.info} onChange={(e) => setForm({ ...form, info: e.target.value })} rows={2} placeholder="How to run it" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <AutoGrowTextarea value={form.howTo} onChange={(e) => setForm({ ...form, howTo: e.target.value })} minRows={3} placeholder="How to run it — instructions" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <AutoGrowTextarea value={form.objectives} onChange={(e) => setForm({ ...form, objectives: e.target.value })} minRows={2} placeholder="Look for — one goal per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <AutoGrowTextarea value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} minRows={2} placeholder="Description" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <AutoGrowTextarea value={form.info} onChange={(e) => setForm({ ...form, info: e.target.value })} minRows={2} placeholder="How to run it" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <input value={form.videoUrl} onChange={(e) => setForm({ ...form, videoUrl: e.target.value })} placeholder="Video URL (optional)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
 
           {/* Photo carousel uploads */}
@@ -3384,7 +3769,7 @@ const DrillPicker = ({ drills, onPick, onClose }) => {
   const [search, setSearch] = useState("");
   const q = search.trim().toLowerCase();
   const cats = useMemo(() => [...new Set(drills.map((d) => d.cat).filter(Boolean))], [drills]);
-  const hits = q ? drills.filter((d) => d.name.toLowerCase().includes(q) || (d.tags || []).some((t) => t.toLowerCase().includes(q))) : null;
+  const hits = q ? drills.filter((d) => (d.kind || "drill") === "drill" && ((d.name || d.title || "").toLowerCase().includes(q) || (d.tags || []).some((t) => String(t).toLowerCase().includes(q)))) : null;
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
       <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[85vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -3456,6 +3841,7 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
   const [published, setPublished] = useState(!!practice.published);
   const [targetMin, setTargetMin] = useState(practice.targetMin || 90);
   const [dirty, setDirty] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
   const [picker, setPicker] = useState(false);
   const [pickForBlock, setPickForBlock] = useState(null);
   const [viewDrill, setViewDrill] = useState(null);
@@ -3468,12 +3854,17 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
 
   useEffect(() => {
     if (!dirty || !canEdit) return;
-    const t = setTimeout(() => { onSave({ name, desc, cat, blocks, published, targetMin }); setDirty(false); }, 700);
+    // A failed save shows an error and stays "unsaved" (the next edit or
+    // Back retries) instead of silently dropping the change.
+    const t = setTimeout(() => {
+      setDirty(false);
+      Promise.resolve(onSave({ name, desc, cat, blocks, published, targetMin })).then(() => setSaveErr(""), (e) => { setSaveErr("Not saved — check your connection, then edit again to retry."); reportError("Couldn't save the practice")(e); });
+    }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, desc, cat, blocks, published, targetMin, dirty]);
 
-  const handleBack = () => { if (dirty && canEdit) onSave({ name, desc, cat, blocks, published, targetMin }); onBack(); };
+  const handleBack = () => { if (dirty && canEdit) Promise.resolve(onSave({ name, desc, cat, blocks, published, targetMin })).catch(reportError("Couldn't save the practice")); onBack(); };
   const setBlock = (i, field, value) => { setBlocks(blocks.map((b, j) => (j === i ? { ...b, [field]: value } : b))); setDirty(true); };
   const removeBlock = (i) => { setBlocks(blocks.filter((_, j) => j !== i)); setDirty(true); };
   const moveBlock = (i, dir) => { const j = i + dir; if (j < 0 || j >= blocks.length) return; const n = [...blocks]; [n[i], n[j]] = [n[j], n[i]]; setBlocks(n); setDirty(true); };
@@ -3586,6 +3977,7 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
         </>
       )}
       {dirty && canEdit && <p className="text-[10px] text-slate-400 text-center">Saving…</p>}
+      {!dirty && saveErr && <p className="text-[10px] text-red-500 font-semibold text-center">{saveErr}</p>}
       {picker && <DrillPicker drills={drills} onPick={addBlock} onClose={() => setPicker(false)} />}
       {pickForBlock !== null && <DrillPicker drills={drills} onPick={(d) => fillBlock(pickForBlock, d)} onClose={() => setPickForBlock(null)} />}
       {viewDrill && <DrillModal item={viewDrill} onClose={() => setViewDrill(null)} />}
@@ -3604,7 +3996,7 @@ const PracticesView = ({ practices, drills, canEdit, add, update, del, initialOp
   const catOptions = useMemo(() => [...new Set(practices.map((p) => p.cat).filter(Boolean))].sort(), [practices]);
   const cats = ["All", ...catOptions];
   const open = practices.find((p) => p.id === openId);
-  if (open) return <PracticeDetail practice={open} drills={drills} canEdit={canEdit} catOptions={catOptions} onSave={(d) => update(open.id, d)} onDelete={async () => { await del(open.id); setOpenId(null); }} onBack={() => setOpenId(null)} />;
+  if (open) return <PracticeDetail key={open.id} practice={open} drills={drills} canEdit={canEdit} catOptions={catOptions} onSave={(d) => update(open.id, d)} onDelete={async () => { await del(open.id); setOpenId(null); }} onBack={() => setOpenId(null)} />;
   const create = async () => {
     if (!newName.trim()) return;
     try { const ref = await add(newName); setNewName(""); setCreating(false); if (ref?.id) setOpenId(ref.id); }
@@ -3697,16 +4089,22 @@ const ProgramDetail = ({ program, practices, canEdit, onSave, onDelete, onBack, 
   const [published, setPublished] = useState(!!program.published);
   const [shared, setShared] = useState(!!program.shared);
   const [dirty, setDirty] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
   const [pickFor, setPickFor] = useState(null); // index of day choosing a practice
 
   useEffect(() => {
     if (!dirty || !canEdit) return;
-    const t = setTimeout(() => { onSave({ name, desc, days, published, shared }); setDirty(false); }, 700);
+    // A failed save shows an error and stays "unsaved" (the next edit or
+    // Back retries) instead of silently dropping the change.
+    const t = setTimeout(() => {
+      setDirty(false);
+      Promise.resolve(onSave({ name, desc, days, published, shared })).then(() => setSaveErr(""), (e) => { setSaveErr("Not saved — check your connection, then edit again to retry."); reportError("Couldn't save the program")(e); });
+    }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, desc, days, published, shared, dirty]);
 
-  const handleBack = () => { if (dirty && canEdit) onSave({ name, desc, days, published, shared }); onBack(); };
+  const handleBack = () => { if (dirty && canEdit) Promise.resolve(onSave({ name, desc, days, published, shared })).catch(reportError("Couldn't save the program")); onBack(); };
   const addDay = () => { setDays([...days, { label: `Day ${days.length + 1}`, practiceId: "", note: "" }]); setDirty(true); };
   const setDay = (i, field, value) => { setDays(days.map((d, j) => (j === i ? { ...d, [field]: value } : d))); setDirty(true); };
   const removeDay = (i) => { setDays(days.filter((_, j) => j !== i)); setDirty(true); };
@@ -3769,7 +4167,7 @@ const ProgramDetail = ({ program, practices, canEdit, onSave, onDelete, onBack, 
         <>
           <button onClick={addDay} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200 text-slate-700 bg-white"><Plus className="w-3.5 h-3.5" /> Add day</button>
           <button onClick={() => onAssign({ ...program, name, days })} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 text-white" style={{ backgroundColor: COLORS.accent, color: "#fff" }}><CalendarIcon className="w-3.5 h-3.5" /> Assign to calendar</button>
-          {user?.role === "orgAdmin" && (
+          {user?.isOrgAdmin && (
             <label className="flex items-center justify-between bg-white rounded-2xl px-4 py-3 shadow-sm border border-slate-100">
               <span className="text-sm font-semibold text-slate-700">Shared curriculum <span className="block text-[11px] font-normal text-slate-500">All coaches can follow this program</span></span>
               <button onClick={() => { setShared(!shared); setDirty(true); }} aria-label="Toggle shared curriculum" className="w-11 h-6 rounded-full transition-colors relative bg-slate-200" style={shared ? { backgroundColor: COLORS.success } : {}}><span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${shared ? "left-[22px]" : "left-0.5"}`} /></button>
@@ -3783,6 +4181,7 @@ const ProgramDetail = ({ program, practices, canEdit, onSave, onDelete, onBack, 
         </>
       )}
       {dirty && canEdit && <p className="text-[10px] text-slate-400 text-center">Saving…</p>}
+      {!dirty && saveErr && <p className="text-[10px] text-red-500 font-semibold text-center">{saveErr}</p>}
       {pickFor !== null && <PracticePicker practices={practices} onPick={(p) => { setDay(pickFor, "practiceId", p.id); setPickFor(null); }} onClose={() => setPickFor(null)} />}
     </div>
   );
@@ -3795,7 +4194,7 @@ const ProgramsView = ({ programs, practices, canEdit, add, update, del, onAssign
   const open = programs.find((p) => p.id === openId);
   const sharedPrograms = programs.filter((p) => p.shared);
   const myPrograms = programs.filter((p) => !p.shared);
-  if (open) return <ProgramDetail program={open} practices={practices} canEdit={canEdit} onSave={(d) => update(open.id, d)} onDelete={async () => { await del(open.id); setOpenId(null); }} onBack={() => setOpenId(null)} onAssign={onAssign} user={user} />;
+  if (open) return <ProgramDetail key={open.id} program={open} practices={practices} canEdit={canEdit} onSave={(d) => update(open.id, d)} onDelete={async () => { await del(open.id); setOpenId(null); }} onBack={() => setOpenId(null)} onAssign={onAssign} user={user} />;
   const create = async () => {
     if (!newName.trim()) return;
     try { const ref = await add(newName); setNewName(""); setCreating(false); if (ref?.id) setOpenId(ref.id); }
@@ -3908,10 +4307,13 @@ const NewPracticeChooser = ({ practices, onCreate }) => (
 // each day (no fixed drop time), so other coaches can see what is scheduled
 // and what they need to run.
 const AssignProgramModal = ({ program, practices, importEvents, onClose }) => {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = teamDateKey();
   const [days, setDays] = useState(() =>
     (program.days || []).map((d, i) => {
-      const dt = new Date(todayStr + "T00:00:00"); dt.setDate(dt.getDate() + i);
+      // Calendar-day arithmetic on the date string (UTC noon avoids any
+      // timezone rollover), so day N is exactly N days after today.
+      const [y, m, dd] = todayStr.split("-").map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, dd + i, 12));
       return { date: dt.toISOString().slice(0, 10), start: "15:00", end: "17:00" };
     })
   );
@@ -3974,7 +4376,7 @@ const PracticePage = ({ user, drills, addDrill, updateDrill, deleteDrill, practi
   const home = () => setNav({ section: "home", mode: null, openId: null });
 
   // Today's session is whichever assigned-program event lands on today.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = teamDateKey();
   const todayEvent = events.find((e) => e.date === today && e.practiceId);
   const todayPractice = todayEvent && practices.find((p) => p.id === todayEvent.practiceId);
 
@@ -4279,10 +4681,10 @@ const SendLineupSheet = ({ title, formation, slots, logoUrl, teamShortName = "",
 
 // Player picker sheet — assign a roster player to the active slot, and (coach)
 // upload a photo for any player who has an account.
-const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onUploadPhoto, onClose, photoErr = "" }) => {
+// Players set their own face photo (Settings / Home); coaches can't change
+// it (decision 2026-11-21 — these are minors).
+const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onClose }) => {
   const [q, setQ] = useState("");
-  const uploadRef = useRef(null);
-  const [target, setTarget] = useState(null);
   const list = roster.filter((p) => (p.name || p.email || "").toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
@@ -4293,9 +4695,7 @@ const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onUploadPhoto, o
         </div>
         <div className="p-4 space-y-2">
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search roster…" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
-          {photoErr && <p className="text-xs text-red-600 leading-snug px-1">{photoErr}</p>}
           <button onClick={onClear} className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-red-500 bg-red-50">Clear this position</button>
-          <input ref={uploadRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (target) onUploadPhoto(target, f); setTarget(null); }} />
           {list.length === 0 && <p className="text-sm text-slate-400 italic text-center py-4">No players found.</p>}
           {list.map((p) => (
             <div key={p.uid || p.email} className={`flex items-center gap-3 px-2 py-2 rounded-xl ${usedUids.has(p.uid) && p.uid ? "opacity-40" : ""}`}>
@@ -4306,11 +4706,6 @@ const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onUploadPhoto, o
                   {p.role === "admin" && <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Coach</div>}
                 </div>
               </button>
-              {p.uid && (
-                <button onClick={() => { setTarget(p); uploadRef.current?.click(); }} aria-label={`Add photo for ${p.name}`} title="Add / change photo" className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-slate-500 bg-slate-100">
-                  <Camera className="w-4 h-4" />
-                </button>
-              )}
             </div>
           ))}
         </div>
@@ -4319,12 +4714,11 @@ const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onUploadPhoto, o
   );
 };
 
-const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup, allUsers = [], invites = [], chatGroups = [], postLineupImage, setPlayerPhoto, lineupLogo = "", setLineupLogo, teamShortName = "" }) => {
+const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup, allUsers = [], invites = [], chatGroups = [], postLineupImage, lineupLogo = "", setLineupLogo, teamShortName = "" }) => {
   const [draft, setDraft] = useState(null); // null = list view; object = editor
   const [activeSlot, setActiveSlot] = useState(null); // slot id being assigned
   const [sending, setSending] = useState(null); // lineup being sent to chat
   const [logoBusy, setLogoBusy] = useState(false);
-  const [photoErr, setPhotoErr] = useState("");
   const logoInputRef = useRef(null);
   const fieldRef = useRef(null);
   const dragRef = useRef({ id: null, moved: false, sx: 0, sy: 0 });
@@ -4336,9 +4730,11 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
     if (!file) return;
     setLogoBusy(true);
     try {
-      const blob = await downscaleToBlob(file, 512, 0.9);
-      const path = `branding/${user.uid}/lineup-logo-${Date.now()}.jpg`;
-      const snap = await uploadBytes(storageRef(storage, path), blob, { contentType: "image/jpeg" });
+      // PNG keeps the logo's transparency on the line-up card (JPEG would
+      // paint a black box behind it).
+      const blob = await downscaleToBlob(file, 512, 0.9, "image/png");
+      const path = `branding/${user.uid}/lineup-logo-${uploadStamp()}.png`;
+      const snap = await uploadBytes(storageRef(storage, path), blob, { contentType: "image/png" });
       const url = await getDownloadURL(snap.ref);
       await setLineupLogo(url, path);
       toast("Line-up logo updated.");
@@ -4365,7 +4761,11 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
 
   const newLineup = () => setDraft({ id: null, name: "", formation: "4-3-3", slots: slotsForFormation(FORMATIONS["4-3-3"]) });
   const editLineup = (l) => setDraft({ id: l.id, name: l.name || "", formation: l.formation || "", slots: (l.slots || []).map((s) => ({ ...s, id: s.id || lid() })) });
-  const changeFormation = (f) => setDraft((d) => ({ ...d, formation: f, slots: slotsForFormation(FORMATIONS[f]) }));
+  const changeFormation = (f) => {
+    const placed = (draft?.slots || []).filter((s) => s.uid || s.email || s.name).length;
+    if (placed && !confirm(`Switch to ${f}? The ${placed} player${placed === 1 ? "" : "s"} you placed will be cleared.`)) return;
+    setDraft((d) => ({ ...d, formation: f, slots: slotsForFormation(FORMATIONS[f]) }));
+  };
 
   const assignPlayer = (player) => {
     setDraft((d) => ({
@@ -4381,21 +4781,6 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
   const clearSlot = () => {
     setDraft((d) => ({ ...d, slots: d.slots.map((s) => (s.id === activeSlot ? { ...s, uid: "", name: "", initials: "", photoURL: "" } : s)) }));
     setActiveSlot(null);
-  };
-  const uploadForPlayer = async (player, file) => {
-    if (!file || !player.uid) return;
-    setPhotoErr("");
-    try {
-      const { snap, path } = await uploadFacePhoto(`avatars/${user.uid}/${Date.now()}`, file, 640, 0.85);
-      const url = await getDownloadURL(snap.ref);
-      await setPlayerPhoto(player.uid, url, path);
-      setDraft((d) => (d ? { ...d, slots: d.slots.map((s) => (s.uid === player.uid ? { ...s, photoURL: url } : s)) } : d));
-      toast(`Photo added for ${player.name}.`);
-    } catch (e) {
-      const msg = "Couldn't add photo. " + (e.message || "Try again.");
-      toast(msg);
-      setPhotoErr(msg);
-    }
   };
 
   // Drag tokens; a tap (no drag) opens the picker.
@@ -4470,7 +4855,7 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
                   </div>
                   <button onClick={() => setSending(l)} aria-label="Send to chat" className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.primary }}><Send className="w-4 h-4" /></button>
                   <button onClick={() => editLineup(l)} aria-label="Edit" className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0"><Pencil className="w-4 h-4 text-slate-500" /></button>
-                  <button onClick={() => { if (window.confirm(`Delete "${l.name || "this line-up"}"?`)) deleteLineup(l.id); }} aria-label="Delete" className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0"><Trash2 className="w-4 h-4 text-slate-400" /></button>
+                  <button onClick={() => { if (window.confirm(`Delete "${l.name || "this line-up"}"?`)) Promise.resolve(deleteLineup(l.id)).catch(reportError("Couldn't delete the line-up")); }} aria-label="Delete" className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0"><Trash2 className="w-4 h-4 text-slate-400" /></button>
                 </div>
               );
             })}
@@ -4537,9 +4922,7 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
           usedUids={usedUids}
           onPick={assignPlayer}
           onClear={clearSlot}
-          onUploadPhoto={uploadForPlayer}
-          photoErr={photoErr}
-          onClose={() => { setActiveSlot(null); setPhotoErr(""); }}
+          onClose={() => setActiveSlot(null)}
         />
       )}
       {sending && <SendLineupSheet title={sending.name} formation={sending.formation} slots={sending.slots} logoUrl={logoUrl} teamShortName={teamShortName} chatGroups={chatGroups} postLineupImage={postLineupImage} onClose={() => setSending(null)} />}
@@ -4551,7 +4934,7 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
 // (§9 Option B, "The Toolbelt"). Same invite system as before: email
 // invites (single + bulk), team-specific invite links, and the roster list
 // with org-admin-only role badges.
-const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks = [], addInviteLink, removeInviteLink, allUsers = [], requestProfileUpdate, activeTeamId }) => {
+const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks = [], addInviteLink, removeInviteLink, allUsers = [], removeUser, requestProfileUpdate, activeTeamId }) => {
   const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email, u.name])), [allUsers]);
   // Teams this coach can invite/link to: the org admin sees all three, a
   // team coach sees only their own team(s).
@@ -4828,7 +5211,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
                     <span className="text-[10px] text-slate-400 ml-1.5">{l.uses || 0}{l.maxUses != null ? `/${l.maxUses}` : ""} uses · expires {l._expiryLabel}</span>
                   </span>
                   <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={status === "Active" ? { backgroundColor: COLORS.success + "1A", color: COLORS.success } : { backgroundColor: "#fee2e2", color: "#dc2626" }}>{status}</span>
-                  <button onClick={() => removeInviteLink(l.id).catch(() => {})} title="Revoke link" aria-label="Revoke link" className="text-slate-300 hover:text-red-500 flex-shrink-0">
+                  <button onClick={() => { if (confirm("Revoke this invite link? Anyone who hasn't joined yet won't be able to use it.")) removeInviteLink(l.id).catch(reportError("Couldn't revoke the link")); }} title="Revoke link" aria-label="Revoke link" className="text-slate-300 hover:text-red-500 flex-shrink-0">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </li>
@@ -4887,7 +5270,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
                     {isCoach ? "Coach" : "Player"}
                   </span>
                 )}
-                <button onClick={() => removeInvite(inv.id)} disabled={isSelf} title={isSelf ? "You can't remove yourself." : `Remove ${inv.email}`} aria-label={`Remove ${inv.email}`} className="text-slate-300 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                <button onClick={() => { if (confirm(`Remove ${inv.email} from the roster? They won't be able to sign up with this invite.`)) Promise.resolve(removeInvite(inv.id)).catch(reportError("Couldn't remove the invite")); }} disabled={isSelf} title={isSelf ? "You can't remove yourself." : `Remove ${inv.email}`} aria-label={`Remove ${inv.email}`} className="text-slate-300 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </li>
@@ -4895,9 +5278,8 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
           })}
           {/* Players who joined through an invite link: they have a users
               doc but no invitedEmails entry, so they are listed here with a
-              "Via link" tag. No role toggle and no remove button: they were
-              never invited by email, so there is no invite to change or
-              delete. */}
+              "Via link" tag. Only the program admin can remove one (deletes
+              their profile — firestore.rules users delete). */}
           {linkJoiners.map((u, j) => {
             const isCoach = u.role === "admin";
             const displayName = (u.name || "").trim();
@@ -4912,6 +5294,11 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
                 <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={isCoach ? { backgroundColor: COLORS.primary, color: "white" } : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}>
                   {isCoach ? "Coach" : "Player"}
                 </span>
+                {isOrgAdmin && removeUser && u.id !== user.uid && (
+                  <button onClick={() => { if (confirm(`Remove ${displayName || u.email} from the team? They'll lose access until invited again.`)) Promise.resolve(removeUser(u.id)).catch(reportError("Couldn't remove the player")); }} aria-label={`Remove ${displayName || u.email}`} className="text-slate-300 hover:text-red-500">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </li>
             );
           })}
@@ -4953,8 +5340,11 @@ const AnnouncementsPage = ({ announcements, addAnnouncement, updateAnnouncement,
     setForm({ title: "", body: "" });
     setAdding(false);
   };
-  const togglePin = (id, pinned) => togglePinAnnouncement(id, pinned).catch(() => {});
-  const del = (id) => deleteAnnouncement(id).catch(() => {});
+  const togglePin = (id, pinned) => togglePinAnnouncement(id, pinned).catch(reportError("Couldn't pin the announcement"));
+  const del = (id) => {
+    if (!confirm("Delete this announcement?")) return;
+    deleteAnnouncement(id).catch(reportError("Couldn't delete the announcement"));
+  };
   const sorted = [...announcements].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
   return (
@@ -4964,12 +5354,12 @@ const AnnouncementsPage = ({ announcements, addAnnouncement, updateAnnouncement,
           <h3 className="text-base font-bold text-slate-900">Announcements</h3>
           <p className="text-xs text-slate-500 mt-0.5">{announcements.length} post{announcements.length === 1 ? "" : "s"} · pinned first</p>
         </div>
-        <button onClick={() => { setAdding(!adding); }} className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full text-white flex items-center gap-1 flex-shrink-0" style={{ backgroundColor: COLORS.primary }}><Plus className="w-3 h-3" /> Post</button>
+        <button onClick={() => { setEditingAnnouncementId(null); setForm({ title: "", body: "" }); setAdding(!adding); }} className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full text-white flex items-center gap-1 flex-shrink-0" style={{ backgroundColor: COLORS.primary }}><Plus className="w-3 h-3" /> Post</button>
       </div>
       {adding && (
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2">
           <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Announcement title" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-          <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="Details…" rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <AutoGrowTextarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="Details…" minRows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
           <div className="flex gap-2"><button onClick={cancelEdit} className="flex-1 py-2 rounded-full bg-slate-100 text-xs font-bold text-slate-600">Cancel</button><button onClick={add} className="flex-1 py-2 rounded-full text-xs font-bold text-white" style={{ backgroundColor: COLORS.primary }}>{editingAnnouncementId ? "Save Changes" : "Post to Team"}</button></div>
         </div>
       )}
@@ -5021,7 +5411,7 @@ const CoachCenterPage = ({ practiceProps, gameDayProps, rosterProps, calendarPro
   const events = calendarProps?.events || [];
   const documents = documentsProps?.documents || [];
   const announcements = announcementsProps?.announcements || [];
-  const todayStr = fmtLocalDate(new Date());
+  const todayStr = teamDateKey();
   const upcomingCount = events.filter((e) => (e.date || "") >= todayStr).length;
   // Pending invites = roster emails nobody has signed in with yet. The
   // roster is small, so this is computed inline (no memo needed).
@@ -5186,10 +5576,8 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
     });
     return out;
   }, [categories]);
-  const [cat, setCat] = useState(effectiveCategories[0] || "Breakfast");
-  useEffect(() => {
-    if (!effectiveCategories.includes(cat) && effectiveCategories.length) setCat(effectiveCategories[0]);
-  }, [effectiveCategories, cat]);
+  const [catPref, setCat] = useState(effectiveCategories[0] || "Breakfast");
+  const cat = effectiveCategories.includes(catPref) ? catPref : (effectiveCategories[0] || catPref);
   const [sub, setSub] = useState(null);
   // Food-type sub-category filter within the active meal category (e.g. Lunch →
   // "Fish & Seafood"). null = "All". A stale pick (from another category) simply
@@ -5214,14 +5602,8 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
     setFormNote(`Looking up ${code}…`);
     try {
       const data = await lookupBarcode(code);
-      setManual({
-        name: data.name || `Product ${code}`,
-        cal: data.cal != null ? String(data.cal) : "",
-        p: data.p != null ? String(data.p) : "",
-        c: data.c != null ? String(data.c) : "",
-        f: data.f != null ? String(data.f) : "",
-      });
-      setFormNote(`Open Food Facts · per 100g — adjust if your portion was different.`);
+      applyPer100(data.name || `Product ${code}`, data);
+      setFormNote(`Open Food Facts · values per 100g — set the amount you ate below.`);
       setFormState("done");
     } catch (e) {
       setFormState("error");
@@ -5229,17 +5611,18 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
     }
   };
 
+  const searchQuery = showManual ? manual.name.trim() : "";
+  const searchActive = searchQuery.length >= 2;
   useEffect(() => {
-    if (!showManual) { setSearchResults([]); return; }
-    const q = manual.name.trim();
-    if (q.length < 2) { setSearchResults([]); setSearchErr(""); return; }
+    if (!searchActive) return;
+    const q = searchQuery;
     const ctl = new AbortController();
-    setSearching(true);
     const timer = setTimeout(async () => {
+      setSearching(true);
       // Query Open Food Facts (no key) + USDA (if a key is set) at once, then
       // merge and de-dupe by name so one box searches everything.
       const tasks = [searchProducts(q, ctl.signal)];
-      if (hasUsdaKey()) tasks.unshift(searchFoods(q, ctl.signal));
+      if (usdaAvailable()) tasks.unshift(searchFoods(q, ctl.signal));
       const settled = await Promise.allSettled(tasks);
       if (ctl.signal.aborted) return;
       const merged = [];
@@ -5262,10 +5645,32 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
       setSearchResults(merged.slice(0, 16));
       setSearching(false);
     }, 300);
-    return () => { clearTimeout(timer); ctl.abort(); };
-  }, [manual.name, showManual]);
+    return () => { clearTimeout(timer); ctl.abort(); setSearching(false); };
+  }, [searchQuery, searchActive]);
+  // Search and barcode results are per 100 g. Keep the base values and let
+  // the player enter the amount they actually ate; macros scale from it.
+  const [per100, setPer100] = useState(null); // { cal, p, c, f } | null
+  const [grams, setGrams] = useState("100");
+  const scaled = (base, g) => {
+    const k = (Number(g) || 0) / 100;
+    return {
+      cal: String(Math.round((Number(base.cal) || 0) * k)),
+      p: String(Math.round((Number(base.p) || 0) * k)),
+      c: String(Math.round((Number(base.c) || 0) * k)),
+      f: String(Math.round((Number(base.f) || 0) * k)),
+    };
+  };
+  const applyPer100 = (name, base) => {
+    setPer100(base);
+    setGrams("100");
+    setManual((m) => ({ ...m, name, ...scaled(base, 100) }));
+  };
+  const changeGrams = (g) => {
+    setGrams(g);
+    if (per100) setManual((m) => ({ ...m, ...scaled(per100, g) }));
+  };
   const pickFood = (r) => {
-    setManual({ ...manual, name: r.name, cal: String(r.cal), p: String(r.p), c: String(r.c), f: String(r.f) });
+    applyPer100(r.name, r);
     setSearchResults([]);
   };
   // admin recipe management
@@ -5374,6 +5779,8 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
         custom: true,
       });
       setManual({ name: "", cat: timeOfDayCategory(), cal: "", p: "", c: "", f: "" });
+      setPer100(null);
+      setGrams("100");
       setSearchResults([]);
       setFormState("idle");
       setFormNote("");
@@ -5382,8 +5789,8 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
       toast("Couldn't add — " + e.message);
     }
   };
-  const rate = (logId, feeling) => updateLog(logId, { feeling }).catch(() => {});
-  const removeLog = (logId) => deleteLog(logId).catch(() => {});
+  const rate = (logId, feeling) => updateLog(logId, { feeling }).catch(reportError("Couldn't save the rating"));
+  const removeLog = (logId) => deleteLog(logId).catch(reportError("Couldn't remove the entry"));
 
   const addSingle = async () => {
     if (!single.name.trim()) return;
@@ -5393,7 +5800,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
       if (targetCat && !categories.includes(targetCat)) await addCategory(targetCat);
       const data = {
         name, cat: targetCat,
-        sub: single.sub.trim() || "",
+        sub: (single.sub || "").trim(),
         cal: Number(single.cal) || 0,
         p: Number(single.p) || 0,
         c: Number(single.c) || 0,
@@ -5502,7 +5909,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
             <input value={single.ingredients} onChange={(e) => setSingle({ ...single, ingredients: e.target.value })} placeholder="Main ingredients, comma-separated (e.g. chicken, rice, beans)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
             <button onClick={addSingle} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white" style={{ backgroundColor: COLORS.primary }}>{editingRecipeId ? "Save Changes" : "Add Recipe"}</button>
             {editingRecipeId && (
-              <button onClick={() => { setEditingRecipeId(null); setSingle({ name: "", cat: single.cat, cal: "", p: "", c: "", f: "", prep: "", ingredients: "" }); setImportMsg(""); }} className="w-full mt-1 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100">Cancel Edit</button>
+              <button onClick={() => { setEditingRecipeId(null); setSingle({ name: "", cat: single.cat, sub: "", cal: "", p: "", c: "", f: "", prep: "", ingredients: "" }); setImportMsg(""); }} className="w-full mt-1 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100">Cancel Edit</button>
             )}
           </div>
         )}
@@ -5568,7 +5975,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
                         <span className="text-[10px] text-slate-400 ml-1.5">{s.cal} cal</span>
                       </button>
                       <button onClick={() => fillFromFood(s)} title="Edit portion" className="px-1.5 py-1.5 text-slate-300 hover:text-slate-600 border-l" style={{ borderColor: COLORS.border }}><Pencil className="w-3 h-3" /></button>
-                      <button onClick={() => deleteSavedFood(s.id)} title="Remove from saved" className="px-2 py-1.5 text-slate-300 hover:text-red-500 border-l" style={{ borderColor: COLORS.border }}><X className="w-3 h-3" /></button>
+                      <button onClick={() => { if (confirm(`Remove "${s.name}" from saved foods?`)) Promise.resolve(deleteSavedFood(s.id)).catch(reportError("Couldn't remove it")); }} title="Remove from saved" className="px-2 py-1.5 text-slate-300 hover:text-red-500 border-l" style={{ borderColor: COLORS.border }}><X className="w-3 h-3" /></button>
                     </div>
                   ))}
                 </div>
@@ -5610,10 +6017,10 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
             )}
             <div className="relative">
               <input value={manual.name} onChange={(e) => setManual({ ...manual, name: e.target.value })} placeholder="Search foods or type your own…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-              {searching && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-semibold">searching…</span>}
+              {searching && searchActive && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-semibold">searching…</span>}
             </div>
             {searchErr && <p className="text-[10px] text-red-500 font-medium px-1">{searchErr}</p>}
-            {searchResults.length > 0 && (
+            {searchActive && searchResults.length > 0 && (
               <ul className="max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 divide-y divide-slate-200">
                 {searchResults.map((r) => (
                   <li key={r.fdcId || r.barcode || r.name}>
@@ -5628,12 +6035,21 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
             <select value={manual.cat} onChange={(e) => setManual({ ...manual, cat: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
               {effectiveCategories.map((c) => <option key={c}>{c}</option>)}
             </select>
+            {per100 && (
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                <span className="font-semibold">Amount eaten</span>
+                <input type="number" min="0" value={grams} onChange={(e) => changeGrams(e.target.value)} className="w-20 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
+                <span>g</span>
+                <span className="text-[10px] text-slate-400">(values scale from per-100 g)</span>
+              </label>
+            )}
             <div className="grid grid-cols-2 gap-2"><input type="number" value={manual.cal} onChange={(e) => setManual({ ...manual, cal: e.target.value })} placeholder="Calories" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" /><input type="number" value={manual.p} onChange={(e) => setManual({ ...manual, p: e.target.value })} placeholder="Protein g" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
+            <div className="grid grid-cols-2 gap-2"><input type="number" value={manual.c} onChange={(e) => setManual({ ...manual, c: e.target.value })} placeholder="Carbs g" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" /><input type="number" value={manual.f} onChange={(e) => setManual({ ...manual, f: e.target.value })} placeholder="Fat g" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
             <div className="flex gap-2">
               <button onClick={() => saveFood(manual)} disabled={!manual.name.trim()} title="Save to favorites" className="px-4 py-2 rounded-full text-xs font-bold border-2 bg-white flex items-center gap-1.5 disabled:opacity-40" style={{ borderColor: COLORS.primary, color: COLORS.primary }}><Star className="w-3.5 h-3.5" fill={isSaved(manual.name) ? COLORS.primary : "none"} /> Save</button>
               <button onClick={addManual} className="flex-1 py-2 rounded-full text-xs font-bold text-white" style={{ backgroundColor: COLORS.primary }}>Add to Log</button>
             </div>
-            {!hasUsdaKey() && <p className="text-[10px] text-slate-400 px-1">Searching Open Food Facts. Add a USDA API key for whole-food results too (see README → Food search).</p>}
+
           </div>
         )}
 
@@ -5751,6 +6167,9 @@ const BarcodeScannerModal = ({ onClose, onScan }) => {
     let scanner = null;
     (async () => {
       try {
+        // Loaded on demand — keeps the scanner library out of the main bundle.
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+        if (cancelled) return;
         scanner = new Html5Qrcode("brophy-barcode-scanner", {
           formatsToSupport: [
             Html5QrcodeSupportedFormats.EAN_13,
@@ -5848,10 +6267,15 @@ const Linkify = ({ children, className = "" }) => {
 const REACTIONS = [["like", "👍"], ["dislike", "👎"], ["heart", "❤️"]];
 
 const PollCard = ({ message, own, myUid, onVote, isAdmin = false, onSeeVoters }) => {
-  const votes = message.votes || {};
-  const myVote = votes[myUid];
+  // My own vote doc (private); tallies come from `voteCounts` on the poll
+  // (server-maintained). Legacy polls fall back to the old votes map.
+  const myVoteDoc = useDoc(message?.id && myUid ? `messages/${message.id}/votes/${myUid}` : null);
+  const legacy = message.votes || {};
+  const myVote = myVoteDoc ? myVoteDoc.option : legacy[myUid];
   const opts = message.options || [];
-  const totals = opts.map((_, i) => Object.values(votes).filter((v) => v === i).length);
+  const totals = Array.isArray(message.voteCounts)
+    ? opts.map((_, i) => Number(message.voteCounts[i]) || 0)
+    : opts.map((_, i) => Object.values(legacy).filter((v) => v === i).length);
   const totalVotes = totals.reduce((a, b) => a + b, 0);
   const handle = (i) => { if (myVote !== i) onVote(i).catch((e) => toast("Couldn't vote — " + (e.message || ""))); };
   return (
@@ -6164,7 +6588,7 @@ const ScheduledModal = ({ scheduled = [], onAdd, onDelete, chatGroups = [], grou
           {kind === "reminder" ? (
             <div className="space-y-2">
               <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Reminder title (e.g. Bring both jerseys)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-              <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message (optional)" rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
+              <AutoGrowTextarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message (optional)" minRows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
               <div>
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Send to</p>
                 <div className="flex gap-2">
@@ -6201,7 +6625,7 @@ const ScheduledModal = ({ scheduled = [], onAdd, onDelete, chatGroups = [], grou
                   {options.length > 2 && <button onClick={() => setOptions((arr) => arr.filter((_, j) => j !== i))} className="text-slate-300 hover:text-red-500"><X className="w-4 h-4" /></button>}
                 </div>
               ))}
-              {options.length < 6 && <button onClick={() => setOptions((arr) => [...arr, ""])} className="text-[11px] font-bold" style={{ color: COLORS.primary }}>+ Add option</button>}
+              {options.length < 4 && <button onClick={() => setOptions((arr) => [...arr, ""])} className="text-[11px] font-bold" style={{ color: COLORS.primary }}>+ Add option</button>}
               <div>
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Post to</p>
                 <select value={channel} onChange={(e) => setChannel(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
@@ -6250,7 +6674,7 @@ const ScheduledModal = ({ scheduled = [], onAdd, onDelete, chatGroups = [], grou
                       {recurring
                         ? <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-0.5" style={{ backgroundColor: COLORS.primary, color: "white" }}><Repeat className="w-2.5 h-2.5" />{rep}</span>
                         : s.sent ? <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: COLORS.success }} /> : <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.primary }}>Scheduled</span>}
-                      <button onClick={() => onDelete(s.id)} aria-label="Cancel" className="text-slate-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => { if (confirm("Cancel this scheduled item?")) Promise.resolve(onDelete(s.id)).catch(reportError("Couldn't cancel it")); }} aria-label="Cancel" className="text-slate-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                     </li>
                   );
                 })}
@@ -6358,7 +6782,7 @@ const PushNotificationModal = ({ pushNotifications = [], onAdd, onDelete, onSend
 
           <div className="space-y-2">
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (e.g. Practice time change)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-            <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message" rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
+            <AutoGrowTextarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message" minRows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
             <div>
               <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Send to</p>
               <div className="flex gap-2">
@@ -6431,7 +6855,7 @@ const PushNotificationModal = ({ pushNotifications = [], onAdd, onDelete, onSend
                       {rep
                         ? <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-0.5" style={{ backgroundColor: COLORS.primary, color: "white" }}><Repeat className="w-2.5 h-2.5" />{rep}</span>
                         : sent ? <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: COLORS.success }} /> : <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.primary }}>Scheduled</span>}
-                      <button onClick={() => onDelete(n.id)} aria-label="Delete" className="text-slate-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => { if (confirm("Delete this notification?")) Promise.resolve(onDelete(n.id)).catch(reportError("Couldn't delete it")); }} aria-label="Delete" className="text-slate-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                     </li>
                   );
                 })}
@@ -6495,7 +6919,7 @@ const VideoViewer = ({ url, onClose }) => {
   );
 };
 
-const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, markDMsRead, scheduled = [], addScheduled, deleteScheduled }) => {
+const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages = false, onLoadOlder, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, markDMsRead, scheduled = [], addScheduled, deleteScheduled }) => {
   const isAdmin = user.role === "admin";
   const [input, setInput] = useState("");
   const [showPinned, setShowPinned] = useState(true);
@@ -6524,8 +6948,13 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
       { label: `Not yet · ${notSeen.length}`, names: notSeen },
     ] });
   };
-  const openVoters = (m) => {
-    const votes = m.votes || {};
+  const openVoters = async (m) => {
+    // Coach-only: read the private vote docs (plus any legacy map entries).
+    const votes = { ...(m.votes || {}) };
+    try {
+      const snap = await getDocs(collection(db, "messages", m.id, "votes"));
+      snap.forEach((v) => { votes[v.id] = v.data().option; });
+    } catch (e) { reportError("Couldn't load the votes")(e); return; }
     const voterSet = new Set(Object.keys(votes));
     const grps = (m.options || []).map((opt, i) => ({
       label: `${opt} · ${Object.values(votes).filter((v) => v === i).length}`,
@@ -6568,13 +6997,28 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
   // own team's coach; a coach sees one pill per player who has a thread on
   // their team. The org admin gets none — DMs are player ↔ own team's coach
   // only (decision 2026-11-08).
+  // A coach can also START a thread with any player on the team (the
+  // thread exists locally until the first message is sent).
+  const [startedDm, setStartedDm] = useState(null); // { uid, name }
   const dmThreads = useMemo(() => {
     if (isOrgAdmin) return [];
     if (!isAdmin) return [{ id: "coach-dm", name: coachDmName, dm: true }];
     const byThread = new Map();
     dms.forEach((d) => { if (!byThread.has(d.threadId)) byThread.set(d.threadId, d); });
-    return [...byThread.entries()].map(([tid, d]) => ({ id: `dm:${tid}`, name: (dms.find((x) => x.threadId === tid && !x.isCoach)?.senderName) || d.senderName || "Player", dm: true }));
-  }, [dms, isAdmin, isOrgAdmin, coachDmName]);
+    const threads = [...byThread.entries()].map(([tid, d]) => ({ id: `dm:${tid}`, name: (dms.find((x) => x.threadId === tid && !x.isCoach)?.senderName) || d.senderName || "Player", dm: true }));
+    if (startedDm && !byThread.has(startedDm.uid)) threads.unshift({ id: `dm:${startedDm.uid}`, name: startedDm.name || "Player", dm: true });
+    return threads;
+  }, [dms, isAdmin, isOrgAdmin, coachDmName, startedDm]);
+  const dmPlayers = useMemo(
+    () => (isAdmin && !isOrgAdmin ? allUsers.filter((u) => u.role === "player" && u.id !== user.uid) : []),
+    [allUsers, isAdmin, isOrgAdmin, user.uid],
+  );
+  const startDmWith = (uid) => {
+    const p = dmPlayers.find((u) => u.id === uid);
+    if (!p) return;
+    setStartedDm({ uid, name: p.name || p.email || "Player" });
+    setActiveChannel(`dm:${uid}`);
+  };
   const channels = [
     { id: "team", name: "Team", channel: true },
     ...visibleChannels.map((c) => ({ id: c.id, name: c.name, pinned: !!c.pinned, channel: true })),
@@ -6637,6 +7081,12 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
   };
 
   // File extension from a name, lowercased; fallback when there is none.
+  const FILE_MIME_BY_EXT = {
+    pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    txt: "text/plain", csv: "text/csv", rtf: "application/rtf",
+  };
   const fileExt = (name, fallback) => {
     const parts = String(name || "").split(".");
     const ext = parts.length > 1 ? parts.pop().toLowerCase() : "";
@@ -6678,7 +7128,9 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
       const ext = fileExt(file.name, "bin");
       const path = `chat/${activeTeamId}/${effectiveChannel}/${user.uid}/${Date.now()}.${ext}`;
       const ref = storageRef(storage, path);
-      const snap = await uploadBytes(ref, file, { contentType: file.type || "application/octet-stream" });
+      // Some browsers report an empty type for Office files; Storage rules
+      // reject application/octet-stream, so infer it from the extension.
+      const snap = await uploadBytes(ref, file, { contentType: file.type || FILE_MIME_BY_EXT[ext] || "application/octet-stream" });
       const url = await getDownloadURL(snap.ref);
       if (isDM) {
         await addDM("", dmThreadId, { attachment: { type: "file", url, path, name: file.name || "file" } });
@@ -6713,6 +7165,11 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
     const t = setTimeout(toBottom, 120);
     return () => { cancelAnimationFrame(r1); clearTimeout(t); };
   }, [channelMessages, dmMessages, shared, activeConv]);
+  // As the message box grows (up to 5 lines) the feed gets shorter; keep the
+  // newest messages in view if the user was already at the bottom.
+  useLayoutEffect(() => {
+    if (nearBottomRef.current && feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
+  }, [input]);
   // Track whether the user is near the bottom of the feed, so new messages
   // only pull the view down when they're already reading the newest ones.
   const onFeedScroll = (e) => {
@@ -6790,8 +7247,11 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
     }
   };
 
-  const togglePin = (m) => togglePinMessage(m.id, m.pinned).catch(() => {});
-  const delMsg = (id) => deleteMessage(id).catch(() => {});
+  const togglePin = (m) => togglePinMessage(m.id, m.pinned).catch(reportError("Couldn't pin the message"));
+  const delMsg = (id) => {
+    if (!confirm("Delete this message for everyone?")) return;
+    deleteMessage(id).catch(reportError("Couldn't delete the message"));
+  };
   const startReply = (m) => setReplyTo({ id: m.id, sender: m.sender, text: m.text, kind: m.kind, question: m.question });
   const cancelReply = () => setReplyTo(null);
   const [copiedId, setCopiedId] = useState(null);
@@ -6932,6 +7392,14 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
           {!isOrgAdmin && (
             <>
               <div className="px-4 pt-4 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Direct messages</div>
+              {dmPlayers.length > 0 && (
+                <div className="px-4 pb-2">
+                  <select value="" onChange={(e) => startDmWith(e.target.value)} aria-label="Message a player" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-white text-slate-600">
+                    <option value="">+ Message a player…</option>
+                    {dmPlayers.map((p) => <option key={p.id} value={p.id}>{p.name || p.email}</option>)}
+                  </select>
+                </div>
+              )}
               {dmConvs.length === 0 ? (
                 <p className="px-4 py-2 text-xs text-slate-400 italic">No direct messages yet.</p>
               ) : (
@@ -7086,7 +7554,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
               className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = ""; }}
             />
-            <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder={isAdmin ? "Reply…" : "Message your coach…"} className="flex-1 bg-slate-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+            <AutoGrowTextarea value={input} onChange={(e) => setInput(e.target.value)} onSubmit={send} placeholder={isAdmin ? "Reply…" : "Message your coach…"} aria-label="Message" className="flex-1 bg-slate-100 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
             <button onClick={send} disabled={!input.trim()} className="w-9 h-9 rounded-full flex items-center justify-center text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}><Send className="w-4 h-4" /></button>
           </div>
         </>
@@ -7106,6 +7574,11 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
 
           <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 min-h-0 overflow-y-auto" style={{ backgroundColor: COLORS.bg }}>
             <div className="min-h-full flex flex-col justify-end space-y-3 px-4 py-4">
+            {hasOlderMessages && onLoadOlder && (
+              <button onClick={onLoadOlder} className="self-center text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-500">Load older messages</button>
+            )}
+            {isLoading(messages) && <p className="text-center text-xs text-slate-400 py-6">Loading messages…</p>}
+            {!isLoading(messages) && stream.length === 0 && <p className="text-center text-xs text-slate-400 italic py-6">No messages here yet. Say hello!</p>}
             {stream.map((item) => {
               if (item.kind === "divider") return <DateDivider key={item.id} label={item.label} />;
               if (item.kind === "announcement") {
@@ -7114,7 +7587,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
                   <div key={item.id} className="rounded-2xl p-3.5 shadow-sm border" style={{ backgroundColor: COLORS.accentSoft, borderColor: COLORS.accent }}>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5" style={{ color: COLORS.accent }}><Bell className="w-3 h-3" /> Announcement</span>
-                      {isAdmin && deleteAnnouncement && <button onClick={() => deleteAnnouncement(a.id).catch(() => {})} className="text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>}
+                      {isAdmin && deleteAnnouncement && <button onClick={() => { if (confirm("Delete this announcement?")) deleteAnnouncement(a.id).catch(reportError("Couldn't delete the announcement")); }} className="text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>}
                     </div>
                     <div className="text-sm font-bold text-slate-900 mt-1">{a.title}</div>
                     {a.body && <div className="text-xs text-slate-600 mt-0.5 leading-snug">{a.body}</div>}
@@ -7187,7 +7660,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
                           const count = Object.values(reax).filter((v) => v === key).length;
                           const mine = reax[user.uid] === key;
                           return (
-                            <button key={key} onClick={() => reactToMessage(m.id, mine ? null : key)} aria-label={key} className={`text-[11px] leading-none px-1.5 py-1 rounded-full border transition-colors ${mine ? "border-transparent" : "border-slate-200 bg-white hover:bg-slate-50"} ${count ? "" : "opacity-60"}`} style={mine ? { backgroundColor: COLORS.accentSoft } : {}}>
+                            <button key={key} onClick={() => reactToMessage(m.id, mine ? null : key).catch(reportError("Couldn't save your reaction"))} aria-label={key} className={`text-[11px] leading-none px-1.5 py-1 rounded-full border transition-colors ${mine ? "border-transparent" : "border-slate-200 bg-white hover:bg-slate-50"} ${count ? "" : "opacity-60"}`} style={mine ? { backgroundColor: COLORS.accentSoft } : {}}>
                               {emoji}{count > 0 ? <span className="ml-0.5 font-semibold text-slate-600">{count}</span> : ""}
                             </button>
                           );
@@ -7278,7 +7751,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
               {isAdmin && effectiveChannel === "team" && (
                 <button onClick={() => setAnnounceMode(!announceMode)} aria-label="Announce" title="Post as an announcement" className="w-9 h-9 rounded-full flex items-center justify-center transition-colors" style={announceMode ? { backgroundColor: COLORS.accentSoft, color: COLORS.accent } : { color: COLORS.textSecondary }}><Bell className="w-4 h-4" /></button>
               )}
-              <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder={replyTo ? `Reply to ${replyTo.sender}…` : "Message the team…"} className="flex-1 bg-slate-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+              <AutoGrowTextarea value={input} onChange={(e) => setInput(e.target.value)} onSubmit={send} placeholder={replyTo ? `Reply to ${replyTo.sender}…` : "Message the team…"} aria-label="Message" className="flex-1 bg-slate-100 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
               <button onClick={send} disabled={!input.trim()} className="w-9 h-9 rounded-full flex items-center justify-center text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}><Send className="w-4 h-4" /></button>
             </div>
           </div>
@@ -7379,7 +7852,7 @@ const CustomExerciseForm = ({ item, uid, equipmentOptions = [], muscleOptions = 
             <input list="ex-mech" value={mechanic} onChange={(e) => setMechanic(e.target.value)} placeholder="Mechanic (e.g. compound)" className="border border-slate-200 rounded-lg px-3 py-2 text-xs" />
             <datalist id="ex-mech"><option value="compound" /><option value="isolation" /></datalist>
           </div>
-          <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={4} placeholder="How to do it — one step per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+          <AutoGrowTextarea value={instructions} onChange={(e) => setInstructions(e.target.value)} minRows={4} placeholder="How to do it — one step per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
 
           {photos.length > 0 && (
             <div className="flex gap-2 overflow-x-auto py-1">
@@ -7647,6 +8120,7 @@ const WorkoutsView = ({ workouts, canEdit, add, update, del, readOnlyLabel, lib,
   if (open) {
     return (
       <WorkoutDetail
+        key={open.id}
         workout={open}
         canEdit={canEdit}
         lib={lib}
@@ -7772,19 +8246,25 @@ const WorkoutDetail = ({ workout, canEdit, lib, onSave, onDelete, onDuplicate, o
   const [name, setName] = useState(workout.name || "");
   const [exercises, setExercises] = useState(workout.exercises || []);
   const [dirty, setDirty] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
   const [picker, setPicker] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
   const [advanced, setAdvanced] = useState(false); // reveal %/RPE/tempo/superset editors
 
   useEffect(() => {
     if (!dirty || !canEdit) return;
-    const t = setTimeout(() => { onSave({ name, exercises }); setDirty(false); }, 700);
+    // A failed save shows an error and stays "unsaved" (the next edit or
+    // Back retries) instead of silently dropping the change.
+    const t = setTimeout(() => {
+      setDirty(false);
+      Promise.resolve(onSave({ name, exercises })).then(() => setSaveErr(""), (e) => { setSaveErr("Not saved — check your connection, then edit again to retry."); reportError("Couldn't save the workout")(e); });
+    }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, exercises, dirty]);
 
   const handleBack = () => {
-    if (dirty && canEdit) onSave({ name, exercises });
+    if (dirty && canEdit) Promise.resolve(onSave({ name, exercises })).catch(reportError("Couldn't save the workout"));
     onBack();
   };
 
@@ -7931,6 +8411,7 @@ const WorkoutDetail = ({ workout, canEdit, lib, onSave, onDelete, onDuplicate, o
       )}
 
       {dirty && canEdit && <p className="text-[10px] text-slate-400 text-center">Saving…</p>}
+      {!dirty && saveErr && <p className="text-[10px] text-red-500 font-semibold text-center">{saveErr}</p>}
 
       {exercises.length > 0 && (
         <button onClick={() => downloadWorkoutFile({ name, exercises })} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200 text-slate-700 bg-white">
@@ -7999,7 +8480,7 @@ const GymPage = ({ user, myWorkouts, addMyWorkout, updateMyWorkout, deleteMyWork
         <p className="text-[11px] leading-snug text-slate-500 mt-2 px-1">Pre-Practice Prehab — bands only, ~12 min before every practice and at home. Your school lifting (2×/week) is separate.</p>
       </div>
 
-      {view === "library" && <ExerciseLibrary items={mergedLib.items} loading={mergedLib.loading} err={mergedLib.err} myWorkouts={myWorkouts} addMyWorkout={addMyWorkout} updateMyWorkout={updateMyWorkout} canEdit={isAdmin} uid={user.uid} addCustomExercise={addCustomExercise} updateCustomExercise={updateCustomExercise} deleteCustomExercise={deleteCustomExercise} seedLifts={seedLifts} seedTeamWorkouts={seedTeamWorkouts} />}
+      {view === "library" && <ExerciseLibrary items={mergedLib.items} loading={mergedLib.loading} err={mergedLib.err} myWorkouts={myWorkouts} addMyWorkout={addMyWorkout} updateMyWorkout={updateMyWorkout} canEdit={isAdmin} uid={user.uid} addCustomExercise={addCustomExercise} updateCustomExercise={updateCustomExercise} deleteCustomExercise={deleteCustomExercise} seedLifts={seedLifts} />}
       {view === "mine" && (
         <WorkoutsView
           workouts={myWorkouts}
@@ -8218,7 +8699,8 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdmin = fa
       setPhotoBusy(false);
     }
   };
-  const [pushOn, setPushOn] = useState(currentPermission() === "granted");
+  // On = this device has a saved token (permission alone stays granted after Off).
+  const [pushOn, setPushOn] = useState(() => pushEnabledOnThisDevice());
   const [pushBusy, setPushBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -8253,7 +8735,7 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdmin = fa
     setPushBusy(true);
     try {
       if (pushOn) {
-        await clearAllPushTokens(user.uid);
+        await disablePushOnThisDevice(user.uid);
         setPushOn(false);
       } else {
         await enablePushNotifications(user.uid);
@@ -8695,11 +9177,18 @@ export default function TeamHubRolesApp() {
       }
     })();
   }, [user, isCoach, visibleTeams]);
-  const [tab, setTab] = useState("home");
+  // Deep link (?tab=X from a notification or shared link) picks the first tab.
+  // Gym/Nutrition/Videos live under the Train hub.
+  const initialTab = (() => { try { return new URLSearchParams(window.location.search).get("tab") || ""; } catch { return ""; } })();
+  const [tab, setTab] = useState(() => (TRAIN_VIEWS.includes(initialTab) ? "train" : initialTab || "home"));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [previewAsPlayer, setPreviewAsPlayer] = useState(false);
-  const [trainView, setTrainView] = useState(null); // player Train sub-page: gym | nutrition | videos
+  const [trainView, setTrainView] = useState(() => (TRAIN_VIEWS.includes(initialTab) ? initialTab : null)); // Train sub-page: gym | nutrition | videos
   const [showTour, setShowTour] = useState(false);
+  // First-login welcome tour, once per device (localStorage). Derived during
+  // render instead of set from an effect.
+  const [tourSeen, setTourSeen] = useState(() => { try { return Boolean(localStorage.getItem(TOUR_SEEN_KEY)); } catch { return true; } });
+  const tourOpen = showTour || (Boolean(user) && !tourSeen);
   // Offer a refresh when a newer build is deployed while the app is open.
   const { updateReady, reload } = useAppUpdate();
   // Automatic live-data recovery: re-sync Firestore whenever the app comes
@@ -8712,10 +9201,10 @@ export default function TeamHubRolesApp() {
   // First-login welcome tour. "Seen" is tracked per-device in localStorage, so
   // it auto-runs once and never nags again (no backend/rules change needed).
   // Bump the key suffix to re-show the tour to everyone after a big update.
-  useEffect(() => {
-    if (user && !localStorage.getItem(TOUR_SEEN_KEY)) setShowTour(true);
-  }, [user]);
-  const closeTour = () => { setShowTour(false); localStorage.setItem(TOUR_SEEN_KEY, "1"); };
+  const closeTour = () => {
+    setShowTour(false); setTourSeen(true);
+    try { localStorage.setItem(TOUR_SEEN_KEY, "1"); } catch { /* private mode */ }
+  };
 
   // Shared face-photo upload for the welcome tour and the Home nudge.
   // Same flow as Settings: downscale, store under avatars/{uid}/{ts}.jpg,
@@ -8733,32 +9222,45 @@ export default function TeamHubRolesApp() {
     } catch (e) {
       const msg = "Couldn't add photo. " + (e.message || "Try again.");
       toast(msg);
-      throw new Error(msg);
+      throw new Error(msg, { cause: e });
     }
   };
 
-  // If we're returning from a magic-link email, finish the sign-in.
+  // Returning from a magic-link email: finish the sign-in. If the link was
+  // opened on a different device/browser (no stored email), LoginScreen asks
+  // for the email inline instead of a blocking window.prompt.
+  const [emailLinkPending, setEmailLinkPending] = useState(() => {
+    try { return isSignInWithEmailLink(auth, window.location.href); } catch { return false; }
+  });
+  const completeEmailLink = async (email) => {
+    await signInWithEmailLink(auth, email.trim().toLowerCase(), window.location.href);
+    try { localStorage.removeItem(EMAIL_FOR_SIGNIN_KEY); } catch { /* private mode */ }
+    window.history.replaceState({}, "", "/");
+    setEmailLinkPending(false);
+  };
   useEffect(() => {
-    if (!isSignInWithEmailLink(auth, window.location.href)) return;
-    let email = localStorage.getItem(EMAIL_FOR_SIGNIN_KEY);
-    if (!email) email = window.prompt("Confirm the email this link was sent to:");
-    if (!email) return;
+    if (!emailLinkPending) return;
+    let email = "";
+    try { email = localStorage.getItem(EMAIL_FOR_SIGNIN_KEY) || ""; } catch { /* private mode */ }
+    if (!email) return; // LoginScreen shows the confirm-email form
     signInWithEmailLink(auth, email, window.location.href)
       .then(() => {
-        localStorage.removeItem(EMAIL_FOR_SIGNIN_KEY);
+        try { localStorage.removeItem(EMAIL_FOR_SIGNIN_KEY); } catch { /* private mode */ }
         window.history.replaceState({}, "", "/");
+        setEmailLinkPending(false);
       })
       .catch((e) => {
         console.error("email-link sign-in failed:", e);
         toast("Couldn't finish sign-in — " + (e.message || "link expired."));
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Deep-link to the right tab when arriving via ?tab=X or notification click.
   // Workouts/Nutrition/Videos no longer have their own tabs — route those to
   // the Train hub with the matching sub-view so old links keep working.
   const routeToTab = (t) => {
-    if (["gym", "nutrition", "videos"].includes(t)) {
+    if (TRAIN_VIEWS.includes(t)) {
       setTrainView(t);
       setTab("train");
     } else {
@@ -8766,9 +9268,7 @@ export default function TeamHubRolesApp() {
     }
   };
   useEffect(() => {
-    const fromQuery = new URLSearchParams(window.location.search).get("tab");
-    if (fromQuery) {
-      routeToTab(fromQuery);
+    if (new URLSearchParams(window.location.search).get("tab")) {
       window.history.replaceState({}, "", window.location.pathname);
     }
     if ("serviceWorker" in navigator) {
@@ -8807,15 +9307,20 @@ export default function TeamHubRolesApp() {
       createdAt: serverTimestamp(),
     });
 
-  // App-wide prompts (e.g. "everyone update your profile"). One doc per kind.
+  // Team-scoped app prompts + branding: one doc per kind PER TEAM
+  // (`profilePrompt_{teamId}`, `lineupLogo_{teamId}`) so a coach of one team
+  // can't change another team's settings (firestore.rules appConfig). The
+  // legacy global docs are still read as a fallback until each team sets its own.
   const appConfig = useCollection(lockedOut ? null : ("appConfig"));
-  const profilePrompt = appConfig.find((d) => d.id === "profilePrompt");
+  const profilePrompt = appConfig.find((d) => d.id === `profilePrompt_${activeTeamId}`)
+    || appConfig.find((d) => d.id === "profilePrompt");
   // Team logo used as the centered watermark on every game-day line-up.
-  const lineupLogo = appConfig.find((d) => d.id === "lineupLogo");
+  const lineupLogo = appConfig.find((d) => d.id === `lineupLogo_${activeTeamId}`)
+    || appConfig.find((d) => d.id === "lineupLogo");
   const setLineupLogo = (url, path) =>
-    setDoc(doc(db, "appConfig", "lineupLogo"), { url: url || "", path: path || "", updatedByName: user.name }, { merge: true });
+    setDoc(doc(db, "appConfig", `lineupLogo_${activeTeamId}`), { url: url || "", path: path || "", updatedByName: user.name }, { merge: true });
   const requestProfileUpdate = async () => {
-    await setDoc(doc(db, "appConfig", "profilePrompt"), { requestedAt: new Date().toISOString(), byName: user.name }, { merge: true });
+    await setDoc(doc(db, "appConfig", `profilePrompt_${activeTeamId}`), { requestedAt: new Date().toISOString(), byName: user.name }, { merge: true });
     // Reuse the announcement fan-out so it also lands as a push to everyone.
     await addAnnouncement("Update your profile", "Please add your full name so the team roster shows who's who. Tap Update now or open Settings.");
   };
@@ -8884,6 +9389,9 @@ export default function TeamHubRolesApp() {
     const batch = writeBatch(db);
     rows.forEach((r) => batch.set(doc(collection(db, "events")), {
       ...r,
+      // Absolute start (team time) so the reminder function can schedule the
+      // 1-hour and 7 AM pings for imported / program-assigned sessions too.
+      startAt: r.startAt || zonedDate(r.date, r.start),
       teamId: activeTeamId,
       audienceKeys: audienceKeysFor(r.visibleTo, groupsList),
       createdAt: serverTimestamp(),
@@ -8923,15 +9431,30 @@ export default function TeamHubRolesApp() {
         n++;
       }
     });
+    const affectedChannels = [];
     chatGroups.forEach((c) => {
-      if ((c.visibleTo?.groupIds || []).includes(id)) {
-        batch.update(doc(db, "chatGroups", c.id), { audienceKeys: audienceKeysFor(c.visibleTo, nextGroups) });
-        n++;
-      }
+      if ((c.visibleTo?.groupIds || []).includes(id)) affectedChannels.push(c);
     });
     if (n) await batch.commit();
+    // Channels addressed to this group: re-stamp their messages FIRST, then
+    // the channel (same order as updateChatGroup), so removed members lose
+    // the history and added members gain it — enforced by the rules.
+    for (const c of affectedChannels) {
+      await restampChannel(c.id, audienceKeysFor(c.visibleTo, nextGroups), c.teamId || activeTeamId);
+    }
+  };
+  // Re-stamp EVERY message of a channel with the channel's audience. Queried
+  // from the server (not just the messages loaded in this session), so older
+  // history outside the chat window is covered too.
+  const restampChannel = async (channelId, audienceKeys, teamId) => {
+    const snap = await getDocs(query(collection(db, "messages"), where("teamId", "==", teamId), where("channel", "==", channelId)));
+    await commitInChunks(snap.docs, (b, d) => b.update(d.ref, { audienceKeys }));
+    await updateDoc(doc(db, "chatGroups", channelId), { audienceKeys });
   };
   const deleteGroup = (id) => deleteDoc(doc(db, "groups", id));
+  // Org admin: remove a player's profile (e.g. someone who joined by link).
+  // Their sign-in stops working until they're invited again.
+  const removeUser = (uid) => deleteDoc(doc(db, "users", uid));
 
   const videos = useCollection(lockedOut ? null : ("videos"), orderBy("createdAt", "desc"));
   const addVideo = (data) =>
@@ -8969,6 +9492,26 @@ export default function TeamHubRolesApp() {
     }
     await batch.commit();
   };
+
+  // Shared documents library (Train → Documents): items for all teams plus
+  // the active team's own. Coaches upload to Storage library/{scope}/{uid}/.
+  const libraryItems = useCollection(lockedOut ? null : ("libraryItems"), where("teamId", "in", ["all", activeTeamId]), orderBy("createdAt", "desc"));
+  const addLibraryItem = async ({ kind, file, url, title, folder, desc, scope, notify }, onProgress) => {
+    const teamId = scope === "all" ? "all" : activeTeamId;
+    const base = { teamId, title, folder: folder || "", desc: desc || "", notify: Boolean(notify), createdByUid: user.uid, createdByName: user.name, createdAt: serverTimestamp() };
+    if (kind === "link") return addDoc(collection(db, "libraryItems"), { ...base, kind: "link", url });
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    const contentType = file.type || LIBRARY_MIME_BY_EXT[ext] || "application/octet-stream";
+    const safe = file.name.replace(/[^\w.\- ]+/g, "").replace(/\s+/g, "-").slice(0, 80) || "file";
+    const path = `library/${teamId}/${user.uid}/${uploadStamp()}-${safe}`;
+    const task = uploadBytesResumable(storageRef(storage, path), file, { contentType });
+    await new Promise((resolve, reject) => task.on("state_changed",
+      (s) => onProgress?.(Math.round((s.bytesTransferred / Math.max(1, s.totalBytes)) * 100)), reject, resolve));
+    const fileUrl = await getDownloadURL(task.snapshot.ref);
+    return addDoc(collection(db, "libraryItems"), { ...base, kind: "file", url: fileUrl, path, name: file.name, fileType: contentType, size: file.size });
+  };
+  const updateLibraryItem = (id, data) => updateDoc(doc(db, "libraryItems", id), data);
+  const deleteLibraryItem = (id) => deleteDoc(doc(db, "libraryItems", id));
 
   // Drill library — building blocks for the Practice page (same CRUD as videos).
   // ONE shared library: the `drillLibrary` collection is read and written by
@@ -9028,11 +9571,6 @@ export default function TeamHubRolesApp() {
     });
   const updateLineup = (id, data) => updateDoc(doc(db, "lineups", id), data);
   const deleteLineup = (id) => deleteDoc(doc(db, "lineups", id));
-  // A coach can set a photo on any player's profile. The image lives in the
-  // coach's own avatars folder (Storage only lets you write your own), and the
-  // URL is stored on the target user doc (admins may edit any user doc).
-  const setPlayerPhoto = async (targetUid, url, path) =>
-    updateDoc(doc(db, "users", targetUid), { photoURL: url, photoPath: path });
 
   // Coach-authored exercises — mixed into the public Exercise Library, same
   // shape so they slot under the same equipment/muscle tags.
@@ -9090,8 +9628,11 @@ export default function TeamHubRolesApp() {
   // (Energy 1 = wiped out, Soreness 1 = very sore, Tiredness 1 = exhausted).
   // A readiness verdict (Ready / Modified / Rest) is stored on the doc at
   // submit time and normalized on read, so older docs still render.
-  const today = new Date().toISOString().slice(0, 10);
-  const wellnessRaw = useCollection(lockedOut ? null : ("wellnessCheckins"), where("teamId", "==", activeTeamId), where("date", "==", today));
+  // "Today" on the team clock (America/Phoenix) — see lib/dates.js.
+  const today = teamDateKey();
+  // Coach-only: the whole team's check-ins (players' read rule only allows
+  // their own doc, so players don't open this query at all).
+  const wellnessRaw = useCollection(lockedOut || !isCoach ? null : ("wellnessCheckins"), where("teamId", "==", activeTeamId), where("date", "==", today));
   const wellness = useMemo(
     () => wellnessRaw.map((w) => normalizeWellness({ ...w, time: formatAgo(w.updatedAt) })),
     [wellnessRaw],
@@ -9111,7 +9652,9 @@ export default function TeamHubRolesApp() {
 
   // Food log — private subcollection per player (guide §4 + §5)
   const logsPath = user ? `logs/${user.uid}/entries` : null;
-  const logged = useCollection(lockedOut ? null : (logsPath), orderBy("createdAt", "desc"));
+  // Most recent 400 entries — enough for today's totals, recents and a
+  // year-long streak without downloading the whole history every launch.
+  const logged = useCollection(lockedOut ? null : (logsPath), orderBy("createdAt", "desc"), limit(400));
   const addLog = async (data) => {
     const ref = await addDoc(collection(db, logsPath), { ...data, createdAt: serverTimestamp() });
     // Bump the activity marker so coach compliance view sees this player today.
@@ -9120,7 +9663,7 @@ export default function TeamHubRolesApp() {
       uid: user.uid,
       date: today,
       lastLoggedAt: serverTimestamp(),
-    }, { merge: true }).catch(() => {});
+    }, { merge: true }).catch(reportError("Couldn't update today's meal check-in"));
     return ref;
   };
   const updateLog = (id, data) =>
@@ -9207,18 +9750,33 @@ export default function TeamHubRolesApp() {
     if (!file) throw new Error("No file selected.");
     const path = `documents/${activeTeamId}/${user.uid}/${Date.now()}-${file.name}`;
     const r = storageRef(storage, path);
+    // Fingerprint of the exact file: every signature records it, and the
+    // rules lock url/path/sha256 so a signed document can't be swapped.
+    const sha256 = await sha256Hex(file);
     const snap = await uploadBytes(r, file, { contentType: file.type || "application/octet-stream" });
     const url = await getDownloadURL(snap.ref);
     return addDoc(collection(db, "documents"), {
       teamId: activeTeamId,
       title: (title || "").trim() || file.name,
-      url, path, name: file.name || "", fileType: file.type || "",
-      createdByName: user.name, signatures: [], createdAt: serverTimestamp(),
+      url, path, sha256, name: file.name || "", fileType: file.type || "",
+      createdByName: user.name, createdAt: serverTimestamp(),
     });
   };
   const deleteDocument = (id) => deleteDoc(doc(db, "documents", id));
-  const signDocument = (id, name) =>
-    updateDoc(doc(db, "documents", id), { signatures: arrayUnion({ uid: user.uid, name, ts: new Date().toISOString() }) });
+  // E-signature: one immutable record per signer (rules check every field).
+  const signDocument = (d, { typedName, drawing, consentText }) =>
+    setDoc(doc(db, "documents", d.id, "signatures", user.uid), {
+      uid: user.uid,
+      typedName,
+      email: (auth.currentUser?.email || user.email || "").toLowerCase(),
+      signedAt: serverTimestamp(),
+      sha256: d.sha256 || "",
+      consentVersion: SIGN_CONSENT_VERSION,
+      consentText,
+      drawing,
+      documentTitle: (d.title || "").slice(0, 300),
+      userAgent: (navigator.userAgent || "").slice(0, 500),
+    });
 
 
 
@@ -9231,7 +9789,8 @@ export default function TeamHubRolesApp() {
   //    team (useAuth redeems ?invite=CODE at first sign-in). The doc id IS
   //    the code (a random token = the capability); shape documented in
   //    src/data/teams.js, rules in firestore.rules.
-  const invites = useCollection(lockedOut ? null : ("invitedEmails"), where("teamId", "==", activeTeamId), orderBy("email"));
+  // Coach-only: the roster's emails are not visible to players (rules).
+  const invites = useCollection(lockedOut || !isCoach ? null : ("invitedEmails"), where("teamId", "==", activeTeamId), orderBy("email"));
   const addInvite = (email, teamId) => {
     const e = email.trim().toLowerCase();
     if (!e.includes("@")) return Promise.reject(new Error("Invalid email."));
@@ -9291,7 +9850,7 @@ export default function TeamHubRolesApp() {
   // Invite links for the team being viewed. Single-field query (no composite
   // index needed); sorted client-side in the roster UI. Players can't list
   // them (rules) — the hook swallows that permission error.
-  const inviteLinks = useCollection(lockedOut ? null : ("inviteLinks"), where("teamId", "==", activeTeamId));
+  const inviteLinks = useCollection(lockedOut || !isCoach ? null : ("inviteLinks"), where("teamId", "==", activeTeamId));
   // Toggle a roster entry between player and admin. Updates the invite doc
   // (controls role for future first-sign-ins) AND any existing users doc with
   // that email (changes role for already-signed-up players immediately).
@@ -9335,7 +9894,7 @@ export default function TeamHubRolesApp() {
     // the admin picked. Primary is the first picked team (or the existing
     // primary if it's still one of them).
     const finalTeams = finalRole === "orgAdmin" ? [...TEAM_IDS] : validTeams;
-    const finalPrimary = finalTeams.includes(primaryTeamId) ? primaryTeamId : finalTeams[0];
+    const finalPrimary = finalTeams.includes(primaryTeamId) ? primaryTeamId : (finalTeams[0] || null);
     await updateDoc(doc(db, "users", uid), { role: finalRole, teamIds: finalTeams, primaryTeamId: finalPrimary });
     // Keep the invite record in sync so a future re-sign-in doesn't revert
     // the role. Best-effort: invite-link sign-ups have no invitedEmails doc.
@@ -9396,7 +9955,13 @@ export default function TeamHubRolesApp() {
   };
 
   // Chat — pinned status lives on each message doc (guide §4)
-  const messages = useAudienceCollection(lockedOut ? null : ("messages"), user, "createdAt", activeTeamId);
+  // Most recent `msgLimit` messages of the team (all channels); "Load older"
+  // in the chat raises the window. Keeps launches fast as history grows.
+  const MSG_PAGE = 300;
+  const [msgLimit, setMsgLimit] = useState(MSG_PAGE);
+  const messages = useAudienceCollection(lockedOut ? null : ("messages"), user, "createdAt", activeTeamId, msgLimit);
+  const loadOlderMessages = () => setMsgLimit((n) => n + MSG_PAGE);
+  const hasOlderMessages = messages.length >= msgLimit;
   const addMessage = (text, { attachment, pinned, replyTo, poll, channel } = {}) => {
     // A message inherits the audience of its channel so hidden channels stay
     // private server-side; the Team channel is visible to everyone.
@@ -9412,7 +9977,7 @@ export default function TeamHubRolesApp() {
       // active team's main channel). Rules + queries scope by this field.
       teamId: ch?.teamId || activeTeamId,
       audienceKeys: ch?.audienceKeys?.length ? ch.audienceKeys : ["*"],
-      isCoach: user.role === "admin",
+      isCoach: user.role === "admin" || user.role === "orgAdmin",
       readBy: { [user.uid]: serverTimestamp() },
       createdAt: serverTimestamp(),
     };
@@ -9429,7 +9994,9 @@ export default function TeamHubRolesApp() {
       data.kind = "poll";
       data.question = poll.question;
       data.options = poll.options;
-      data.votes = {};
+      // Totals only on the message; each vote is a private doc.
+      data.voteCounts = poll.options.map(() => 0);
+      data.voteTotal = 0;
     }
     return addDoc(collection(db, "messages"), data);
   };
@@ -9439,7 +10006,7 @@ export default function TeamHubRolesApp() {
   const postLineupImage = async (blob, channel, name) => {
     const ch = channel || "team";
     const chDoc = ch !== "team" ? chatGroups.find((c) => c.id === ch) : null;
-    const path = `chat/${chDoc?.teamId || activeTeamId}/${ch}/${user.uid}/${Date.now()}.jpg`;
+    const path = `chat/${chDoc?.teamId || activeTeamId}/${ch}/${user.uid}/${uploadStamp()}.jpg`;
     const r = storageRef(storage, path);
     const snap = await uploadBytes(r, blob, { contentType: "image/jpeg" });
     const url = await getDownloadURL(snap.ref);
@@ -9453,17 +10020,19 @@ export default function TeamHubRolesApp() {
   const deleteMessage = (id) => deleteDoc(doc(db, "messages", id));
   const markMessagesRead = async (ids) => {
     if (!ids?.length) return;
-    const batch = writeBatch(db);
-    ids.forEach((id) => {
-      batch.update(doc(db, "messages", id), {
-        [`readBy.${user.uid}`]: serverTimestamp(),
-      });
-    });
-    await batch.commit();
+    // Chunked: a single batch over 500 writes always fails.
+    await commitInChunks(ids, (b, id) => b.update(doc(db, "messages", id), {
+      [`readBy.${user.uid}`]: serverTimestamp(),
+    }));
   };
+  // Poll votes are private (messages/{id}/votes/{uid}): players see totals
+  // only, kept on the poll by the onPollVoteWritten function; the coach can
+  // see who voted for what.
   const voteOnPoll = (messageId, optionIndex) =>
-    updateDoc(doc(db, "messages", messageId), {
-      [`votes.${user.uid}`]: optionIndex,
+    setDoc(doc(db, "messages", messageId, "votes", user.uid), {
+      uid: user.uid,
+      option: optionIndex,
+      updatedAt: serverTimestamp(),
     });
   // React to a message (👍/👎/❤️). Passing a falsy reaction clears it (toggle).
   const reactToMessage = (messageId, reaction) =>
@@ -9493,12 +10062,8 @@ export default function TeamHubRolesApp() {
   // than leaving a private channel whose backlog is still world-readable.
   const updateChatGroup = async (id, visibleTo) => {
     const audienceKeys = audienceKeysFor(visibleTo, groupsList);
-    const channelMessages = messages.filter((m) => m.channel === id);
-    for (let i = 0; i < channelMessages.length; i += 400) {
-      const batch = writeBatch(db);
-      channelMessages.slice(i, i + 400).forEach((m) => batch.update(doc(db, "messages", m.id), { audienceKeys }));
-      await batch.commit();
-    }
+    const ch = chatGroups.find((c) => c.id === id);
+    await restampChannel(id, audienceKeys, ch?.teamId || activeTeamId);
     await updateDoc(doc(db, "chatGroups", id), { visibleTo, audienceKeys });
   };
 
@@ -9533,10 +10098,9 @@ export default function TeamHubRolesApp() {
       createdAt: serverTimestamp(),
     });
   const deletePushNotification = (id) => deleteDoc(doc(db, "pushNotifications", id));
-  // "Send now" used to call the sendPushNotification callable, but the org
-  // policy blocks public calls to it, so every tap failed. It now queues the
-  // same doc the Schedule flow writes, with sendAt set to now, and the
-  // runScheduled sweep sends it within a few minutes.
+  // "Send now" queues a pushNotifications doc with sendAt = now; the
+  // onPushNotificationCreated Cloud Function sends it the moment it's
+  // written (the 1-minute sweep is only a safety net).
   const sendPushNotificationNow = async ({ title, body, audienceKeys, visibleTo }) => {
     const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; } })();
     await addPushNotification({ title, body, audienceKeys, visibleTo, sendAt: serverTimestamp(), recurrence: { type: "none", time: "", days: [] }, tz });
@@ -9589,6 +10153,8 @@ export default function TeamHubRolesApp() {
     lockedOut ? null : (user && user.role !== "orgAdmin" ? "dms" : null),
     where("teamId", "==", activeTeamId),
     ...(isTeamCoach ? [] : [where("threadId", "==", user?.uid || "_")]),
+    orderBy("createdAt", "desc"),
+    limit(msgLimit),
   );
   const addDM = (text, threadId, { attachment } = {}) => {
     const data = {
@@ -9609,13 +10175,9 @@ export default function TeamHubRolesApp() {
   // Mark DM messages read (readBy only — same pattern as channel messages).
   const markDMsRead = async (ids) => {
     if (!ids?.length) return;
-    const batch = writeBatch(db);
-    ids.forEach((id) => {
-      batch.update(doc(db, "dms", id), {
-        [`readBy.${user.uid}`]: serverTimestamp(),
-      });
-    });
-    await batch.commit();
+    await commitInChunks(ids, (b, id) => b.update(doc(db, "dms", id), {
+      [`readBy.${user.uid}`]: serverTimestamp(),
+    }));
   };
 
   // Quote of the Day — latest coach-posted quote; posting one fans out a push.
@@ -9642,7 +10204,7 @@ export default function TeamHubRolesApp() {
       </div>
     );
   }
-  if (!user) return <LoginScreen externalError={authError} clearExternalError={clearError} />;
+  if (!user) return <LoginScreen externalError={authError} clearExternalError={clearError} emailLinkPending={emailLinkPending} onCompleteEmailLink={completeEmailLink} />;
   // Locked door: drill-library-only accounts (role drillBuilder, or any role
   // outside the three team roles) see the no-access screen instead of the
   // app shell — no team views render, and every subscription above was
@@ -9652,7 +10214,8 @@ export default function TeamHubRolesApp() {
   // Force a real first+last name before using the app (auto name = email prefix).
   const emailPrefix = (user.email || "").split("@")[0];
   const needsProfile = !user.name || user.name.trim() === emailPrefix || !user.name.trim().includes(" ");
-  if (needsProfile) return <NameGate user={user} onDone={() => window.location.reload()} />;
+  // The live profile (useAuth) picks up the saved name — no reload needed.
+  if (needsProfile) return <NameGate user={user} />;
 
   // "View as player" preview — a real coach can drop their effective role to
   // player to see exactly what the team sees. Identity (uid/name) stays real.
@@ -9770,8 +10333,8 @@ export default function TeamHubRolesApp() {
         {updateReady && <UpdateBanner onReload={reload} color={COLORS.primary} />}
         <Header title={title} user={effUser} onAvatarClick={() => setSettingsOpen(true)} onPreview={() => { setPreviewAsPlayer(true); setTab("home"); }} onRefresh={resyncFirestore} refreshing={firestoreSyncing} stale={firestoreStale} />
         {canSeeMultipleTeams && <TeamSwitcher teams={visibleTeams} activeTeamId={activeTeamId} onSelect={setPreferredTeamId} />}
-        {settingsOpen && <SettingsModal user={user} onClose={() => setSettingsOpen(false)} onSignOut={() => signOut(auth)} onReplayTour={() => { setSettingsOpen(false); setShowTour(true); }} isOrgAdmin={user.role === "orgAdmin"} orgUsers={orgUsers} setUserRoleAndTeams={setUserRoleAndTeams} />}
-        <WelcomeTour open={showTour} role={effUser.role} onClose={closeTour} user={user} onUploadPhoto={uploadOwnPhoto} />
+        {settingsOpen && <SettingsModal user={user} onClose={() => setSettingsOpen(false)} onSignOut={() => signOutUser(user.uid)} onReplayTour={() => { setSettingsOpen(false); setShowTour(true); }} isOrgAdmin={user.role === "orgAdmin"} orgUsers={orgUsers} setUserRoleAndTeams={setUserRoleAndTeams} />}
+        <WelcomeTour key={tourOpen ? "tour-open" : "tour-closed"} open={tourOpen} role={effUser.role} onClose={closeTour} user={user} onUploadPhoto={uploadOwnPhoto} />
         {previewAsPlayer && realIsAdmin && (
           <button onClick={() => setPreviewAsPlayer(false)} className="w-full flex items-center justify-center gap-2 py-2 text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: COLORS.primary }}>
             <Eye className="w-3.5 h-3.5" /> Viewing as a player — tap to exit
@@ -9781,7 +10344,7 @@ export default function TeamHubRolesApp() {
           {/* Desktop content cap: the column goes wide on a laptop, but the
               pages stay readable (and the pitch stays usable) at 72rem. */}
           <div className="w-full lg:max-w-6xl lg:mx-auto h-full flex flex-col">
-          {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} isOrgAdmin={user.role === "orgAdmin"} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} checkin={checkin} setCheckin={setCheckin} wellness={wellness} submitWellness={submitWellness} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} inviteLinks={inviteLinks} addInviteLink={addInviteLink} removeInviteLink={removeInviteLink} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
+          {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} isOrgAdmin={user.role === "orgAdmin"} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} wellness={wellness} wellnessLoading={isLoading(wellnessRaw)} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} inviteLinks={inviteLinks} addInviteLink={addInviteLink} removeInviteLink={removeInviteLink} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
           {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} practices={practices} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} nutritionTarget={myNutritionGoal} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} onUploadPhoto={uploadOwnPhoto} />}
           {activeTab === "train" && (
             trainView ? (
@@ -9789,22 +10352,23 @@ export default function TeamHubRolesApp() {
                 <div className="px-5 pt-4 pb-1"><button onClick={() => setTrainView(null)} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> Train</button></div>
                 {trainView === "gym" && <GymPage user={effUser} myWorkouts={myWorkouts} addMyWorkout={addMyWorkout} updateMyWorkout={updateMyWorkout} deleteMyWorkout={deleteMyWorkout} teamWorkouts={teamWorkouts} addTeamWorkout={addTeamWorkout} updateTeamWorkout={updateTeamWorkout} deleteTeamWorkout={deleteTeamWorkout} customExercises={customExercises} addCustomExercise={addCustomExercise} updateCustomExercise={updateCustomExercise} deleteCustomExercise={deleteCustomExercise} seedLifts={seedLifts} seedTeamWorkouts={seedTeamWorkouts} />}
                 {trainView === "nutrition" && <NutritionPage user={effUser} recipes={recipes} addRecipe={addRecipe} updateRecipe={updateRecipe} deleteRecipe={deleteRecipe} importRecipes={importRecipes} seedRecipes={seedRecipes} categories={categories} addCategory={addCategory} logged={logged} addLog={addLog} updateLog={updateLog} deleteLog={deleteLog} waterCups={waterCups} setWaterCups={setWaterCups} myNutritionGoal={myNutritionGoal} myNutritionTotals={myNutritionTotals} saveMyNutritionGoal={saveMyNutritionGoal} clearMyNutritionGoal={clearMyNutritionGoal} savedFoods={savedFoods} addSavedFood={addSavedFood} deleteSavedFood={deleteSavedFood} />}
+                {trainView === "library" && <LibraryPage user={effUser} items={libraryItems} activeTeamId={activeTeamId} addItem={addLibraryItem} updateItem={updateLibraryItem} deleteItem={deleteLibraryItem} />}
                 {trainView === "videos" && <VideosPage user={effUser} videos={videos} addVideo={addVideo} updateVideo={updateVideo} deleteVideo={deleteVideo} importVideos={importVideos} videoFolders={videoFolderDocs} addVideoFolder={addVideoFolder} renameVideoFolder={renameVideoFolder} deleteVideoFolder={deleteVideoFolder} />}
               </div>
             ) : <TrainHub onPick={setTrainView} />
           )}
           {activeTab === "practice" && effUser.role === "admin" && (
             <CoachCenterPage
-              practiceProps={{ user: effUser, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events }}
-              gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, setPlayerPhoto, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId) }}
-              rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId }}
+              practiceProps={{ user: { ...effUser, isOrgAdmin: user.role === "orgAdmin" }, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events }}
+              gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId) }}
+              rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", removeUser, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId }}
               calendarProps={{ user: effUser, events, practices, teamWorkouts, personalEvents, addEvent, updateEvent, addPersonalEvent, updatePersonalEvent, deleteEvent, deletePersonalEvent, importEvents, groups: groupsList, addGroup, updateGroupMembers, deleteGroup, invites, allUsers, chatGroups }}
               documentsProps={{ user: effUser, documents, rosterCount: invites.filter((i) => i.role !== "admin").length, onUpload: addDocument, onDelete: deleteDocument, onSign: signDocument }}
               announcementsProps={{ announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement }}
             />
           )}
           {activeTab === "calendar" && <CalendarPage user={effUser} events={events} practices={practices} teamWorkouts={teamWorkouts} personalEvents={personalEvents} addEvent={addEvent} updateEvent={updateEvent} addPersonalEvent={addPersonalEvent} updatePersonalEvent={updatePersonalEvent} deleteEvent={deleteEvent} deletePersonalEvent={deletePersonalEvent} importEvents={importEvents} groups={groupsList} addGroup={addGroup} updateGroupMembers={updateGroupMembers} deleteGroup={deleteGroup} invites={invites} allUsers={allUsers} chatGroups={chatGroups} />}
-          {activeTab === "messages" && <MessagesPage user={effUser} activeTeamId={activeTeamId} isOrgAdmin={user.role === "orgAdmin"} allUsers={allUsers} messages={messages} addMessage={addMessage} togglePinMessage={togglePinMessage} deleteMessage={deleteMessage} markMessagesRead={markMessagesRead} voteOnPoll={voteOnPoll} reactToMessage={reactToMessage} rosterCount={invites.length} chatGroups={chatGroups} addChatGroup={addChatGroup} deleteChatGroup={deleteChatGroup} updateChatGroup={updateChatGroup} onPinChannel={pinChatGroup} groups={groupsList} invites={invites} announcements={announcements} addAnnouncement={addAnnouncement} deleteAnnouncement={deleteAnnouncement} dms={dms} addDM={addDM} markDMsRead={markDMsRead} scheduled={scheduled} addScheduled={addScheduled} deleteScheduled={deleteScheduled} />}
+          {activeTab === "messages" && <MessagesPage user={effUser} activeTeamId={activeTeamId} hasOlderMessages={hasOlderMessages} onLoadOlder={loadOlderMessages} isOrgAdmin={user.role === "orgAdmin"} allUsers={allUsers} messages={messages} addMessage={addMessage} togglePinMessage={togglePinMessage} deleteMessage={deleteMessage} markMessagesRead={markMessagesRead} voteOnPoll={voteOnPoll} reactToMessage={reactToMessage} rosterCount={invites.length} chatGroups={chatGroups} addChatGroup={addChatGroup} deleteChatGroup={deleteChatGroup} updateChatGroup={updateChatGroup} onPinChannel={pinChatGroup} groups={groupsList} invites={invites} announcements={announcements} addAnnouncement={addAnnouncement} deleteAnnouncement={deleteAnnouncement} dms={dms} addDM={addDM} markDMsRead={markDMsRead} scheduled={scheduled} addScheduled={addScheduled} deleteScheduled={deleteScheduled} />}
           </div>
         </main>
         <nav className="lg:hidden flex-shrink-0 w-full bg-white border-t border-slate-200 z-20" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>

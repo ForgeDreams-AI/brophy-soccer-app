@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 // Brand palette (mirrors COLORS in TeamHubRoles so the tour matches the app).
 const RED = "#980000";
@@ -38,21 +38,13 @@ export default function WelcomeTour({ open, role, onClose, user, onUploadPhoto }
   const [i, setI] = useState(0);
   // Face photo for this player (local state: the parent's user object is only
   // loaded once at sign-in, so it does not refresh after an upload).
-  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoUrl, setPhotoUrl] = useState(user?.photoURL || "");
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoErr, setPhotoErr] = useState("");
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Always start at the beginning each time it opens.
-  useEffect(() => {
-    if (open) {
-      setI(0);
-      setPhotoUrl(user?.photoURL || "");
-      setPhotoBusy(false);
-      setPhotoErr("");
-    }
-  }, [open]);
+  // Starts at step 0 each time it opens: the parent re-mounts it via `key`.
 
   if (!open) return null;
   const step = steps[i];

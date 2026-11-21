@@ -3,7 +3,7 @@
 Mobile-first team app for Brophy Soccer. Built per `../TeamHub_Build_Guide.md`.
 
 - **Production URL:** `BrophySoccer.forgedreams.ai`
-- **Hosting:** Cloudflare Pages (domain registered on Cloudflare)
+- **Hosting:** Cloudflare (domain registered on Cloudflare). The repo carries both a Pages setup (this README) and a Worker + static-assets setup (`wrangler.toml`); confirm which one serves production before changing either. The `hosting` block in `firebase.json` is unused.
 - **Backend:** Firebase Auth + Firestore (project: `brophy-soccer-app`)
 - **Stack:** Vite + React + Tailwind v3 + Firebase JS SDK + lucide-react
 
@@ -29,8 +29,14 @@ All six tabs are live-Firestore-backed:
 
 ```bash
 npm install
-npm run dev     # → http://localhost:5173
+npm run dev          # → http://localhost:5173 (talks to the PRODUCTION Firebase project)
+npm run lint
+npm test             # unit tests (Vitest, src/**/*.test.js)
+npm run test:rules   # Firestore + Storage rules tests on the emulators (needs Java 21)
+(cd functions && npm test)   # Cloud Functions helper tests
 ```
+
+CI (`.github/workflows/ci.yml`) runs all of the above on every pull request.
 
 `.env.local` holds your USDA key (see below). Restart `npm run dev` after editing env vars — Vite reads them only at boot.
 
@@ -39,15 +45,16 @@ npm run dev     # → http://localhost:5173
 The "Log Something Else" form has built-in auto-fill search powered by USDA's free API.
 
 1. Get a key (instant, no card): <https://fdc.nal.usda.gov/api-key-signup.html>
-2. Paste it into `.env` (gitignored — never commit a real key): `VITE_USDA_API_KEY=...`
-3. Restart `npm run dev`.
-4. For Cloudflare Pages: add the same variable in **Pages project → Settings → Environment variables** (a build secret — the deploy needs it or food search falls back to Open Food Facts only).
+2. Store it as a **Worker secret**, never in the app bundle: `npx wrangler secret put USDA_API_KEY` (from `teamhub/`). The browser calls `/api/usda` and the Worker adds the key.
+3. Without the secret (or in local `npm run dev`, where there's no Worker), food search uses Open Food Facts only.
 
 Values are per 100g — adjust calories/protein after autofill if your portion was different.
 
-## Make yourself coach (admin)
+## Sign-up is invite-only (enforced by the rules)
 
-After your first sign-in, Firebase console → Firestore → `users/<your-uid>` → change `role` from `"player"` to `"admin"` → reload the app.
+A profile can only be created from a matching roster invite (`invitedEmails/{email}`) or a live team invite link (`?invite=CODE`). The Firestore rules check every field against the invite, so an uninvited account can't create a profile even with the SDK. Roles and team assignment are changed only by the program admin (Settings → People & Roles).
+
+**Bootstrap the first program admin:** Firebase console → Firestore → create `invitedEmails/<your-email>` with `{ email, role: "orgAdmin", teamId: "varsity" }` → sign in.
 
 ## Deploy to Cloudflare Pages
 
@@ -69,7 +76,7 @@ After your first sign-in, Firebase console → Firestore → `users/<your-uid>` 
    - **Build command:** `npm run build`
    - **Build output directory:** `dist`
    - **Root directory:** `teamhub` ← important (since this folder is nested in the repo)
-   - **Environment variables (production AND preview):** `VITE_USDA_API_KEY=<your USDA key>`, `VITE_FIREBASE_VAPID_KEY=<your VAPID key>`
+   - **Environment variables (production AND preview):** `VITE_FIREBASE_VAPID_KEY=<your VAPID key>` (the USDA key is a Worker secret now — see "Food search")
      (VAPID key: generate in the Brophy Firebase console → Project Settings → Cloud Messaging → Web Push certificates.)
 
    Click **Save and Deploy**. First build takes ~2 min.
@@ -90,15 +97,18 @@ git push
 
 PR branches get preview URLs automatically (great for trying changes before merging).
 
-## Updating Firestore rules
+## Deploying rules, indexes and functions
 
-The security rules are in `firestore.rules`. After editing them:
+Nothing below deploys automatically — run it from `teamhub/` after merging. Order matters:
 
-- Easiest: copy the file's contents → paste into Firebase console → Firestore → **Rules** → **Publish**.
-- Or via CLI: `npm install -g firebase-tools && firebase login && firebase deploy --only firestore:rules`.
+```bash
+npx firebase-tools@14 login
+npx firebase-tools@14 deploy --only firestore:rules,storage     # 1. rules
+npx firebase-tools@14 deploy --only firestore:indexes           # 2. indexes (wait until "Enabled" in the console)
+npx firebase-tools@14 deploy --only functions                   # 3. functions (Blaze plan)
+```
 
-Storage rules (`storage.rules`) publish the same way: `firebase deploy --only storage`,
-or paste into Firebase console → Storage → **Rules**.
+Always run `npm run test:rules` before deploying rules. Don't paste rules into the console by hand — that's how git and production drift apart.
 
 ## Game Day line-up photos (Storage CORS)
 
@@ -147,7 +157,6 @@ src/
 firestore.rules        ← role-based access (paste into console after edits)
 firebase.json          ← Firestore rules deploy config
 .firebaserc            ← Firebase project alias
-public/_redirects      ← SPA route fallback for Cloudflare Pages
 .env.example           ← committed template
 .env.local             ← gitignored, holds real keys
 ```
@@ -167,15 +176,9 @@ public/_redirects      ← SPA route fallback for Cloudflare Pages
   loads 120 whole-food recipes, browsable by meal category and food-type
   sub-category. Additive — it skips recipes you already have.
 
-## v1.1 backlog
+## Backlog
 
-Things worth doing next session, in priority order:
-
-1. **Email-link sign-in.** Replace "anyone with Google can sign in" with a coach-driven invite flow: coach enters a player email → Firebase sends a one-tap magic link → player joins. No passwords, no manual account creation in the console. Gated by an `invitedEmails` Firestore collection so randos can't self-join. (Firebase native: `sendSignInLinkToEmail` / `signInWithEmailLink`.)
-2. **AI photo food logging.** Tiny Cloudflare Worker proxying Gemini 2.0 Flash. "📷 Use photo" button on the food log form → snap a photo → AI estimates name + macros → user confirms → saved. Complements USDA text search (text = exact, photo = best-guess for mixed plates).
-3. **Push notifications** for new announcements + new chat messages (Firebase Cloud Messaging).
-4. **Player profile pages** — clickable name in the chat or readiness list opens their profile with position, jersey #, etc.
-5. **Workout completion logging** — players check off completed sets while doing a workout.
+See `../docs/FIX_PLAN.md` (§7 "Needs a decision") and `../docs/APP_WALKTHROUGH.md`.
 
 ## Build guide
 

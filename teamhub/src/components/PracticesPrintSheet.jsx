@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
 import { shareSheetPdf } from "../lib/sharePdf";
+import { toast } from "../lib/toast";
 
 const RED = "#980000";
 const durLabel = (d) => {
@@ -32,7 +33,10 @@ export default function PracticesPrintSheet({ practices = [], drills = [], teamN
     setBusy(true);
     try {
       const safe = (teamName || "practices").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "practices";
-      await shareSheetPdf(`${safe}-practices.pdf`);
+      const res = await shareSheetPdf(`${safe}-practices.pdf`);
+      if (res?.missingImages) toast(`${res.missingImages} picture${res.missingImages === 1 ? "" : "s"} couldn't be added to the PDF (Storage CORS isn't set up yet — see README).`);
+    } catch (e) {
+      toast("Couldn't make the PDF — " + (e?.message || "try again."));
     } finally {
       setBusy(false);
     }

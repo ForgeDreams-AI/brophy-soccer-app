@@ -49,22 +49,37 @@ export async function enablePushNotifications(uid) {
     fcmTokens: arrayUnion(token),
     notificationsEnabledAt: new Date().toISOString(),
   });
+  rememberDeviceToken(token);
 
   return token;
 }
 
-export async function disablePushNotifications(uid, token) {
-  if (!token) return;
-  await updateDoc(doc(db, "users", uid), {
-    fcmTokens: arrayRemove(token),
-  });
+// This device's FCM token, remembered at enable time so "Turn off" and
+// sign-out remove ONLY this device (other phones keep their pushes).
+const DEVICE_TOKEN_KEY = "brophy_fcm_token";
+function rememberDeviceToken(token) {
+  try { localStorage.setItem(DEVICE_TOKEN_KEY, token); } catch { /* private mode */ }
+}
+export function deviceToken() {
+  try { return localStorage.getItem(DEVICE_TOKEN_KEY) || ""; } catch { return ""; }
+}
+function forgetDeviceToken() {
+  try { localStorage.removeItem(DEVICE_TOKEN_KEY); } catch { /* private mode */ }
 }
 
-// Clear every device's token for this user (used by the "Off" toggle in
-// Settings — Cloud Function has nothing to send to even though the browser
-// permission technically remains granted).
-export async function clearAllPushTokens(uid) {
-  await updateDoc(doc(db, "users", uid), { fcmTokens: [] });
+// Push is "on" for this device when permission is granted AND this
+// device's token was saved (permission alone stays granted after Off).
+export const pushEnabledOnThisDevice = () =>
+  currentPermission() === "granted" && Boolean(deviceToken());
+
+// Remove THIS device's token (Settings "Off" toggle, and sign-out so a
+// shared phone stops receiving the previous user's pushes). Other devices
+// of the same user keep theirs.
+export async function disablePushOnThisDevice(uid) {
+  const token = deviceToken();
+  forgetDeviceToken();
+  if (!uid || !token) return;
+  await updateDoc(doc(db, "users", uid), { fcmTokens: arrayRemove(token) });
 }
 
 // Foreground messages (app is open). We show our own toast/notification.
