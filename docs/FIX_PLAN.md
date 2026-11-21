@@ -184,3 +184,17 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
 - **F82, repo size:**
   - The 89 MB of intermediate WAVs are removed from the files and gitignored. They can be rebuilt from the MP3s (`videos/walkthrough/README.md`).
   - Purging them from history needs a force-push; it is deploy plan step 11 and needs Batman's explicit go.
+
+## 12. Documents library (requested 2026-11-21)
+
+- **Train → Documents** sits next to Videos.
+- Coaches share **files** (PDF, Word, PowerPoint, Excel, images, Pages, Keynote, Numbers, OpenDocument; up to 50 MB, with an upload progress bar) or **links** (Google Drive and so on).
+- Items go into folders (pick one or type a new one), with an optional note, a search box, and folder filters.
+- Each item is shared with **all teams** or with **one team**. Edit and delete are coach-only.
+- With **"Notify players"** on, the `onLibraryItemCreated` function sends a push.
+- Under the hood:
+  - Data: `libraryItems`; files: Storage `library/{all|team}/{uid}/`.
+  - New index: `libraryItems (teamId, createdAt desc)`.
+  - 5 new rules tests (68 total).
+  - Deep link: `?tab=library`.
+- This is separate from Coach Center → Documents, which is for documents players must **sign**.

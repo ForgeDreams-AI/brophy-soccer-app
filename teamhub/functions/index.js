@@ -197,6 +197,29 @@ exports.onAnnouncementCreated = onDocumentCreated("announcements/{id}", async (e
   });
 });
 
+// Shared documents library: a coach shares a file or link and leaves
+// "Notify players" on → push it to that team, or to all three teams for an
+// all-teams item.
+const ALL_TEAMS = ["jvb", "jva", "varsity"];
+exports.onLibraryItemCreated = onDocumentCreated("libraryItems/{id}", async (event) => {
+  const data = event.data?.data();
+  if (!data || data.notify !== true) return;
+  const teams = data.teamId === "all" ? ALL_TEAMS : [data.teamId];
+  const merged = { tokens: [], tokenToUid: new Map() };
+  for (const t of teams) {
+    const b = await collectTokens({ teamId: t, excludeUid: data.createdByUid });
+    b.tokens.forEach((tok) => {
+      if (!merged.tokenToUid.has(tok)) { merged.tokens.push(tok); merged.tokenToUid.set(tok, b.tokenToUid.get(tok)); }
+    });
+  }
+  await sendToTokens(merged, {
+    title: `📄 New ${data.kind === "link" ? "link" : "document"}: ${trunc(data.title, 80)}`,
+    body: data.folder ? `In ${data.folder} · tap to open` : "Tap to open",
+    link: "/?tab=library",
+    tag: `library-${event.params.id}`,
+  });
+});
+
 // Quote of the Day: a coach posts an inspirational quote → push it to everyone.
 exports.onQuoteCreated = onDocumentCreated("quotes/{id}", async (event) => {
   const data = event.data?.data();

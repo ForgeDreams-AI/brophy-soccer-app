@@ -171,6 +171,23 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
+    // Shared documents library (Train → Documents). Path shape:
+    // library/{scope}/{uid}/{filename}, scope = 'all' or a team id.
+    // Read: a team-app profile, and membership for team-scoped files.
+    // Write: a coach (any coach for 'all', that team's coach otherwise),
+    // into their own folder; documents/images/text up to 50 MB.
+    match /library/{scope}/{uid}/{filename} {
+      allow read: if request.auth != null && hasProfile()
+        && (scope == 'all' || isMemberOfTeam(scope));
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && (scope == 'all' ? isAdminUser() : isTeamCoach(scope))
+        && request.resource.size < 50 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+          || request.resource.contentType.matches('application/(pdf|msword|rtf|vnd\\.ms-(excel|powerpoint)|vnd\\.openxmlformats-officedocument\\.(wordprocessingml\\.document|spreadsheetml\\.sheet|presentationml\\.presentation)|vnd\\.apple\\.(pages|keynote|numbers)|vnd\\.oasis\\.opendocument\\..*)')
+          || request.resource.contentType.matches('text/(plain|csv|rtf)'));
+    }
+
     // Team documents (PDF, Office files, images, etc.). Path shape:
     // documents/{teamId}/{uid}/{filename}. Readable only by members of that
     // team; only a coach of the team (or the org admin) writes, under their

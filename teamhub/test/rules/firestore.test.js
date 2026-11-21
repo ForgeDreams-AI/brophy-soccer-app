@@ -349,3 +349,30 @@ describe('poll votes are private (players see totals only)', () => {
     await assertFails(updateDoc(doc(db, 'messages/poll1'), { voteCounts: [9, 9] }))
   })
 })
+
+describe('shared documents library (libraryItems)', () => {
+  const item = (teamId, uid, extra = {}) => ({ teamId, title: 'Playbook', kind: 'file', createdByUid: uid, ...extra })
+  test('who can share what', async () => {
+    await assertSucceeds(setDoc(doc(as(env, 'coachJ').firestore(), 'libraryItems/a'), item('all', 'coachJ')))
+    await assertSucceeds(setDoc(doc(as(env, 'coachV').firestore(), 'libraryItems/b'), item('varsity', 'coachV', { kind: 'link', url: 'https://drive.google.com/x' })))
+    await assertFails(setDoc(doc(as(env, 'coachJ').firestore(), 'libraryItems/c'), item('varsity', 'coachJ')))
+    await assertFails(setDoc(doc(as(env, 'p1').firestore(), 'libraryItems/d'), item('all', 'p1')))
+    await assertFails(setDoc(doc(as(env, 'coachV').firestore(), 'libraryItems/e'), item('all', 'coachJ')))
+  })
+  test('who can see what', async () => {
+    await seed(env, 'libraryItems/all1', item('all', 'coachJ'))
+    await seed(env, 'libraryItems/v1', item('varsity', 'coachV'))
+    await assertSucceeds(getDoc(doc(as(env, 'p1').firestore(), 'libraryItems/all1')))
+    await assertSucceeds(getDoc(doc(as(env, 'p1').firestore(), 'libraryItems/v1')))
+    await assertFails(getDoc(doc(as(env, 'coachJ').firestore(), 'libraryItems/v1')))
+    await assertFails(getDoc(doc(as(env, 'builder').firestore(), 'libraryItems/all1')))
+  })
+  test('edit and delete: scope fixed; team items by that team\'s coach', async () => {
+    await seed(env, 'libraryItems/v1', item('varsity', 'coachV'))
+    await assertSucceeds(updateDoc(doc(as(env, 'coachV').firestore(), 'libraryItems/v1'), { title: 'Scouting v2', folder: 'Scouting' }))
+    await assertFails(updateDoc(doc(as(env, 'coachV').firestore(), 'libraryItems/v1'), { teamId: 'all' }))
+    await assertFails(deleteDoc(doc(as(env, 'coachJ').firestore(), 'libraryItems/v1')))
+    await assertFails(deleteDoc(doc(as(env, 'p1').firestore(), 'libraryItems/v1')))
+    await assertSucceeds(deleteDoc(doc(as(env, 'org').firestore(), 'libraryItems/v1')))
+  })
+})

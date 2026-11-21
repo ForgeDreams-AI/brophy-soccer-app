@@ -25,7 +25,7 @@ import {
   serverTimestamp, writeBatch, deleteField,
 } from "firebase/firestore";
 import { auth, db, storage } from "./firebase";
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { useAuth } from "./hooks/useAuth";
 import { useCollection, useAudienceCollection, useDoc, isLoading } from "./hooks/useCollection";
 
@@ -293,6 +293,8 @@ const COLORS = {
 // Production domain (decided 2026-11-08, §11).
 const APP_DOMAIN = "BrophySoccer.forgedreams.ai";
 const TOUR_SEEN_KEY = "teamhub_tour_seen_v1";
+// Sub-pages of the Train hub (also valid ?tab= deep links).
+const TRAIN_VIEWS = ["gym", "nutrition", "videos", "library"];
 
 // Toast host — renders transient messages dispatched via toast(). Rendered once
 // at the app root; aria-live so screen readers announce them.
@@ -1266,6 +1268,7 @@ const TrainHub = ({ onPick }) => {
     ["gym", "Workouts", Dumbbell, "Your lifts & exercises"],
     ["nutrition", "Nutrition", Apple, "Meals, recipes & water"],
     ["videos", "Videos", Video, "Film, drills & guides"],
+    ["library", "Documents", FileText, "Playbooks, forms & plans"],
   ];
   return (
     <div className="px-5 pt-5 pb-4 space-y-3">
@@ -2537,6 +2540,192 @@ const parseVideoCSV = (text) => {
       subfolder: (c[7] || "").trim(),
     };
   }).filter((r) => r.title && r.url);
+};
+
+/* ─── DOCUMENTS LIBRARY (Train → Documents, next to Videos) ───────────────
+   Coach-shared files and links (playbooks, scouting reports, forms, training
+   plans…), filed in folders. Each item is shared with ALL three teams or with
+   one team (firestore.rules libraryItems + storage.rules library/). Players
+   open/download; coaches add, edit and delete. Different from Coach Center →
+   Documents, which is for documents players must SIGN. */
+const LIBRARY_FOLDERS = ["Playbook", "Scouting", "Forms", "Training plans", "Nutrition", "Recovery"];
+const LIBRARY_MIME_BY_EXT = {
+  pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  txt: "text/plain", csv: "text/csv", rtf: "application/rtf",
+  pages: "application/vnd.apple.pages", key: "application/vnd.apple.keynote", numbers: "application/vnd.apple.numbers",
+  odt: "application/vnd.oasis.opendocument.text", ods: "application/vnd.oasis.opendocument.spreadsheet", odp: "application/vnd.oasis.opendocument.presentation",
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", heic: "image/heic",
+};
+const fileSizeLabel = (n) => (!n ? "" : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`);
+const isHttpUrl = (u) => { try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:"; } catch { return false; } };
+
+const LibraryItemForm = ({ initial, activeTeamId, folders, onSave, onClose }) => {
+  const editing = Boolean(initial?.id);
+  const [kind, setKind] = useState(initial?.kind || "file");
+  const [file, setFile] = useState(null);
+  const [url, setUrl] = useState(initial?.url && initial?.kind === "link" ? initial.url : "");
+  const [title, setTitle] = useState(initial?.title || "");
+  const [folder, setFolder] = useState(initial?.folder || "");
+  const [desc, setDesc] = useState(initial?.desc || "");
+  const [scope, setScope] = useState(initial?.teamId || "all");
+  const [notify, setNotify] = useState(!editing);
+  const [progress, setProgress] = useState(null);
+  const [err, setErr] = useState("");
+  const submit = async () => {
+    setErr("");
+    if (!editing && kind === "file" && !file) { setErr("Pick a file to upload."); return; }
+    if (kind === "link" && !isHttpUrl(url.trim())) { setErr("Enter a full link starting with https://"); return; }
+    if (!editing && kind === "file" && file.size > 50 * 1024 * 1024) { setErr("That file is over 50 MB. Share it as a link (e.g. Google Drive) instead."); return; }
+    const t = (title.trim() || file?.name || url.trim()).slice(0, 200);
+    try {
+      setProgress(0);
+      await onSave({ kind, file, url: url.trim(), title: t, folder: folder.trim(), desc: desc.trim(), scope, notify }, setProgress);
+      onClose();
+    } catch (e) {
+      setProgress(null);
+      setErr((e?.code === "storage/unauthorized" || e?.code === "permission-denied") ? "You don't have permission to share to that team." : (e?.message || "Couldn't save — try again."));
+    }
+  };
+  const busy = progress !== null;
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={busy ? undefined : onClose}>
+      <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-base text-slate-900">{editing ? "Edit document" : "Share a document"}</h3>
+          <button onClick={onClose} disabled={busy} aria-label="Close" className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        {!editing && (
+          <div className="grid grid-cols-2 gap-1 bg-slate-100 rounded-full p-1">
+            {[["file", "Upload a file"], ["link", "Share a link"]].map(([k, label]) => (
+              <button key={k} onClick={() => setKind(k)} className={`py-1.5 rounded-full text-xs font-bold ${kind === k ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`}>{label}</button>
+            ))}
+          </div>
+        )}
+        {!editing && kind === "file" && (
+          <label className="block border border-dashed border-slate-300 rounded-xl px-3 py-4 text-center cursor-pointer">
+            <input type="file" accept={DOC_ACCEPT} className="hidden" onChange={(e) => { const f = e.target.files?.[0] || null; setFile(f); if (f && !title.trim()) setTitle(f.name.replace(/\.[^.]+$/, "")); }} />
+            {file ? <span className="text-sm font-semibold text-slate-800">{file.name} <span className="text-slate-400 font-normal">· {fileSizeLabel(file.size)}</span></span>
+              : <span className="text-sm text-slate-500"><Paperclip className="w-4 h-4 inline mr-1" />PDF, Word, PowerPoint, Excel, images… up to 50 MB</span>}
+          </label>
+        )}
+        {kind === "link" && (
+          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://drive.google.com/…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        )}
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (e.g. Set-piece playbook)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        <div>
+          <input value={folder} onChange={(e) => setFolder(e.target.value)} list="library-folders" placeholder="Folder (pick or type a new one)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          <datalist id="library-folders">{folders.map((f) => <option key={f} value={f} />)}</datalist>
+        </div>
+        <AutoGrowTextarea value={desc} onChange={(e) => setDesc(e.target.value)} minRows={2} placeholder="Short note for the team (optional)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        {!editing && (
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Share with</span>
+            <div className="grid grid-cols-2 gap-1 bg-slate-100 rounded-full p-1">
+              {[["all", "All teams"], [activeTeamId, `${getTeamShortName(activeTeamId)} only`]].map(([k, label]) => (
+                <button key={k} onClick={() => setScope(k)} className={`py-1.5 rounded-full text-xs font-bold ${scope === k ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`}>{label}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {!editing && (
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} /> Notify players
+          </label>
+        )}
+        {err && <p className="text-xs text-red-600">{err}</p>}
+        {busy && kind === "file" && !editing && (
+          <div className="h-2 rounded-full bg-slate-100 overflow-hidden"><div className="h-full transition-all" style={{ width: `${progress}%`, backgroundColor: COLORS.success }} /></div>
+        )}
+        <button onClick={submit} disabled={busy} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>
+          {busy ? (kind === "file" && !editing ? `Uploading… ${progress}%` : "Saving…") : editing ? "Save changes" : "Share"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export const LibraryPage = ({ user, items = [], activeTeamId, addItem, updateItem, deleteItem }) => {
+  const isAdmin = user.role === "admin";
+  const [folder, setFolder] = useState("All");
+  const [q, setQ] = useState("");
+  const [form, setForm] = useState(null); // null | {} (new) | item (edit)
+  const usedFolders = [...new Set(items.map((i) => i.folder).filter(Boolean))];
+  const folders = [...new Set([...usedFolders, ...LIBRARY_FOLDERS])];
+  const pills = ["All", ...usedFolders.sort((a, b) => a.localeCompare(b))];
+  const activeFolder = pills.includes(folder) ? folder : "All";
+  const needle = q.trim().toLowerCase();
+  const shown = items.filter((i) => (activeFolder === "All" || i.folder === activeFolder)
+    && (!needle || [i.title, i.desc, i.folder, i.name].some((v) => (v || "").toLowerCase().includes(needle))));
+  const fmtDate = (ts) => (ts?.toDate ? ts.toDate().toLocaleDateString([], { month: "short", day: "numeric" }) : "");
+  const remove = (i) => {
+    if (!confirm(`Delete "${i.title}"? ${i.teamId === "all" ? "All three teams" : "The team"} will lose it.`)) return;
+    Promise.resolve(deleteItem(i.id)).catch(reportError("Couldn't delete the document"));
+  };
+  return (
+    <div className="px-5 pt-3 pb-6 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-base font-bold text-slate-900">Documents</h3>
+          <p className="text-xs text-slate-500">Playbooks, scouting, forms and plans from your coaches</p>
+        </div>
+        {isAdmin && <button onClick={() => setForm({})} className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full text-white flex items-center gap-1 flex-shrink-0" style={{ backgroundColor: COLORS.primary }}><Plus className="w-3 h-3" /> Share</button>}
+      </div>
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search documents…" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white" />
+      {pills.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto -mx-5 px-5 pb-1">
+          {pills.map((f) => (
+            <button key={f} onClick={() => setFolder(f)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold" style={{ backgroundColor: activeFolder === f ? COLORS.primary : "white", color: activeFolder === f ? "#fff" : COLORS.textSecondary, border: `1px solid ${activeFolder === f ? COLORS.primary : COLORS.border}` }}>{f}</button>
+          ))}
+        </div>
+      )}
+      {isLoading(items) ? <p className="text-sm text-slate-400 text-center py-8">Loading documents…</p>
+        : shown.length === 0 ? (
+          <div className="text-center py-10 text-slate-400">
+            <FileText className="w-8 h-8 mx-auto mb-2" />
+            <p className="text-sm">{items.length ? "No documents match." : isAdmin ? "Nothing shared yet. Tap Share to add a playbook, form or link." : "Nothing shared yet."}</p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {shown.map((i) => {
+              const isLink = i.kind === "link";
+              const isImg = !isLink && (i.fileType || "").startsWith("image/");
+              return (
+                <li key={i.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 flex items-center gap-3">
+                  {isImg ? <img src={i.url} alt="" loading="lazy" className="w-11 h-11 rounded-xl object-cover flex-shrink-0" />
+                    : <div className="w-11 h-11 rounded-xl flex flex-col items-center justify-center flex-shrink-0 gap-0.5" style={{ backgroundColor: COLORS.accentSoft }}>
+                      {isLink ? <LinkIcon className="w-4 h-4" style={{ color: COLORS.accent }} /> : <FileText className="w-4 h-4" style={{ color: COLORS.accent }} />}
+                      <span className="text-[7px] font-black leading-none" style={{ color: COLORS.accent }}>{isLink ? "LINK" : docTypeLabel(i)}</span>
+                    </div>}
+                  <a href={i.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 truncate">{i.title}</div>
+                    <div className="text-[10px] text-slate-500 truncate">
+                      {[i.folder, i.teamId === "all" ? "All teams" : getTeamShortName(i.teamId), fileSizeLabel(i.size), fmtDate(i.createdAt)].filter(Boolean).join(" · ")}
+                    </div>
+                    {i.desc && <div className="text-[11px] text-slate-600 line-clamp-2 mt-0.5">{i.desc}</div>}
+                  </a>
+                  <a href={i.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${i.title}`} className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.bg, color: COLORS.primary }}>
+                    {isLink ? <ExternalLink className="w-4 h-4" /> : <Download className="w-4 h-4" />}
+                  </a>
+                  {isAdmin && (
+                    <div className="flex flex-col gap-1 flex-shrink-0">
+                      <button onClick={() => setForm(i)} aria-label={`Edit ${i.title}`} className="text-slate-300 hover:text-slate-600"><Pencil className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => remove(i)} aria-label={`Delete ${i.title}`} className="text-slate-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      {form && (
+        <LibraryItemForm initial={form} activeTeamId={activeTeamId} folders={folders}
+          onSave={(data, onProgress) => (form.id ? updateItem(form.id, { title: data.title, folder: data.folder, desc: data.desc, ...(form.kind === "link" ? { url: data.url } : {}) }) : addItem(data, onProgress))}
+          onClose={() => setForm(null)} />
+      )}
+    </div>
+  );
 };
 
 const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVideos, videoFolders = [], addVideoFolder, renameVideoFolder, deleteVideoFolder }) => {
@@ -8991,10 +9180,10 @@ export default function TeamHubRolesApp() {
   // Deep link (?tab=X from a notification or shared link) picks the first tab.
   // Gym/Nutrition/Videos live under the Train hub.
   const initialTab = (() => { try { return new URLSearchParams(window.location.search).get("tab") || ""; } catch { return ""; } })();
-  const [tab, setTab] = useState(() => (["gym", "nutrition", "videos"].includes(initialTab) ? "train" : initialTab || "home"));
+  const [tab, setTab] = useState(() => (TRAIN_VIEWS.includes(initialTab) ? "train" : initialTab || "home"));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [previewAsPlayer, setPreviewAsPlayer] = useState(false);
-  const [trainView, setTrainView] = useState(() => (["gym", "nutrition", "videos"].includes(initialTab) ? initialTab : null)); // Train sub-page: gym | nutrition | videos
+  const [trainView, setTrainView] = useState(() => (TRAIN_VIEWS.includes(initialTab) ? initialTab : null)); // Train sub-page: gym | nutrition | videos
   const [showTour, setShowTour] = useState(false);
   // First-login welcome tour, once per device (localStorage). Derived during
   // render instead of set from an effect.
@@ -9071,7 +9260,7 @@ export default function TeamHubRolesApp() {
   // Workouts/Nutrition/Videos no longer have their own tabs — route those to
   // the Train hub with the matching sub-view so old links keep working.
   const routeToTab = (t) => {
-    if (["gym", "nutrition", "videos"].includes(t)) {
+    if (TRAIN_VIEWS.includes(t)) {
       setTrainView(t);
       setTab("train");
     } else {
@@ -9303,6 +9492,26 @@ export default function TeamHubRolesApp() {
     }
     await batch.commit();
   };
+
+  // Shared documents library (Train → Documents): items for all teams plus
+  // the active team's own. Coaches upload to Storage library/{scope}/{uid}/.
+  const libraryItems = useCollection(lockedOut ? null : ("libraryItems"), where("teamId", "in", ["all", activeTeamId]), orderBy("createdAt", "desc"));
+  const addLibraryItem = async ({ kind, file, url, title, folder, desc, scope, notify }, onProgress) => {
+    const teamId = scope === "all" ? "all" : activeTeamId;
+    const base = { teamId, title, folder: folder || "", desc: desc || "", notify: Boolean(notify), createdByUid: user.uid, createdByName: user.name, createdAt: serverTimestamp() };
+    if (kind === "link") return addDoc(collection(db, "libraryItems"), { ...base, kind: "link", url });
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    const contentType = file.type || LIBRARY_MIME_BY_EXT[ext] || "application/octet-stream";
+    const safe = file.name.replace(/[^\w.\- ]+/g, "").replace(/\s+/g, "-").slice(0, 80) || "file";
+    const path = `library/${teamId}/${user.uid}/${uploadStamp()}-${safe}`;
+    const task = uploadBytesResumable(storageRef(storage, path), file, { contentType });
+    await new Promise((resolve, reject) => task.on("state_changed",
+      (s) => onProgress?.(Math.round((s.bytesTransferred / Math.max(1, s.totalBytes)) * 100)), reject, resolve));
+    const fileUrl = await getDownloadURL(task.snapshot.ref);
+    return addDoc(collection(db, "libraryItems"), { ...base, kind: "file", url: fileUrl, path, name: file.name, fileType: contentType, size: file.size });
+  };
+  const updateLibraryItem = (id, data) => updateDoc(doc(db, "libraryItems", id), data);
+  const deleteLibraryItem = (id) => deleteDoc(doc(db, "libraryItems", id));
 
   // Drill library — building blocks for the Practice page (same CRUD as videos).
   // ONE shared library: the `drillLibrary` collection is read and written by
@@ -10143,6 +10352,7 @@ export default function TeamHubRolesApp() {
                 <div className="px-5 pt-4 pb-1"><button onClick={() => setTrainView(null)} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> Train</button></div>
                 {trainView === "gym" && <GymPage user={effUser} myWorkouts={myWorkouts} addMyWorkout={addMyWorkout} updateMyWorkout={updateMyWorkout} deleteMyWorkout={deleteMyWorkout} teamWorkouts={teamWorkouts} addTeamWorkout={addTeamWorkout} updateTeamWorkout={updateTeamWorkout} deleteTeamWorkout={deleteTeamWorkout} customExercises={customExercises} addCustomExercise={addCustomExercise} updateCustomExercise={updateCustomExercise} deleteCustomExercise={deleteCustomExercise} seedLifts={seedLifts} seedTeamWorkouts={seedTeamWorkouts} />}
                 {trainView === "nutrition" && <NutritionPage user={effUser} recipes={recipes} addRecipe={addRecipe} updateRecipe={updateRecipe} deleteRecipe={deleteRecipe} importRecipes={importRecipes} seedRecipes={seedRecipes} categories={categories} addCategory={addCategory} logged={logged} addLog={addLog} updateLog={updateLog} deleteLog={deleteLog} waterCups={waterCups} setWaterCups={setWaterCups} myNutritionGoal={myNutritionGoal} myNutritionTotals={myNutritionTotals} saveMyNutritionGoal={saveMyNutritionGoal} clearMyNutritionGoal={clearMyNutritionGoal} savedFoods={savedFoods} addSavedFood={addSavedFood} deleteSavedFood={deleteSavedFood} />}
+                {trainView === "library" && <LibraryPage user={effUser} items={libraryItems} activeTeamId={activeTeamId} addItem={addLibraryItem} updateItem={updateLibraryItem} deleteItem={deleteLibraryItem} />}
                 {trainView === "videos" && <VideosPage user={effUser} videos={videos} addVideo={addVideo} updateVideo={updateVideo} deleteVideo={deleteVideo} importVideos={importVideos} videoFolders={videoFolderDocs} addVideoFolder={addVideoFolder} renameVideoFolder={renameVideoFolder} deleteVideoFolder={deleteVideoFolder} />}
               </div>
             ) : <TrainHub onPick={setTrainView} />

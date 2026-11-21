@@ -100,3 +100,21 @@ describe('shared library uploads (F79)', () => {
     await assertSucceeds(head(as(env, 'p1'), 'documents/coachV/legacy.jpg'))
   })
 })
+
+describe('shared documents library (Train → Documents)', () => {
+  test('any coach uploads to all-teams; only that team\'s coach to a team folder; players never', async () => {
+    await assertSucceeds(put(as(env, 'coachJ'), 'library/all/coachJ/playbook.pdf', 'application/pdf'))
+    await assertSucceeds(put(as(env, 'coachV'), 'library/varsity/coachV/scouting.pdf', 'application/pdf'))
+    await assertFails(put(as(env, 'coachJ'), 'library/varsity/coachJ/scouting.pdf', 'application/pdf'))
+    await assertFails(put(as(env, 'p1'), 'library/all/p1/x.pdf', 'application/pdf'))
+    await assertFails(put(as(env, 'coachV'), 'library/all/coachV/x.exe', 'application/octet-stream'))
+  })
+  test('team files are readable by that team only; all-teams files by any profile', async () => {
+    await seedFile('library/varsity/coachV/scouting.pdf', 'application/pdf')
+    await seedFile('library/all/coachV/playbook.pdf', 'application/pdf')
+    await assertSucceeds(head(as(env, 'p1'), 'library/varsity/coachV/scouting.pdf'))
+    await assertFails(head(as(env, 'coachJ'), 'library/varsity/coachV/scouting.pdf'))
+    await assertSucceeds(head(as(env, 'coachJ'), 'library/all/coachV/playbook.pdf'))
+    await assertFails(head(newbie(), 'library/all/coachV/playbook.pdf'))
+  })
+})
