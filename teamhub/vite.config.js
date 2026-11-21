@@ -24,8 +24,9 @@ export default defineConfig(({ command, mode }) => {
   if (command === 'build' && mode === 'production' && !env.VITE_FIREBASE_VAPID_KEY) {
     const msg = 'VITE_FIREBASE_VAPID_KEY is missing — push notifications would be broken. '
       + 'Put the Web Push public key in teamhub/.env.production (see README → Push notifications).'
-    // CI only checks that the code builds; a real (deploy) build must stop.
-    if (process.env.CI) console.warn(`\n⚠ ${msg}\n`)
+    // CI checks only warn; a real deploy build (local, or the deploy
+    // workflow, which sets REQUIRE_VAPID) must stop.
+    if (process.env.CI && !process.env.REQUIRE_VAPID) console.warn(`\n⚠ ${msg}\n`)
     else throw new Error(msg)
   }
   return {
