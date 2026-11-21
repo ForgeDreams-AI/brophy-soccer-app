@@ -93,6 +93,7 @@ import { recipeSeedDocs } from "./data/recipeSeed";
 import { liftSeedDocs } from "./data/liftSeed";
 import { workoutSeedDocs, AREA_ORDER } from "./data/workoutSeed";
 import { TEAMS, TEAM_IDS, DEFAULT_TEAM_ID, isValidTeamId, teamDocFields, getTeam, getTeamShortName } from "./data/teams";
+import { POSITIONS, groupByPosition } from "./data/rosterPositions";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { useFirestoreResync, useFirestoreStale } from "./hooks/useFirestoreResync";
 import { BUILD_ID } from "./lib/appVersion";
@@ -281,6 +282,9 @@ const formatDateHeader = (ts) => {
 // accent red #A6192E is the site's own --brophy-red CSS variable.
 // accentSoft / bg are pale red tints DERIVED from #980000 (not from the site).
 // CTAs use `primary` (red + white text). `accent` is for badges + decorative.
+// Stable empty object (a fresh {} each render would re-run memos).
+const EMPTY_OBJ = Object.freeze({});
+
 const COLORS = {
   primary: "#980000",     // Brophy Red (site header)
   accent: "#A6192E",      // Brophy red (site --brophy-red variable)
@@ -4540,6 +4544,12 @@ const roundRect = (ctx, x, y, w, h, r) => {
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 };
+// Default line-up watermark: the Brophy logo (the same one that watermarks
+// drill diagrams), in white so it reads on the green pitch. A coach can
+// upload their own logo to replace it.
+const BRAND_WATERMARK = "/brand/logo-white.png";
+const BRAND_WATERMARK_ALPHA = 0.35;
+
 const renderLineupBlob = async (title, formation, slots, logoUrl, teamShortName = "") => {
   const [imgs, logoImg] = await Promise.all([
     Promise.all(slots.map((s) => loadCorsImage(s.photoURL))),
@@ -4587,8 +4597,8 @@ const renderLineupBlob = async (title, formation, slots, logoUrl, teamShortName 
   // the teams config).
   if (useLogo && logoImg && logoImg.width) {
     ctx.save();
-    ctx.globalAlpha = 0.6;
-    const lw = CARD_W * 0.5;
+    ctx.globalAlpha = logoUrl === BRAND_WATERMARK ? BRAND_WATERMARK_ALPHA : 0.6;
+    const lw = CARD_W * (logoUrl === BRAND_WATERMARK ? 0.7 : 0.5);
     const scale = lw / logoImg.width;
     const lh = logoImg.height * scale;
     ctx.drawImage(logoImg, (CARD_W - lw) / 2, pTop + (pH - lh) / 2, lw, lh);
@@ -4724,8 +4734,8 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
   const dragRef = useRef({ id: null, moved: false, sx: 0, sy: 0 });
 
   // The watermark shown on every line-up — the coach's uploaded logo, or
-  // the active team's name until they set one (no logo fallback).
-  const logoUrl = lineupLogo || "";
+  // the Brophy logo until they set one.
+  const logoUrl = lineupLogo || BRAND_WATERMARK;
   const uploadLogo = async (file) => {
     if (!file) return;
     setLogoBusy(true);
@@ -4820,12 +4830,15 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
         <div className="rounded-2xl bg-white border border-slate-100 shadow-sm p-3 flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
             {logoUrl
-              ? <img src={logoUrl} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+              ? <img src={lineupLogo || "/brand/logo.png"} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
               : <span className="text-[11px] font-black px-1 text-center leading-tight" style={{ color: COLORS.primary }}>{teamShortName || "Team"}</span>}
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-sm font-bold text-slate-900">Line-up watermark</div>
-            <div className="text-[11px] text-slate-500 leading-snug">{lineupLogo ? "Your logo, centered on every line-up." : `Using ${teamShortName || "your team"} as the watermark. Upload your own logo.`}</div>
+            <div className="text-[11px] text-slate-500 leading-snug">{lineupLogo ? "Your logo, centered on every line-up." : "Using the Brophy logo. Upload your own to replace it."}</div>
+            {lineupLogo && (
+              <button type="button" onClick={async () => { try { await setLineupLogo("", ""); toast("Back to the Brophy logo."); } catch (e) { toast("Couldn't change — " + (e?.message || "")); } }} className="text-[11px] font-semibold underline text-slate-500 mt-0.5">Use the Brophy logo</button>
+            )}
           </div>
           <button onClick={() => logoInputRef.current?.click()} disabled={logoBusy} className="text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-full text-white flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>
             {logoBusy ? "…" : lineupLogo ? "Change" : "Upload"}
@@ -4886,7 +4899,7 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
         {/* watermark — uploaded logo, or the active team's name, at 60%,
             behind the tokens */}
         {logoUrl ? (
-          <img src={logoUrl} alt="" aria-hidden="true" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none object-contain" style={{ width: "50%", opacity: 0.6 }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          <img src={logoUrl} alt="" aria-hidden="true" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none object-contain" style={lineupLogo ? { width: "50%", opacity: 0.6 } : { width: "70%", opacity: BRAND_WATERMARK_ALPHA }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
         ) : (
           <div aria-hidden="true" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center" style={{ width: "85%", opacity: 0.35 }}>
             <span className="font-black text-white text-center leading-none" style={{ fontSize: 56 }}>{teamShortName}</span>
@@ -4934,7 +4947,99 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
 // (§9 Option B, "The Toolbelt"). Same invite system as before: email
 // invites (single + bulk), team-specific invite links, and the roster list
 // with org-admin-only role badges.
-const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks = [], addInviteLink, removeInviteLink, allUsers = [], removeUser, requestProfileUpdate, activeTeamId }) => {
+// Players by position — players only (no coaches), in GK / DEF / MID / FWD
+// columns like the coach's roster sheet. Starts from the sheet (matched by
+// name, see data/rosterPositions.js); a coach taps a player to move them and
+// that choice is saved for the team. Sheet names with no account yet are
+// listed faded as "not in app yet".
+const PlayersByPosition = ({ allUsers = [], activeTeamId, byUid = {}, onSetPosition }) => {
+  const players = useMemo(
+    () => (allUsers || []).filter((u) => u.role === "player" && (u.teamIds || []).includes(activeTeamId)),
+    [allUsers, activeTeamId],
+  );
+  const { groups, notJoined } = useMemo(() => groupByPosition(players, activeTeamId, byUid), [players, activeTeamId, byUid]);
+  const [moving, setMoving] = useState(null); // player being moved
+  const waiting = Object.values(notJoined).reduce((n, l) => n + l.length, 0);
+  const move = async (pos) => {
+    const p = moving;
+    setMoving(null);
+    try { await onSetPosition(p.id, pos); } catch (e) { toast("Couldn't save — " + (e?.message || "try again.")); }
+  };
+  const playerRow = (p) => (
+    <button
+      key={p.id}
+      type="button"
+      onClick={() => onSetPosition && setMoving(p)}
+      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left active:bg-slate-100"
+    >
+      <Avatar photoURL={p.photoURL} initials={p.initials} size={26} />
+      <span className="text-[13px] font-semibold text-slate-800 leading-tight break-words min-w-0">{p.name || p.email}</span>
+    </button>
+  );
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="px-4 py-3 text-center text-white font-bold" style={{ backgroundColor: COLORS.primary }}>
+        Roster
+        <div className="text-[11px] font-semibold text-white/80">
+          {players.length} player{players.length === 1 ? "" : "s"} in the app{waiting ? ` · ${waiting} not signed up yet` : ""}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100">
+        {POSITIONS.map((pos) => (
+          <div key={pos.id} className="min-w-0 border-b border-slate-100 sm:border-b-0">
+            <div className="px-2 py-2 bg-slate-100 text-center text-[12px] font-bold text-slate-700">
+              {pos.label} <span className="text-slate-400 font-semibold">{groups[pos.id].length}</span>
+            </div>
+            <div className="p-1">
+              {groups[pos.id].map(playerRow)}
+              {(notJoined[pos.id] || []).map((n) => (
+                <div key={n} className="flex items-center gap-2 px-2 py-1.5 opacity-50" title="Not in the app yet">
+                  <div className="w-[26px] h-[26px] rounded-full border border-dashed border-slate-300 flex-shrink-0" />
+                  <span className="text-[13px] text-slate-500 leading-tight min-w-0">{n}<span className="block text-[10px]">not in app yet</span></span>
+                </div>
+              ))}
+              {!groups[pos.id].length && !(notJoined[pos.id] || []).length && (
+                <p className="text-[11px] text-slate-400 text-center py-3">No one yet</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {groups.NONE.length > 0 && (
+        <div className="border-t border-slate-100">
+          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50">
+            No position yet ({groups.NONE.length}) — tap to place
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 p-1">
+            {groups.NONE.map(playerRow)}
+          </div>
+        </div>
+      )}
+      {onSetPosition && <p className="text-[10px] text-slate-400 text-center py-2">Tap a player to change their position. Coaches aren't listed.</p>}
+      {moving && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4" onClick={() => setMoving(null)} role="dialog" aria-label="Change position">
+          <div className="w-full max-w-sm bg-white rounded-2xl p-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 pb-1">
+              <Avatar photoURL={moving.photoURL} initials={moving.initials} size={32} />
+              <div className="font-bold text-slate-900">{moving.name || moving.email}</div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {POSITIONS.map((pos) => (
+                <button key={pos.id} type="button" onClick={() => move(pos.id)}
+                  className="py-3 rounded-xl text-sm font-bold border border-slate-200 text-slate-800 active:bg-slate-100">
+                  {pos.label}
+                </button>
+              ))}
+            </div>
+            <button type="button" onClick={() => move("NONE")} className="w-full py-2.5 rounded-xl text-sm font-semibold text-slate-500">No position</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks = [], addInviteLink, removeInviteLink, allUsers = [], removeUser, requestProfileUpdate, activeTeamId, positionsByUid = {}, setPlayerPosition }) => {
   const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email, u.name])), [allUsers]);
   // Teams this coach can invite/link to: the org admin sees all three, a
   // team coach sees only their own team(s).
@@ -5084,6 +5189,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addInvite, 
           <Bell className="w-3.5 h-3.5" /> Ask everyone to update their info
         </button>
       )}
+      <PlayersByPosition allUsers={allUsers} activeTeamId={activeTeamId} byUid={positionsByUid} onSetPosition={setPlayerPosition} />
       <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 space-y-2">
         {myTeams.length > 1 && (
           <label className="block">
@@ -9441,6 +9547,10 @@ export default function TeamHubRolesApp() {
   // Team logo used as the centered watermark on every game-day line-up.
   const lineupLogo = appConfig.find((d) => d.id === `lineupLogo_${activeTeamId}`)
     || appConfig.find((d) => d.id === "lineupLogo");
+  // Coach-set positions for the roster (see PlayersByPosition).
+  const positionsByUid = appConfig.find((d) => d.id === `rosterPositions_${activeTeamId}`)?.byUid || EMPTY_OBJ;
+  const setPlayerPosition = (uid, pos) =>
+    setDoc(doc(db, "appConfig", `rosterPositions_${activeTeamId}`), { byUid: { [uid]: pos }, updatedByName: user.name }, { merge: true });
   const setLineupLogo = (url, path) =>
     setDoc(doc(db, "appConfig", `lineupLogo_${activeTeamId}`), { url: url || "", path: path || "", updatedByName: user.name }, { merge: true });
   const requestProfileUpdate = async () => {
@@ -10485,7 +10595,7 @@ export default function TeamHubRolesApp() {
             <CoachCenterPage
               practiceProps={{ user: { ...effUser, isOrgAdmin: user.role === "orgAdmin" }, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events }}
               gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId) }}
-              rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", removeUser, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId }}
+              rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", removeUser, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId, positionsByUid, setPlayerPosition }}
               calendarProps={{ user: effUser, events, practices, teamWorkouts, personalEvents, addEvent, updateEvent, addPersonalEvent, updatePersonalEvent, deleteEvent, deletePersonalEvent, importEvents, groups: groupsList, addGroup, updateGroupMembers, deleteGroup, invites, allUsers, chatGroups }}
               documentsProps={{ user: effUser, documents, rosterCount: invites.filter((i) => i.role !== "admin").length, onUpload: addDocument, onDelete: deleteDocument, onSign: signDocument }}
               announcementsProps={{ announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement }}

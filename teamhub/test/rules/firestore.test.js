@@ -257,6 +257,8 @@ describe('appConfig (F17)', () => {
     const db = as(env, 'coachV').firestore()
     await assertSucceeds(setDoc(doc(db, 'appConfig/lineupLogo_varsity'), { url: 'x' }))
     await assertSucceeds(setDoc(doc(db, 'appConfig/profilePrompt_varsity'), { active: true }))
+    await assertSucceeds(setDoc(doc(db, 'appConfig/rosterPositions_varsity'), { byUid: { u1: 'GK' } }))
+    await assertFails(setDoc(doc(db, 'appConfig/rosterPositions_jvb'), { byUid: { u1: 'GK' } }))
     await assertFails(setDoc(doc(db, 'appConfig/lineupLogo_jvb'), { url: 'x' }))
     await assertFails(setDoc(doc(db, 'appConfig/lineupLogo'), { url: 'x' }))
     await assertFails(setDoc(doc(db, 'appConfig/somethingElse_varsity'), { url: 'x' }))
@@ -265,6 +267,7 @@ describe('appConfig (F17)', () => {
     await assertSucceeds(setDoc(doc(as(env, 'org').firestore(), 'appConfig/lineupLogo'), { url: 'x' }))
     await assertSucceeds(setDoc(doc(as(env, 'org').firestore(), 'appConfig/lineupLogo_jva'), { url: 'x' }))
     await assertFails(setDoc(doc(as(env, 'p1').firestore(), 'appConfig/lineupLogo_varsity'), { url: 'x' }))
+    await assertFails(setDoc(doc(as(env, 'p1').firestore(), 'appConfig/rosterPositions_varsity'), { byUid: { p1: 'FWD' } }))
   })
   test('read needs a team-app profile', async () => {
     await seed(env, 'appConfig/lineupLogo', { url: 'x' })

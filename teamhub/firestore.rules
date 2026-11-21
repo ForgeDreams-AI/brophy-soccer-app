@@ -382,7 +382,7 @@ service cloud.firestore {
     match /appConfig/{id} {
       allow read:  if hasTeamRole();
       allow write: if isOrgAdmin()
-        || (id.matches('^(lineupLogo|profilePrompt)_(jvb|jva|varsity)$') && isCoachOf(id.split('_')[1]));
+        || (id.matches('^(lineupLogo|profilePrompt|rosterPositions)_(jvb|jva|varsity)$') && isCoachOf(id.split('_')[1]));
     }
 
     // Scheduled reminders + polls: coach-only, team-scoped. A Cloud Function
