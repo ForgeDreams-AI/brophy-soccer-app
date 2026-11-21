@@ -33,7 +33,8 @@ export default function PracticesPrintSheet({ practices = [], drills = [], teamN
     setBusy(true);
     try {
       const safe = (teamName || "practices").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "practices";
-      await shareSheetPdf(`${safe}-practices.pdf`);
+      const res = await shareSheetPdf(`${safe}-practices.pdf`);
+      if (res?.missingImages) toast(`${res.missingImages} picture${res.missingImages === 1 ? "" : "s"} couldn't be added to the PDF (Storage CORS isn't set up yet — see README).`);
     } catch (e) {
       toast("Couldn't make the PDF — " + (e?.message || "try again."));
     } finally {

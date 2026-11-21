@@ -49,7 +49,20 @@ export const BOARD_PRESETS = [
   { id: "half", label: "Half pitch", lengthYd: 57.5, widthYd: 75, orient: "portrait", note: "75 × 57.5 yd" },
   { id: "third", label: "Final third", lengthYd: 38, widthYd: 75, orient: "portrait", note: "75 × 38 yd" },
   { id: "grid", label: "Grid / zone", lengthYd: 30, widthYd: 20, orient: "landscape", note: "custom yd" },
+  // A blank field: green turf + boundary only, no markings. Set any size and
+  // split it into sections (columns × rows) to design your own grid.
+  { id: "blank", label: "Blank field", lengthYd: 60, widthYd: 40, orient: "landscape", note: "custom yd" },
 ];
+
+// Custom-size presets (yard inputs + sections are shown for these).
+export const CUSTOM_PRESETS = new Set(["grid", "blank"]);
+// Default sections per preset: the Grid keeps its old centre line (2 × 1),
+// the blank field starts unmarked (1 × 1).
+export const defaultSections = (field) => (field === "grid" ? { gridCols: 2, gridRows: 1 } : { gridCols: 1, gridRows: 1 });
+const clampInt = (v, lo, hi, d) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n >= lo && n <= hi ? n : d;
+};
 
 // Validate a recorded animation against the board it belongs to: drop
 // steps whose token is gone, whose arrow is gone, or whose track is too
@@ -90,18 +103,21 @@ const dropUndefined = (o) => {
 // Back-compat: map the old board state (field/tokens/arrows only) to v2.
 export function normalizeBoardState(initial) {
   const raw = initial || {};
-  const fieldMap = { soccer: "full", "soccer-half": "half", "soccer-third": "third", "soccer-box": "third", box: "third", blank: "grid", basketball: "grid", football: "grid" };
+  const fieldMap = { soccer: "full", "soccer-half": "half", "soccer-third": "third", "soccer-box": "third", box: "third", basketball: "grid", football: "grid" };
   const field = BOARD_PRESETS.some((p) => p.id === raw.field) ? raw.field : (fieldMap[raw.field] || "half");
   const preset = BOARD_PRESETS.find((p) => p.id === field);
-  const tokenMap = { home: "focus", away: "opp", neutral: "gk" };
+  const tokenMap = { home: "focus", away: "opp" };
   const arrowMap = { run: "run", pass: "pass", dribble: "dribble", line: "direction" };
   const tokens = (raw.tokens || []).map((t) => dropUndefined({ ...t, kind: tokenMap[t.kind] || t.kind || "focus" }));
   const arrows = (raw.arrows || []).map((a) => dropUndefined({ ...a, kind: arrowMap[a.kind] || a.kind || "run" }));
   const zones = (raw.zones || []).filter((z) => z && (z.shape === "rect" || z.shape === "circle"));
+  const sec = defaultSections(field);
   return {
     field,
     lengthYd: Number(raw.lengthYd) > 0 ? Number(raw.lengthYd) : preset.lengthYd,
     widthYd: Number(raw.widthYd) > 0 ? Number(raw.widthYd) : preset.widthYd,
+    gridCols: clampInt(raw.gridCols, 1, 8, sec.gridCols),
+    gridRows: clampInt(raw.gridRows, 1, 8, sec.gridRows),
     tokens,
     arrows,
     zones,
@@ -121,7 +137,12 @@ export function boardDims(state) {
   return { preset, wYd, dYd, pitchH: ph, vbH: ph + LEG_H };
 }
 
-export const TEAM_COLORS = { focus: "#2563EB", opp: "#DC2626", gk: "#EAB308" };
+// neutral = a light grey bib (plays for whichever team has the ball).
+export const TEAM_COLORS = { focus: "#2563EB", opp: "#DC2626", gk: "#EAB308", neutral: "#E5E7EB" };
+// Token label colour: dark text on the light neutral bib, white elsewhere.
+export const TOKEN_TEXT = { neutral: "#0F172A" };
+// Plain lines (no arrowhead, no number badge) for marking areas / channels.
+export const LINE_KINDS = new Set(["solidline", "dashedline"]);
 export const ARROW_LEGEND = [
   { id: "pass", label: "Pass", desc: "Solid, open head" },
   { id: "run", label: "Run", desc: "Dashed" },
@@ -149,7 +170,7 @@ export const wavyPath = (x1, y1, x2, y2, amp = 7, wl = 20) => {
 export const ARROW_COLORS = ["#FFFFFF", "#FACC15", "#38BDF8"]; // white, yellow, sky
 // Approximate half-size of each token kind, in board units — used for hit
 // areas and for smart-guide edge snapping.
-export const TOKEN_HALF = { focus: 19, opp: 19, gk: 19, ball: 12, cone: 13, goal: 42, mannequin: 13, pole: 6, ladder: 20 };
+export const TOKEN_HALF = { focus: 19, opp: 19, gk: 19, neutral: 19, ball: 12, cone: 13, goal: 42, mannequin: 13, pole: 6, ladder: 20 };
 
 // Sample a quadratic Bézier (p1, control, p2) at N points.
 const quadSamples = (p1, c, p2, n = 16) => {
@@ -215,8 +236,12 @@ export function pitchSnapLines(state) {
     xs.push(0, 6 / wYd, 12 / wYd, 18 / wYd, 0.5, 1 - 18 / wYd, 1 - 12 / wYd, 1 - 6 / wYd, 1);
     ys.push(0, (dYd - 44) / 2 / dYd, (dYd - 20) / 2 / dYd, 0.5, (dYd + 20) / 2 / dYd, (dYd + 44) / 2 / dYd, 1);
   } else {
+    // Grid / blank field: snap to the boundary, centre and every section line.
+    const s = normalizeBoardState(state);
     xs.push(0, 0.5, 1);
     ys.push(0, 0.5, 1);
+    for (let i = 1; i < s.gridCols; i++) xs.push(i / s.gridCols);
+    for (let i = 1; i < s.gridRows; i++) ys.push(i / s.gridRows);
   }
   return { xs: xs.filter((v) => v >= 0 && v <= 1), ys: ys.filter((v) => v >= 0 && v <= 1) };
 }

@@ -37,7 +37,8 @@ export default function DrillPrintSheet({ drill, onClose }) {
     setPdfBusy(true);
     try {
       const safe = (drill.name || drill.title || "drill").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "drill";
-      await shareSheetPdf(`${safe}.pdf`);
+      const res = await shareSheetPdf(`${safe}.pdf`);
+      if (res?.missingImages) toast(`${res.missingImages} picture${res.missingImages === 1 ? "" : "s"} couldn't be added to the PDF (Storage CORS isn't set up yet — see README).`);
     } catch (e) {
       toast("Couldn't make the PDF — " + (e?.message || "try again."));
     } finally {

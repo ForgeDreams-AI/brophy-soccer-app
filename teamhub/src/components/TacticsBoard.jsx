@@ -41,6 +41,7 @@ import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import {
   VB_W, LEG_H, clamp, BOARD_PRESETS, TEAM_COLORS, ARROW_LEGEND,
+  CUSTOM_PRESETS, defaultSections, TOKEN_TEXT, LINE_KINDS,
   ARROW_COLORS, TOKEN_HALF, wavyPath, arrowGeom, pitchSnapLines,
   normalizeBoardState, normalizeAnimation, boardDims,
 } from "./boardData";
@@ -74,7 +75,7 @@ const ARROW_NUM_R = 14;
 // (animation paths), which get no badge.
 function arrowBadgeNumber(arrows, i) {
   const a = arrows[i];
-  if (!a || a.kind === "freehand") return null;
+  if (!a || a.kind === "freehand" || LINE_KINDS.has(a.kind)) return null;
   let n = 0;
   for (let j = 0; j <= i; j++) {
     if (arrows[j].kind === a.kind) n++;
@@ -97,7 +98,7 @@ const L = { fill: "none", stroke: "rgba(255,255,255,0.85)", strokeWidth: 3 };
 
 // To-scale pitch markings. (wYd = yards across, dYd = yards deep, goal at the
 // top for portrait presets, goals at both ends for the full pitch.)
-function PitchMarks({ preset, wYd, dYd, pitchH }) {
+function PitchMarks({ preset, wYd, dYd, pitchH, gridCols = 1, gridRows = 1 }) {
   const X = (xYd) => M + (xYd / wYd) * (VB_W - 2 * M);
   const Y = (yYd) => M + (yYd / dYd) * (pitchH - 2 * M);
   const cx = VB_W / 2;
@@ -123,11 +124,21 @@ function PitchMarks({ preset, wYd, dYd, pitchH }) {
     return <path d={`M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${(r / wYd) * (VB_W - 2 * M)} ${(r / dYd) * (pitchH - 2 * M)} 0 0 ${sweep} ${x2.toFixed(1)} ${y2.toFixed(1)}`} {...L} />;
   };
 
-  if (preset.id === "grid") {
+  if (preset.id === "grid" || preset.id === "blank") {
+    // Custom grid: boundary + dashed section lines (columns × rows). The
+    // blank field defaults to 1 × 1 (no lines); the Grid to 2 × 1.
+    const cols = Math.max(1, gridCols), rows = Math.max(1, gridRows);
     return (
       <g>
         {bg}{stripes}{boundary}
-        <line x1={cx} y1={M} x2={cx} y2={pitchH - M} {...L} strokeDasharray="8 6" strokeWidth={2} />
+        {Array.from({ length: cols - 1 }).map((_, i) => {
+          const x = M + ((i + 1) / cols) * (VB_W - 2 * M);
+          return <line key={`c${i}`} x1={x} y1={M} x2={x} y2={pitchH - M} {...L} strokeDasharray="8 6" strokeWidth={2} />;
+        })}
+        {Array.from({ length: rows - 1 }).map((_, i) => {
+          const y = M + ((i + 1) / rows) * (pitchH - 2 * M);
+          return <line key={`r${i}`} x1={M} y1={y} x2={VB_W - M} y2={y} {...L} strokeDasharray="8 6" strokeWidth={2} />;
+        })}
       </g>
     );
   }
@@ -240,7 +251,7 @@ function TokenGlyph({ t, x, y }) {
   return (
     <g transform={rot}>
       <circle cx={x} cy={y} r={R} fill={TEAM_COLORS[t.kind] || "#64748B"} stroke="rgba(0,0,0,0.4)" strokeWidth={2} />
-      {t.label ? <text x={x} y={y + R * 0.34} textAnchor="middle" fontSize={R * 0.85} fontWeight="700" fill="#fff" style={{ pointerEvents: "none" }}>{t.label}</text> : null}
+      {t.label ? <text x={x} y={y + R * 0.34} textAnchor="middle" fontSize={R * 0.85} fontWeight="700" fill={TOKEN_TEXT[t.kind] || "#fff"} style={{ pointerEvents: "none" }}>{t.label}</text> : null}
     </g>
   );
 }
@@ -271,9 +282,10 @@ function ArrowShape({ a, num, px, py, interactive, selected, onDown }) {
   const geom = arrowGeom(a, px, py);
   const color = a.color || ARROW_WHITE;
   const key = colorKey(color);
-  const head = a.kind === "pass" ? `url(#bs-open-${key})` : `url(#bs-head-${key})`;
-  const width = a.kind === "pass" ? 3.5 : a.kind === "shot" ? 2.5 : 4;
-  const dash = a.kind === "run" ? "10 7" : undefined;
+  const isLine = LINE_KINDS.has(a.kind);
+  const head = isLine ? undefined : a.kind === "pass" ? `url(#bs-open-${key})` : `url(#bs-head-${key})`;
+  const width = a.kind === "pass" ? 3.5 : a.kind === "shot" ? 2.5 : isLine ? 3 : 4;
+  const dash = a.kind === "run" ? "10 7" : a.kind === "dashedline" ? "8 6" : undefined;
   const bendPos = a.bend ? { x: px(a.bend.x), y: py(a.bend.y) } : geom.mid;
   return (
     <g>
@@ -314,7 +326,7 @@ export function BoardSvg({ state, className = "", showLegend = false }) {
   return (
     <svg viewBox={`0 0 ${VB_W} ${showLegend ? vbH : pitchH}`} className={className} role="img" aria-label="Drill diagram">
       <defs><ArrowMarkers /></defs>
-      <PitchMarks preset={preset} wYd={wYd} dYd={dYd} pitchH={pitchH} />
+      <PitchMarks preset={preset} wYd={wYd} dYd={dYd} pitchH={pitchH} gridCols={s.gridCols} gridRows={s.gridRows} />
       {s.zones.map((z) => (
         z.shape === "circle"
           ? <circle key={z.id} cx={px(z.x)} cy={py(z.y)} r={z.r * (VB_W - 2 * M)} fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.7)" strokeWidth={2} strokeDasharray="8 6" />
@@ -749,6 +761,7 @@ const PALETTE = [
   { kind: "focus", label: "Focus" },
   { kind: "opp", label: "Opp" },
   { kind: "gk", label: "GK" },
+  { kind: "neutral", label: "Neutral" },
   { kind: "ball", label: "Ball" },
   { kind: "cone", label: "Cone" },
   { kind: "goal", label: "Goal" },
@@ -764,11 +777,13 @@ const ARROW_TOOLS = [
   { kind: "direction", label: "Direction" },
   { kind: "curve", label: "Curve" },
   { kind: "freehand", label: "Freehand" },
+  { kind: "solidline", label: "Line" },
+  { kind: "dashedline", label: "Dashed line" },
 ];
 
 function PaletteGlyph({ kind }) {
   const c = TEAM_COLORS[kind];
-  if (c) return <span className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black text-white" style={{ background: c }}>{kind === "gk" ? "GK" : ""}</span>;
+  if (c) return <span className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black" style={{ background: c, color: TOKEN_TEXT[kind] || "#fff" }}>{kind === "gk" ? "GK" : kind === "neutral" ? "N" : ""}</span>;
   if (kind === "ball") return <span className="w-5 h-5 rounded-full bg-white border-2 border-slate-900" />;
   if (kind === "cone") return <span className="w-0 h-0" style={{ borderLeft: "9px solid transparent", borderRight: "9px solid transparent", borderBottom: "16px solid #F97316" }} />;
   if (kind === "goal") return <span className="w-7 h-4 border-[3px] border-white rounded-sm bg-white/15" />;
@@ -779,6 +794,11 @@ function PaletteGlyph({ kind }) {
 }
 
 function ArrowPreview({ kind }) {
+  if (LINE_KINDS.has(kind)) return (
+    <svg width="30" height="12" viewBox="0 0 30 12" aria-hidden="true">
+      <line x1="1" y1="6" x2="29" y2="6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeDasharray={kind === "dashedline" ? "4 3" : undefined} />
+    </svg>
+  );
   if (kind === "freehand") return (
     <svg width="30" height="12" viewBox="0 0 30 12" aria-hidden="true">
       <path d="M 1 8 Q 6 2 11 7 T 21 6 T 29 4" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
@@ -814,6 +834,8 @@ export default function TacticsBoard({ initial, onSave, onClose, title = "Diagra
   const [field, setField] = useState(init.field);
   const [lengthYd, setLengthYd] = useState(init.lengthYd);
   const [widthYd, setWidthYd] = useState(init.widthYd);
+  const [gridCols, setGridCols] = useState(init.gridCols);
+  const [gridRows, setGridRows] = useState(init.gridRows);
   const [tokens, setTokens] = useState(init.tokens);
   const [arrows, setArrows] = useState(init.arrows);
   const [zones, setZones] = useState(init.zones);
@@ -846,11 +868,11 @@ export default function TacticsBoard({ initial, onSave, onClose, title = "Diagra
   const longPress = useRef(null);
   const lastArrowKind = useRef("run");
 
-  const dims = boardDims({ field, lengthYd, widthYd });
+  const dims = boardDims({ field, lengthYd, widthYd, gridCols, gridRows });
   const { preset, wYd, dYd, pitchH, vbH } = dims;
   const { zoom, pan } = view;
-  const state = () => ({ field, lengthYd, widthYd, tokens, arrows, zones, animation });
-  const snapLines = useMemo(() => pitchSnapLines({ field, lengthYd, widthYd }), [field, lengthYd, widthYd]);
+  const state = () => ({ field, lengthYd, widthYd, gridCols, gridRows, tokens, arrows, zones, animation });
+  const snapLines = useMemo(() => pitchSnapLines({ field, lengthYd, widthYd, gridCols, gridRows }), [field, lengthYd, widthYd, gridCols, gridRows]);
 
   // Live state for the test harness / parent (read-only notification, not
   // a state sync — the parent stores it in a ref, it never re-renders us).
@@ -920,25 +942,27 @@ export default function TacticsBoard({ initial, onSave, onClose, title = "Diagra
 
   // ── undo / redo ──────────────────────────────────────────────────────────
   const snapshot = () => {
-    undoStack.current.push({ field, lengthYd, widthYd, tokens: [...tokens], arrows: [...arrows], zones: [...zones], animation });
+    undoStack.current.push({ field, lengthYd, widthYd, gridCols, gridRows, tokens: [...tokens], arrows: [...arrows], zones: [...zones], animation });
     if (undoStack.current.length > 60) undoStack.current.shift();
     redoStack.current = [];
   };
   const applySnap = (s) => {
     setField(s.field); setLengthYd(s.lengthYd); setWidthYd(s.widthYd);
+    if (s.gridCols) setGridCols(s.gridCols);
+    if (s.gridRows) setGridRows(s.gridRows);
     setTokens(s.tokens); setArrows(s.arrows); setZones(s.zones || []); setSel([]);
     setAnimation(s.animation || { steps: [] });
   };
   const undo = () => {
     const prev = undoStack.current.pop();
     if (!prev) return;
-    redoStack.current.push({ field, lengthYd, widthYd, tokens, arrows, zones, animation });
+    redoStack.current.push({ field, lengthYd, widthYd, gridCols, gridRows, tokens, arrows, zones, animation });
     applySnap(prev);
   };
   const redo = () => {
     const nxt = redoStack.current.pop();
     if (!nxt) return;
-    undoStack.current.push({ field, lengthYd, widthYd, tokens, arrows, zones, animation });
+    undoStack.current.push({ field, lengthYd, widthYd, gridCols, gridRows, tokens, arrows, zones, animation });
     applySnap(nxt);
   };
 
@@ -1081,6 +1105,9 @@ export default function TacticsBoard({ initial, onSave, onClose, title = "Diagra
     setField(f);
     setLengthYd(preset.lengthYd);
     setWidthYd(preset.widthYd);
+    const sec = defaultSections(f);
+    setGridCols(sec.gridCols);
+    setGridRows(sec.gridRows);
     fitView();
   };
   const changeDims = (len, wid) => {
@@ -1746,9 +1773,9 @@ export default function TacticsBoard({ initial, onSave, onClose, title = "Diagra
         </div>
       </div>
 
-      {/* grid dimensions (only for the Grid preset) */}
-      {field === "grid" && (
-        <div className="px-4 py-2 bg-slate-800/60 border-b border-white/10 flex items-center gap-2 shrink-0">
+      {/* size + sections (Grid and Blank field presets) */}
+      {CUSTOM_PRESETS.has(field) && (
+        <div className="px-4 py-2 bg-slate-800/60 border-b border-white/10 flex items-center gap-2 shrink-0 overflow-x-auto flex-nowrap">
           <span className="text-[11px] font-bold text-white/60">Grid size</span>
           <label className="flex items-center gap-1 text-[11px] font-semibold text-white">
             <input type="number" min={5} max={130} value={lengthYd} onChange={(e) => changeDims(e.target.value, widthYd)} className="w-16 bg-white/10 text-white text-xs font-bold text-center rounded-lg px-2 py-2 border border-white/15 outline-none" /> yd long
@@ -1757,6 +1784,14 @@ export default function TacticsBoard({ initial, onSave, onClose, title = "Diagra
           <label className="flex items-center gap-1 text-[11px] font-semibold text-white">
             <input type="number" min={5} max={130} value={widthYd} onChange={(e) => changeDims(lengthYd, e.target.value)} className="w-16 bg-white/10 text-white text-xs font-bold text-center rounded-lg px-2 py-2 border border-white/15 outline-none" /> yd wide
           </label>
+          <span className="text-[11px] font-bold text-white/60 ml-3 whitespace-nowrap">Sections</span>
+          <select value={gridCols} onChange={(e) => { snapshot(); setGridCols(Number(e.target.value)); }} aria-label="Columns" className="text-[11px] font-semibold bg-white/10 text-white rounded-lg px-2 py-2 outline-none cursor-pointer">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n} className="text-slate-900">{n} col{n === 1 ? "" : "s"}</option>)}
+          </select>
+          <span className="text-white/40 text-xs">×</span>
+          <select value={gridRows} onChange={(e) => { snapshot(); setGridRows(Number(e.target.value)); }} aria-label="Rows" className="text-[11px] font-semibold bg-white/10 text-white rounded-lg px-2 py-2 outline-none cursor-pointer">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n} className="text-slate-900">{n} row{n === 1 ? "" : "s"}</option>)}
+          </select>
         </div>
       )}
 
@@ -1781,7 +1816,7 @@ export default function TacticsBoard({ initial, onSave, onClose, title = "Diagra
               style={{ width: base.w, height: base.h }}
             >
               <defs><ArrowMarkers /></defs>
-              <g data-pitch="1"><PitchMarks preset={preset} wYd={wYd} dYd={dYd} pitchH={pitchH} /></g>
+              <g data-pitch="1"><PitchMarks preset={preset} wYd={wYd} dYd={dYd} pitchH={pitchH} gridCols={gridCols} gridRows={gridRows} /></g>
 
               {/* faint 5-yard grid — a backdrop only, never the snap mechanism */}
               {showGrid && (
@@ -1964,8 +1999,8 @@ export default function TacticsBoard({ initial, onSave, onClose, title = "Diagra
               <div className="space-y-2">
                 <div className="text-[10px] font-black uppercase tracking-wider text-white/40">Selected · arrow {arrows.findIndex((a) => a.id === selArrow.id) + 1}</div>
                 <div className="flex flex-wrap gap-1">
-                  {["pass", "run", "dribble", "shot", "direction"].map((k) => (
-                    <button key={k} onClick={() => setArrowKindOf(selArrow.id, k)} className={`text-[11px] font-bold px-2.5 py-2 rounded-full min-h-9 capitalize ${selArrow.kind === k ? "text-white bg-sky-500" : "text-white/70 bg-white/10"}`}>{k}</button>
+                  {[["pass", "Pass"], ["run", "Run"], ["dribble", "Dribble"], ["shot", "Shot"], ["direction", "Direction"], ["solidline", "Line"], ["dashedline", "Dashed line"]].map(([k, label]) => (
+                    <button key={k} onClick={() => setArrowKindOf(selArrow.id, k)} className={`text-[11px] font-bold px-2.5 py-2 rounded-full min-h-9 ${selArrow.kind === k ? "text-white bg-sky-500" : "text-white/70 bg-white/10"}`}>{label}</button>
                   ))}
                 </div>
                 <div className="flex items-center gap-2">
