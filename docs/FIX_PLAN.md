@@ -106,7 +106,7 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
 | F47 | Finish %-of-max (store each athlete's maxes) or remove the toggle? | Unchanged. |
 | F81 | Split the 9.8k-line file into per-area modules. | Separate refactor project once tests exist (Phase 0 enables it). |
 | F82 | Purge ~100 MB of media from git history. This rewrites history and needs a force-push. | Not done. |
-| F84 (part) | `public/drill-bank.json` may be fetched by the Drill Library site. | Kept. |
+| F84 (part) | `public/drill-bank.json` was public (783 drills downloadable without signing in) and used by nothing, including the Drill Library. | Deleted (drills are signed-in only). |
 | F08, F32, F44 | `coachUids`, `scenario/cues` (shared schema with the Drill Library site), bearer document URLs | Documented, unchanged. |
 
 ## 8. Rollout checklist (after merge)
