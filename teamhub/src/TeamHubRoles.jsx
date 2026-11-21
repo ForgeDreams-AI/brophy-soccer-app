@@ -6621,10 +6621,14 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
       const ref = storageRef(storage, path);
       const snap = await uploadBytes(ref, blob, { contentType: "image/jpeg" });
       const url = await getDownloadURL(snap.ref);
-      await addMessage("", {
-        attachment: { type: "image", url, path, name: file.name || "photo.jpg" },
-        channel: effectiveChannel,
-      });
+      if (isDM) {
+        await addDM("", dmThreadId, { attachment: { type: "image", url, path, name: file.name || "photo.jpg" } });
+      } else {
+        await addMessage("", {
+          attachment: { type: "image", url, path, name: file.name || "photo.jpg" },
+          channel: effectiveChannel,
+        });
+      }
     } catch (e) {
       toast("Couldn't send photo — " + (e.message || "check Storage rules?"));
     } finally {
@@ -6650,10 +6654,14 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
       const ref = storageRef(storage, path);
       const snap = await uploadBytes(ref, file, { contentType: file.type || "video/mp4" });
       const url = await getDownloadURL(snap.ref);
-      await addMessage("", {
-        attachment: { type: "video", url, path, name: file.name || "video.mp4" },
-        channel: effectiveChannel,
-      });
+      if (isDM) {
+        await addDM("", dmThreadId, { attachment: { type: "video", url, path, name: file.name || "video.mp4" } });
+      } else {
+        await addMessage("", {
+          attachment: { type: "video", url, path, name: file.name || "video.mp4" },
+          channel: effectiveChannel,
+        });
+      }
     } catch (e) {
       toast("Couldn't send video: " + (e.message || "check Storage rules?"));
     } finally {
@@ -6672,10 +6680,14 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
       const ref = storageRef(storage, path);
       const snap = await uploadBytes(ref, file, { contentType: file.type || "application/octet-stream" });
       const url = await getDownloadURL(snap.ref);
-      await addMessage("", {
-        attachment: { type: "file", url, path, name: file.name || "file" },
-        channel: effectiveChannel,
-      });
+      if (isDM) {
+        await addDM("", dmThreadId, { attachment: { type: "file", url, path, name: file.name || "file" } });
+      } else {
+        await addMessage("", {
+          attachment: { type: "file", url, path, name: file.name || "file" },
+          channel: effectiveChannel,
+        });
+      }
     } catch (e) {
       toast("Couldn't send file: " + (e.message || "check Storage rules?"));
     } finally {
@@ -7020,9 +7032,21 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
               const own = d.senderUid === user.uid;
               return (
                 <div key={d.id} className={`flex ${own ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${own ? "text-white" : "bg-white text-slate-900"}`} style={own ? { backgroundColor: COLORS.primary } : {}}>
-                    {!own && <div className="text-[10px] font-bold mb-0.5" style={{ color: COLORS.accent }}>{d.senderName}{d.isCoach ? " · Coach" : ""}</div>}
-                    <p className="leading-snug break-words select-text"><Linkify>{d.text}</Linkify></p>
+                  <div className={`max-w-[80%] rounded-2xl shadow-sm overflow-hidden ${own ? "text-white" : "bg-white text-slate-900"}`} style={own ? { backgroundColor: COLORS.primary } : {}}>
+                    {!own && <div className="px-3 pt-2 text-[10px] font-bold" style={{ color: COLORS.accent }}>{d.senderName}{d.isCoach ? " · Coach" : ""}</div>}
+                    {d.attachment?.type === "image" && d.attachment.url && (
+                      <img src={d.attachment.url} alt="" className="w-full max-h-80 object-cover" loading="lazy" />
+                    )}
+                    {d.attachment?.type === "video" && d.attachment.url && (
+                      <div className="relative">
+                        <video src={d.attachment.url} controls playsInline preload="metadata" className="w-full max-h-80 object-cover" />
+                        <button onClick={() => setVideoViewer(d.attachment.url)} aria-label="Watch fullscreen" title="Watch fullscreen" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center"><Maximize2 className="w-4 h-4" /></button>
+                      </div>
+                    )}
+                    {d.attachment?.type === "file" && d.attachment.url && (
+                      <a href={d.attachment.url} target="_blank" rel="noopener noreferrer" className={`mx-3 mt-2 rounded-xl p-2 flex items-center gap-2 ${own ? "bg-white/15" : "bg-slate-100"}`}><AttIcon type={d.attachment.type} /><span className="text-[11px] font-semibold truncate">{d.attachment.name}</span></a>
+                    )}
+                    {d.text && <p className="px-3 py-2 text-sm leading-snug break-words select-text"><Linkify>{d.text}</Linkify></p>}
                   </div>
                 </div>
               );
@@ -7030,6 +7054,38 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
             </div>
           </div>
           <div className="bg-white border-t border-slate-200 p-3 flex items-center gap-2 shrink-0">
+            <button onClick={() => photoInputRef.current?.click()} disabled={uploading} aria-label="Send photo" title="Send a photo" className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-wait">
+              {uploading ? <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Camera className="w-4 h-4" />}
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) sendImage(f); e.target.value = ""; }}
+            />
+            <button onClick={() => videoInputRef.current?.click()} disabled={uploading} aria-label="Send video" title="Send a video" className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-wait">
+              {uploading ? <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Video className="w-4 h-4" />}
+            </button>
+            <input
+              ref={videoInputRef}
+              type="file"
+              accept="video/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) sendVideo(f); e.target.value = ""; }}
+            />
+            <button onClick={() => fileInputRef.current?.click()} disabled={uploading} aria-label="Send file" title="Send a file" className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-wait">
+              {uploading ? <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Paperclip className="w-4 h-4" />}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = ""; }}
+            />
             <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder={isAdmin ? "Reply…" : "Message your coach…"} className="flex-1 bg-slate-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
             <button onClick={send} disabled={!input.trim()} className="w-9 h-9 rounded-full flex items-center justify-center text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}><Send className="w-4 h-4" /></button>
           </div>
@@ -9534,8 +9590,8 @@ export default function TeamHubRolesApp() {
     where("teamId", "==", activeTeamId),
     ...(isTeamCoach ? [] : [where("threadId", "==", user?.uid || "_")]),
   );
-  const addDM = (text, threadId) =>
-    addDoc(collection(db, "dms"), {
+  const addDM = (text, threadId, { attachment } = {}) => {
+    const data = {
       teamId: activeTeamId,
       threadId,
       senderUid: user.uid,
@@ -9544,7 +9600,12 @@ export default function TeamHubRolesApp() {
       text: (text || "").trim(),
       readBy: { [user.uid]: serverTimestamp() },
       createdAt: serverTimestamp(),
-    });
+    };
+    // Photos/videos/files in a DM live on the DM doc itself — never in the
+    // channel `messages` collection, where they would be team-visible.
+    if (attachment) data.attachment = attachment;
+    return addDoc(collection(db, "dms"), data);
+  };
   // Mark DM messages read (readBy only — same pattern as channel messages).
   const markDMsRead = async (ids) => {
     if (!ids?.length) return;

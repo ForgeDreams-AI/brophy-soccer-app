@@ -264,7 +264,11 @@ exports.onMessageCreated = onDocumentCreated("messages/{id}", async (event) => {
 exports.onDMCreated = onDocumentCreated("dms/{id}", async (event) => {
   const data = event.data?.data();
   if (!data) return;
-  const body = trunc(data.text);
+  let body;
+  if (data.attachment?.type === "image") body = "📷 Sent a photo";
+  else if (data.attachment?.type === "video") body = "🎬 Sent a video";
+  else if (data.attachment?.type === "file") body = "📎 Sent a file";
+  else body = trunc(data.text);
   if (!body) return;
   const admins = await teamCoachUidsForTeam(data.teamId);
   const recipients = [...new Set([data.threadId, ...admins])].filter((uid) => uid && uid !== data.senderUid);
