@@ -376,3 +376,18 @@ describe('shared documents library (libraryItems)', () => {
     await assertSucceeds(deleteDoc(doc(as(env, 'org').firestore(), 'libraryItems/v1')))
   })
 })
+
+describe('USDA food search requests', () => {
+  test('a team member asks as themselves; nobody reads others or edits', async () => {
+    const db = as(env, 'p1').firestore()
+    await assertSucceeds(setDoc(doc(db, 'foodSearches/s1'), { uid: 'p1', q: 'chicken', createdAt: serverTimestamp() }))
+    await assertFails(setDoc(doc(db, 'foodSearches/s2'), { uid: 'p2', q: 'chicken' }))
+    await assertFails(setDoc(doc(db, 'foodSearches/s3'), { uid: 'p1', q: 'chicken', foods: [], done: true }))
+    await assertFails(setDoc(doc(as(env, 'builder').firestore(), 'foodSearches/s4'), { uid: 'builder', q: 'rice' }))
+    await seed(env, 'foodSearches/s5', { uid: 'p2', q: 'rice', foods: [], done: true })
+    await assertFails(getDoc(doc(db, 'foodSearches/s5')))
+    await assertSucceeds(getDoc(doc(as(env, 'p2').firestore(), 'foodSearches/s5')))
+    await assertFails(updateDoc(doc(as(env, 'p2').firestore(), 'foodSearches/s5'), { foods: [{ name: 'fake' }] }))
+    await assertFails(getDoc(doc(db, 'usdaCache/rice')))
+  })
+})

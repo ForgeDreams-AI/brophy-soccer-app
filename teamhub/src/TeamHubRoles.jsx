@@ -5619,30 +5619,29 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
     const ctl = new AbortController();
     const timer = setTimeout(async () => {
       setSearching(true);
-      // Query Open Food Facts (no key) + USDA (if a key is set) at once, then
-      // merge and de-dupe by name so one box searches everything.
-      const tasks = [searchProducts(q, ctl.signal)];
-      if (usdaAvailable()) tasks.unshift(searchFoods(q, ctl.signal));
-      const settled = await Promise.allSettled(tasks);
-      if (ctl.signal.aborted) return;
-      const merged = [];
-      const seen = new Set();
-      settled.forEach((s) => {
-        if (s.status !== "fulfilled") return;
-        s.value.forEach((r) => {
+      // Open Food Facts (packaged foods, instant) and USDA (whole foods, via
+      // a server function — a second or two) run at once. Results show as
+      // each source answers, USDA first in the list, de-duped by name.
+      const bySource = { usda: [], off: [] };
+      const errors = [];
+      const show = () => {
+        const merged = [];
+        const seen = new Set();
+        [...bySource.usda, ...bySource.off].forEach((r) => {
           const key = (r.name || "").toLowerCase();
           if (!key || seen.has(key)) return;
           seen.add(key);
           merged.push(r);
         });
-      });
-      if (!merged.length && settled.every((s) => s.status === "rejected")) {
-        const firstErr = settled.find((s) => s.status === "rejected");
-        setSearchErr(firstErr?.reason?.message || "search failed");
-      } else {
-        setSearchErr("");
-      }
-      setSearchResults(merged.slice(0, 16));
+        setSearchResults(merged.slice(0, 16));
+      };
+      const run = (src, p) => p.then((rows) => { if (!ctl.signal.aborted) { bySource[src] = rows || []; show(); } })
+        .catch((e) => { if (e?.name !== "AbortError") errors.push(e); });
+      const tasks = [run("off", searchProducts(q, ctl.signal))];
+      if (usdaAvailable()) tasks.push(run("usda", searchFoods(q, ctl.signal)));
+      await Promise.all(tasks);
+      if (ctl.signal.aborted) return;
+      setSearchErr(!bySource.usda.length && !bySource.off.length && errors.length ? (errors[0]?.message || "search failed") : "");
       setSearching(false);
     }, 300);
     return () => { clearTimeout(timer); ctl.abort(); setSearching(false); };

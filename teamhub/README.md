@@ -3,7 +3,7 @@
 Mobile-first team app for Brophy Soccer. Built per `../TeamHub_Build_Guide.md`.
 
 - **Production URL:** `BrophySoccer.forgedreams.ai`
-- **Hosting:** **Firebase Hosting** at https://brophy-soccer-app.web.app (deploy: `npm run build && npx firebase-tools@14 deploy --only hosting`). Merging to `main` does NOT redeploy the site. `/api/**` is rewritten to the `api` Cloud Function (food search, PDF picture proxy). The Cloudflare files (`wrangler.toml`, `worker/`) are unused leftovers.
+- **Hosting:** **Firebase Hosting** at https://brophy-soccer-app.web.app (deploy: `npm run build && npx firebase-tools@14 deploy --only hosting`). Merging to `main` does NOT redeploy the site. The Cloudflare files (`wrangler.toml`, `worker/`) are unused leftovers.
 - **Backend:** Firebase Auth + Firestore (project: `brophy-soccer-app`)
 - **Stack:** Vite + React + Tailwind v3 + Firebase JS SDK + lucide-react
 
@@ -45,7 +45,7 @@ CI (`.github/workflows/ci.yml`) runs all of the above on every pull request.
 The "Log Something Else" form has built-in auto-fill search powered by USDA's free API.
 
 1. Get a key (instant, no card): <https://fdc.nal.usda.gov/api-key-signup.html>
-2. Store it as a **Firebase secret**, never in the app bundle: `npx firebase-tools@14 functions:secrets:set USDA_API_KEY`, then deploy the `api` function. The browser calls `/api/usda`, and the function adds the key.
+2. Store it as a **Firebase secret**, never in the app bundle: `npx firebase-tools@14 functions:secrets:set USDA_API_KEY`, then deploy functions. The app writes a `foodSearches` request doc, and the `onFoodSearch` trigger (not a public endpoint, because the org blocks those) fetches USDA and writes the results back.
 3. Without the secret (or in local `npm run dev`), food search uses Open Food Facts only.
 
 Values are per 100g — adjust calories/protein after autofill if your portion was different.
@@ -56,6 +56,14 @@ A profile can only be created from a matching roster invite (`invitedEmails/{ema
 
 **Bootstrap the first program admin:** Firebase console → Firestore → create `invitedEmails/<your-email>` with `{ email, role: "orgAdmin", teamId: "varsity" }` → sign in.
 
+## Push notifications (VAPID key)
+
+Web push needs the project's **Web Push public key** (VAPID) baked into the build:
+- **Where it lives:** `teamhub/.env.production`, which is committed. The key is public by design, since it ships in every browser bundle.
+- **Where to find it:** Firebase console → Project settings → Cloud Messaging → Web configuration → Web Push certificates → **Key pair**.
+- **Safety net:** a production build **fails on purpose** if the key is missing. On 2026-11-21 a build without it shipped, and nobody could turn on notifications.
+- **Don't replace an existing key pair.** Devices that already turned on notifications are tied to it.
+
 ## Deploy the website (Firebase Hosting)
 
 ```bash
@@ -65,7 +73,7 @@ npx firebase-tools@14 deploy --only hosting --project brophy-soccer-app
 ```
 
 - **Live at:** https://brophy-soccer-app.web.app. Merging to `main` does **not** deploy it.
-- **Build variable:** `VITE_FIREBASE_VAPID_KEY` (web push) must be set in `.env` on the machine that builds.
+- **Build variable:** `VITE_FIREBASE_VAPID_KEY` (web push) comes from the committed `.env.production` (see Push notifications).
 - **Custom domain (optional):** Firebase console → Hosting → Add custom domain (for example `BrophySoccer.forgedreams.ai`), then add that domain under Authentication → Settings → Authorized domains.
 
 ## Deploying rules, indexes and functions
