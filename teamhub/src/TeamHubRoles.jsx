@@ -6,7 +6,7 @@ import {
   Link as LinkIcon, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Wind, Activity, Dumbbell, Snowflake, StretchHorizontal, FileText,
   Image as ImageIcon, Mail, ArrowRight, Layers, Reply, BarChart3, ScanLine, Camera,
-  Bell, BellOff, Pencil, Copy, Download, Printer, Megaphone,
+  Bell, BellOff, Pencil, Copy, Download, Printer, Megaphone, Maximize2,
   Users, Tag, Target, Footprints, Repeat, Flag, Zap, ImagePlus, Goal, Hash, Eye,
   ClipboardList, ExternalLink, Star, Shuffle, CornerDownRight, Crosshair, Swords, LayoutGrid, SquareDashed,
   RefreshCw,
@@ -6477,6 +6477,24 @@ const DateDivider = ({ label }) => (
   </div>
 );
 
+// Fullscreen in-app video player. Chat videos play in a small bubble, which
+// is too small to see on a phone, so tapping the expand button opens the
+// video here instead — full screen, inside the app, with a big close button.
+// No new tab, no leaving the app.
+const VideoViewer = ({ url, onClose }) => {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex items-center justify-center" onClick={onClose}>
+      <button onClick={onClose} aria-label="Close video" className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center"><X className="w-5 h-5" /></button>
+      <video src={url} controls autoPlay playsInline className="max-h-full max-w-full" onClick={(e) => e.stopPropagation()} />
+    </div>
+  );
+};
+
 const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, markDMsRead, scheduled = [], addScheduled, deleteScheduled }) => {
   const isAdmin = user.role === "admin";
   const [input, setInput] = useState("");
@@ -6491,6 +6509,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
   const [channelModal, setChannelModal] = useState(false);
   const [scheduledModal, setScheduledModal] = useState(false);
   const [viewer, setViewer] = useState(null); // { title, groups } — coach seen/voted breakdown
+  const [videoViewer, setVideoViewer] = useState(null); // url of the video playing fullscreen in-app
   const nameByUid = useMemo(() => Object.fromEntries((allUsers || []).map((u) => [u.id, u.name || u.email || "Member"])), [allUsers]);
   // email → display name, for showing roster people by name instead of address.
   const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email && u.name).map((u) => [u.email.toLowerCase(), u.name])), [allUsers]);
@@ -6939,6 +6958,9 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
       {viewer && (
         <ViewersModal title={viewer.title} groups={viewer.groups} onClose={() => setViewer(null)} />
       )}
+      {videoViewer && (
+        <VideoViewer url={videoViewer} onClose={() => setVideoViewer(null)} />
+      )}
 
       {shared ? (
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-5" style={{ backgroundColor: COLORS.bg }}>
@@ -6948,9 +6970,10 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
               <div className="grid grid-cols-3 gap-2">
                 {mediaMsgs.map((m) => (
                   m.attachment?.type === "video" && m.attachment.url ? (
-                    <a key={m.id} href={m.attachment.url} target="_blank" rel="noopener noreferrer" className="aspect-square rounded-xl overflow-hidden bg-slate-100 block">
+                    <button key={m.id} onClick={() => setVideoViewer(m.attachment.url)} aria-label="Watch video fullscreen" className="aspect-square rounded-xl overflow-hidden bg-slate-100 block relative">
                       <video src={m.attachment.url} preload="metadata" className="w-full h-full object-cover" />
-                    </a>
+                      <span className="absolute inset-0 flex items-center justify-center"><span className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center"><Play className="w-5 h-5 text-white fill-white ml-0.5" /></span></span>
+                    </button>
                   ) : m.attachment?.type === "image" && m.attachment.url ? (
                     <a key={m.id} href={m.attachment.url} target="_blank" rel="noopener noreferrer" className="aspect-square rounded-xl overflow-hidden bg-slate-100 block">
                       <img src={m.attachment.url} alt="" className="w-full h-full object-cover" loading="lazy" />
@@ -7071,7 +7094,10 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
                             </a>
                           )}
                           {m.attachment?.type === "video" && m.attachment.url && (
-                            <video src={m.attachment.url} controls playsInline preload="metadata" className="w-full max-h-80 object-cover" />
+                            <div className="relative">
+                              <video src={m.attachment.url} controls playsInline preload="metadata" className="w-full max-h-80 object-cover" />
+                              <button onClick={() => setVideoViewer(m.attachment.url)} aria-label="Watch fullscreen" title="Watch fullscreen" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center"><Maximize2 className="w-4 h-4" /></button>
+                            </div>
                           )}
                           {m.text && <p className="text-sm leading-snug break-words px-3 py-2 select-text"><Linkify>{m.text}</Linkify></p>}
                           {m.attachment && m.attachment.type !== "image" && m.attachment.type !== "video" && (

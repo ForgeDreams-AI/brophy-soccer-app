@@ -12,15 +12,18 @@ import {
 // and nothing re-subscribes — the offline cache then keeps showing the last
 // snapshot with no error, so chat and everything else looks frozen until a
 // full restart. This hook fixes that automatically in two ways: whenever the
-// app comes back to the foreground after being away for a while, or the
-// network comes back, it cycles the Firestore network off and on AND bumps
-// the re-subscribe generation, which tears down and re-creates every
-// listener from scratch. The second half is the part that matters: once the
-// SDK has terminated a listener with an error, a network cycle alone will
-// not bring it back. Only a fresh onSnapshot call does. No one has to tap
-// anything. A watchdog covers the case where the stream dies silently while
-// the app is open: if snapshots stay cache-only for a while, it resyncs on
-// its own.
+// app comes back to the foreground after being away for a while and the
+// stream is actually dead (server snapshots have stopped), or the network
+// comes back, it cycles the Firestore network off and on AND bumps the
+// re-subscribe generation, which tears down and re-creates every listener
+// from scratch. A healthy stream is left alone on foreground return —
+// resyncing it anyway on every app switch is what made the app feel slow.
+// The second half is the part that matters: once the SDK has terminated a
+// listener with an error, a network cycle alone will not bring it back.
+// Only a fresh onSnapshot call does. No one has to tap anything. A watchdog
+// covers the case where the stream dies silently while the app is open: if
+// snapshots stay cache-only for a while, it resyncs on its own, backing off
+// when resyncs do not help so a bad connection does not churn forever.
 //
 // The 30-second away-time gate keeps rapid tab switches from churning the
 // connection. `resync` is also exposed for the small manual Refresh button
@@ -28,6 +31,7 @@ import {
 const AWAY_MS = 30 * 1000;
 const STALE_WATCHDOG_MS = 30 * 1000;
 const AUTO_RESYNC_MIN_GAP_MS = 60 * 1000;
+const AUTO_RESYNC_MAX_GAP_MS = 10 * 60 * 1000;
 
 export function useFirestoreResync() {
   const [syncing, setSyncing] = useState(false);
@@ -35,6 +39,11 @@ export function useFirestoreResync() {
   const hiddenSinceRef = useRef(null);
   const staleSinceRef = useRef(null);
   const lastAutoResyncRef = useRef(0);
+  // Gap before the watchdog may resync again. It grows when a resync does
+  // not clear the staleness (bad connection: tearing everything down every
+  // minute just re-downloads it all and the app feels slow), and resets as
+  // soon as live data flows again.
+  const resyncGapRef = useRef(AUTO_RESYNC_MIN_GAP_MS);
 
   const resync = useCallback(async () => {
     if (syncingRef.current) return;
@@ -65,14 +74,16 @@ export function useFirestoreResync() {
       const now = Date.now();
       if (!isFirestoreStale(now)) {
         staleSinceRef.current = null;
+        resyncGapRef.current = AUTO_RESYNC_MIN_GAP_MS;
         return;
       }
       if (!staleSinceRef.current) staleSinceRef.current = now;
       if (now - staleSinceRef.current < STALE_WATCHDOG_MS) return;
       if (typeof navigator !== "undefined" && navigator.onLine === false) return;
-      if (now - lastAutoResyncRef.current < AUTO_RESYNC_MIN_GAP_MS) return;
+      if (now - lastAutoResyncRef.current < resyncGapRef.current) return;
       lastAutoResyncRef.current = now;
       staleSinceRef.current = null;
+      resyncGapRef.current = Math.min(resyncGapRef.current * 2, AUTO_RESYNC_MAX_GAP_MS);
       resync();
     }, 15 * 1000);
     return () => clearInterval(id);
@@ -86,6 +97,11 @@ export function useFirestoreResync() {
       hiddenSinceRef.current = null;
       if (!hiddenSince) return; // never went away (initial load) — nothing to do
       if (Date.now() - hiddenSince < AWAY_MS) return;
+      // Only tear everything down when the stream is actually dead. A
+      // healthy stream survives being backgrounded, and resyncing it anyway
+      // on every return is what made the app feel slow — every app switch
+      // re-downloaded all the data for no reason.
+      if (!isFirestoreStale(Date.now())) return;
       resync();
     };
     const onVisibility = () => {

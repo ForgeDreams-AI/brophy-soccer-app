@@ -25,7 +25,13 @@ export function reportSnapshot(fromCache) {
 }
 
 export function isFirestoreStale(now = Date.now()) {
-  return cacheSeenAt > 0 && now - lastServerAt > STALE_AFTER_MS;
+  // Only a stream that was alive and then went quiet counts as stale.
+  // Before the first server snapshot ever arrives (initial load on a slow
+  // connection), cache-first snapshots are normal, not a dead stream —
+  // counting them as stale made the watchdog tear down and re-create every
+  // listener about once a minute, re-downloading everything, which is what
+  // made the app feel super slow.
+  return lastServerAt > 0 && cacheSeenAt > 0 && now - lastServerAt > STALE_AFTER_MS;
 }
 
 export function subscribeFirestoreHealth(fn) {
