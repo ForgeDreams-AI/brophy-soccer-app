@@ -3,7 +3,7 @@
 Mobile-first team app for Brophy Soccer. Built per `../TeamHub_Build_Guide.md`.
 
 - **Production URL:** `BrophySoccer.forgedreams.ai`
-- **Hosting:** Cloudflare (domain registered on Cloudflare). The repo carries both a Pages setup (this README) and a Worker + static-assets setup (`wrangler.toml`); confirm which one serves production before changing either. The `hosting` block in `firebase.json` is unused.
+- **Hosting:** **Firebase Hosting** at https://brophy-soccer-app.web.app (deploy: `npm run build && npx firebase-tools@14 deploy --only hosting`). Merging to `main` does NOT redeploy the site. `/api/**` is rewritten to the `api` Cloud Function (food search, PDF picture proxy). The Cloudflare files (`wrangler.toml`, `worker/`) are unused leftovers.
 - **Backend:** Firebase Auth + Firestore (project: `brophy-soccer-app`)
 - **Stack:** Vite + React + Tailwind v3 + Firebase JS SDK + lucide-react
 
@@ -45,8 +45,8 @@ CI (`.github/workflows/ci.yml`) runs all of the above on every pull request.
 The "Log Something Else" form has built-in auto-fill search powered by USDA's free API.
 
 1. Get a key (instant, no card): <https://fdc.nal.usda.gov/api-key-signup.html>
-2. Store it as a **Worker secret**, never in the app bundle: `npx wrangler secret put USDA_API_KEY` (from `teamhub/`). The browser calls `/api/usda` and the Worker adds the key.
-3. Without the secret (or in local `npm run dev`, where there's no Worker), food search uses Open Food Facts only.
+2. Store it as a **Firebase secret**, never in the app bundle: `npx firebase-tools@14 functions:secrets:set USDA_API_KEY`, then deploy the `api` function. The browser calls `/api/usda`, and the function adds the key.
+3. Without the secret (or in local `npm run dev`), food search uses Open Food Facts only.
 
 Values are per 100g — adjust calories/protein after autofill if your portion was different.
 
@@ -56,46 +56,17 @@ A profile can only be created from a matching roster invite (`invitedEmails/{ema
 
 **Bootstrap the first program admin:** Firebase console → Firestore → create `invitedEmails/<your-email>` with `{ email, role: "orgAdmin", teamId: "varsity" }` → sign in.
 
-## Deploy to Cloudflare Pages
-
-### One-time setup
-
-1. **Push to GitHub** (private or public — env vars stay out of the repo). From the **project root** (`teamapp/`, not `teamhub/`):
-
-   ```bash
-   git init
-   git add -A
-   git commit -m "Initial TeamHub commit"
-   gh repo create brophy-soccer-app --private --source=. --remote=origin --push
-   ```
-
-   (Or create the repo manually on GitHub and `git remote add origin … && git push -u origin main`.)
-
-2. **Connect Cloudflare Pages.** <https://dash.cloudflare.com> → Workers & Pages → **Create** → Pages → **Connect to Git** → select the repo. Build settings:
-   - **Framework preset:** Vite
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-   - **Root directory:** `teamhub` ← important (since this folder is nested in the repo)
-   - **Environment variables (production AND preview):** `VITE_FIREBASE_VAPID_KEY=<your VAPID key>` (the USDA key is a Worker secret now — see "Food search")
-     (VAPID key: generate in the Brophy Firebase console → Project Settings → Cloud Messaging → Web Push certificates.)
-
-   Click **Save and Deploy**. First build takes ~2 min.
-
-3. **Add the custom domain.** Pages project → **Custom domains** → **Set up** → `BrophySoccer.forgedreams.ai`. Cloudflare creates the DNS automatically since the domain is on Cloudflare. SSL is auto-provisioned.
-
-4. **Authorize the new domain in Firebase.** Firebase console → Authentication → Settings → **Authorized domains** → add `BrophySoccer.forgedreams.ai` (and the Pages preview URL `*.brophy-soccer-app.pages.dev` if you want preview deploys to work for sign-in too).
-
-### Ongoing deploys
-
-Just push to `main`. Pages auto-builds and deploys.
+## Deploy the website (Firebase Hosting)
 
 ```bash
-git add -A
-git commit -m "…"
-git push
+cd teamhub
+npm ci && npm run build
+npx firebase-tools@14 deploy --only hosting --project brophy-soccer-app
 ```
 
-PR branches get preview URLs automatically (great for trying changes before merging).
+- **Live at:** https://brophy-soccer-app.web.app. Merging to `main` does **not** deploy it.
+- **Build variable:** `VITE_FIREBASE_VAPID_KEY` (web push) must be set in `.env` on the machine that builds.
+- **Custom domain (optional):** Firebase console → Hosting → Add custom domain (for example `BrophySoccer.forgedreams.ai`), then add that domain under Authentication → Settings → Authorized domains.
 
 ## Deploying rules, indexes and functions
 

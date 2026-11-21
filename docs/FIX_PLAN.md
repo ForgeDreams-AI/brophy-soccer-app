@@ -198,3 +198,11 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
   - 5 new rules tests (68 total).
   - Deep link: `?tab=library`.
 - This is separate from Coach Center → Documents, which is for documents players must **sign**.
+
+## 13. Hosting confirmed: Firebase Hosting (2026-11-21)
+
+- The live app is **https://brophy-soccer-app.web.app** on Firebase Hosting, not Cloudflare. After the merge it still served the old pre-audit build, because Hosting only updates on `firebase deploy --only hosting`.
+- The `/api/usda` and `/api/img` routes moved from the unused Cloudflare Worker to the **`api` Cloud Function**, reached through the Hosting rewrite `/api/**`. The USDA key is a Secret Manager secret.
+  - 3 new unit tests.
+  - Emulator check: the rewrite works, cross-site requests get 403, and only this bucket is allowed for images.
+- `DEPLOY_PLAN.md` step 9 is rewritten for Firebase Hosting, and the README and rollback steps are updated.

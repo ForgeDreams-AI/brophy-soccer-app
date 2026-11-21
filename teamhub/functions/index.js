@@ -3,6 +3,9 @@
 
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onRequest } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
+const { handleApi } = require("./lib/api");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
@@ -271,6 +274,26 @@ exports.onMessageCreated = onDocumentCreated("messages/{id}", async (event) => {
     link: "/?tab=messages",
     tag: "chat",
   });
+});
+
+// Same-origin web API (/api/usda food search, /api/img PDF picture proxy),
+// reached through the Firebase Hosting rewrite /api/** → api. The USDA key
+// is a Secret Manager secret (`firebase functions:secrets:set USDA_API_KEY`).
+// `invoker: "public"` is needed because the browser calls it unauthenticated;
+// if an organization policy forbids public functions, the deploy of THIS
+// function fails and food search simply falls back to Open Food Facts.
+const USDA_API_KEY = defineSecret("USDA_API_KEY");
+exports.api = onRequest({ secrets: [USDA_API_KEY], invoker: "public", memory: "256MiB", maxInstances: 5 }, async (req, res) => {
+  try {
+    const out = await handleApi(
+      { method: req.method, path: req.path, query: req.query || {}, headers: req.headers || {} },
+      { usdaKey: USDA_API_KEY.value(), fetch },
+    );
+    res.status(out.status).set(out.headers).send(out.body);
+  } catch (e) {
+    console.error("api error", e);
+    res.status(500).set("cache-control", "no-store").json({ error: "server error" });
+  }
 });
 
 // Poll votes live in messages/{id}/votes/{uid} — private to the voter and

@@ -94,7 +94,8 @@ npx -y firebase-tools@14 deploy --only functions --project brophy-soccer-app
   - `onPushNotificationCreated`: instant "Send now".
   - `onPollVoteWritten`: private poll tallies.
 - Changed function: `runScheduled` (bounded queries, once-a-day wellness pass, retry cap).
-- Check: `npx -y firebase-tools@14 functions:list --project brophy-soccer-app` lists 10 functions, including `onPushNotificationCreated` and `onPollVoteWritten`, and not `sendPushNotification`.
+- Check: `npx -y firebase-tools@14 functions:list --project brophy-soccer-app` lists `onPushNotificationCreated`, `onPollVoteWritten` and `onLibraryItemCreated`, and not `sendPushNotification`.
+- The `api` function (food search) needs a secret first, so it is deployed in step 9. If this step complains that `USDA_API_KEY` is missing, do step 9.1 first, then rerun this step.
 
 ## 6. Turn on Storage CORS (fixes blank pictures in practice PDFs)
 
@@ -105,7 +106,7 @@ gcloud storage buckets update gs://brophy-soccer-app.firebasestorage.app --cors-
 Verify the header now appears. Take any drill image URL, for example from the Firebase console → Storage → `drills/` → a file → "Access token" link:
 
 ```bash
-curl -s -o /dev/null -D - -H "Origin: https://brophysoccer.forgedreams.ai" "<that download URL>" | grep -i access-control-allow-origin
+curl -s -o /dev/null -D - -H "Origin: https://brophy-soccer-app.web.app" "<that download URL>" | grep -i access-control-allow-origin
 ```
 
 **Expected:** `access-control-allow-origin: *`. Before this step there is no such header, which is exactly why PDF pictures came out blank.
@@ -126,29 +127,54 @@ cd ..
 
 - The script reports how many votes and polls it moved. It is idempotent: a second run moves 0.
 
-## 9. Deploy the website (frontend)
+## 9. Deploy the website (frontend) — Firebase Hosting
 
-The repo has **two** possible Cloudflare setups, and it isn't known which one serves `BrophySoccer.forgedreams.ai`. Find out first:
+**Confirmed 2026-11-21:** the live app is on **Firebase Hosting** at **https://brophy-soccer-app.web.app**, not Cloudflare.
+- Merging to `main` does **not** update the website. It only changes when you run `firebase deploy --only hosting`.
+- The Cloudflare files (`wrangler.toml`, `worker/`) are unused.
+- `BrophySoccer.forgedreams.ai` doesn't resolve publicly right now. Connecting it is optional: Firebase console → Hosting → Add custom domain.
 
-1. Check the Cloudflare dashboard → Workers & Pages → find the project for `BrophySoccer.forgedreams.ai`.
-2. **Food-search key (both hosting types).** The USDA key used to ship inside the public app, so treat the old one as leaked:
-   - Get a **new** free key at https://fdc.nal.usda.gov/api-key-signup.html.
-   - Store it **server-side only** (step 3 or 4 below).
-   - **Remove** any `VITE_USDA_API_KEY` build variable from Cloudflare.
-3. **If it is a Pages project connected to Git:**
-   - In Pages → Settings → Environment variables, delete `VITE_USDA_API_KEY` and add **`USDA_API_KEY`** as an *encrypted secret* (Production + Preview).
-   - Then merge PR #1 into `main` on GitHub. Pages builds and deploys automatically (build command `npm run build`, output `dist`, root `teamhub`).
-   - The build emits `dist/_worker.js`, so Pages also serves `/api/usda` and `/api/img`.
-4. **If it is a Worker (`brophy-soccer-app`, using `wrangler.toml`):** merge PR #1, then from `teamhub/` run:
+Run these from `teamhub/` on the merged `main`:
+
+1. **Food-search key.** The old USDA key was public in the app, so treat it as leaked.
+   1. Get a **new** free key at https://fdc.nal.usda.gov/api-key-signup.html.
+   2. Store it in Secret Manager. The CLI prompts you to paste the key; never put it in a file or in git:
+      ```bash
+      npx -y firebase-tools@14 functions:secrets:set USDA_API_KEY --project brophy-soccer-app
+      ```
+2. **Deploy the `api` function.** It serves `/api/usda` (food search) and `/api/img` (PDF picture backup):
    ```bash
-   npx -y wrangler@3 secret put USDA_API_KEY      # paste the NEW key when prompted
-   npm run build && npx -y wrangler@3 deploy
+   npx -y firebase-tools@14 deploy --only functions:api --project brophy-soccer-app
    ```
-5. Check food search: open `https://brophysoccer.forgedreams.ai/api/usda?q=chicken` in a browser.
+   - It needs public access, because the browser calls it without signing in.
+   - **If the deploy fails with an IAM / "allUsers" / organization-policy error, report it and continue.** An org policy blocks public functions. The app still works: food search falls back to Open Food Facts only, and PDF pictures load directly now that CORS is on.
+3. **Build and deploy the website:**
+   ```bash
+   git checkout main && git pull
+   npm ci && npm run build
+   npx -y firebase-tools@14 deploy --only hosting --project brophy-soccer-app
+   ```
+4. **Check it's the new version:**
+   - `https://brophy-soccer-app.web.app/version.json` shows a new `build` number. The old one was `1795224129750`.
+   - In the app: Chat has "Load older messages", and Train has a **Documents** card.
+5. **Check food search:** open `https://brophy-soccer-app.web.app/api/usda?q=chicken` in a browser.
    - **Expected:** JSON with `foods`.
-   - `{"error":"USDA search is not configured"}` means the secret is missing.
+   - `{"error":"USDA search is not configured"}` means the secret from 9.1 is missing.
    - `{"error":"forbidden"}` from curl is expected. The route only answers same-site browser requests.
-6. Report which hosting type it was.
+   - A blank page or 403 means the `api` function didn't deploy (see 9.2).
+6. **Custom domain `brophysoccer.forgedreams.ai`.** The Cloudflare DNS side was done by Claude on 2026-11-21:
+   - an `A` record → `199.36.158.100`, DNS only (not proxied)
+   - a `TXT` record `hosting-site=brophy-soccer-app`
+   
+   Muse does the Firebase side:
+   1. Firebase console → **Hosting** → **Add custom domain** → `brophysoccer.forgedreams.ai`. Leave "redirect to an existing website" unticked.
+   2. If Firebase asks for DNS records **different** from the two above, post them in the Claude chat **exactly as shown** (type, host/name, value). Claude adds them in Cloudflare. Muse has no Cloudflare access.
+   3. Wait until Firebase shows **Connected**. The certificate can take up to about an hour.
+   4. Firebase console → **Authentication** → **Settings** → **Authorized domains** → **Add** `brophysoccer.forgedreams.ai`. Without this, sign-in on the new domain fails.
+7. **Report:**
+   - the new build number
+   - whether the `api` function deployed
+   - the food-search result
 
 ## 10. Smoke test (production)
 
@@ -234,7 +260,7 @@ echo "$PRE"   # must print one commit id
   gcloud firestore import gs://brophy-soccer-app-backups/firestore-backups/<YYYY-MM-DD-HHMM> --project brophy-soccer-app
   ```
   The older restore point is `gs://brophy-soccer-app-backups/firestore-backups/2026-11-20`.
-- **Frontend:** in Cloudflare Pages, "Rollback to this deployment" on the previous build. For a Worker, use `npx wrangler rollback`.
+- **Frontend:** Firebase console → Hosting → Release history → "Roll back" on the previous release. Or, from a checkout of the pre-PR commit (`git checkout "$PRE"`), run `npm ci && npm run build && npx -y firebase-tools@14 deploy --only hosting`.
 
 ## Report back
 
