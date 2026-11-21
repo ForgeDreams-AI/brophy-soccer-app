@@ -111,7 +111,7 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
 
 ## 8. Rollout checklist (after merge)
 
-1. Back up Firestore (console export).
+1. Back up Firestore to `gs://brophy-soccer-app-backups/firestore-backups/<date>`. That bucket is in us-central1, like the database. The Storage bucket is in us-east1, so Firestore can't export to it. See `DEPLOY_PLAN.md` step 2.
 2. Deploy rules **first**: `firebase deploy --only firestore:rules,storage`.
 3. Deploy indexes: `firebase deploy --only firestore:indexes`, then wait for "Enabled". New chat and scheduler queries need them.
 4. Deploy functions: `firebase deploy --only functions`. Confirm deletion of `sendPushNotification`.
