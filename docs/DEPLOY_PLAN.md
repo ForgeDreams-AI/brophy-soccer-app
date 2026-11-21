@@ -162,7 +162,16 @@ Run these from `teamhub/` on the merged `main`:
    - `{"error":"USDA search is not configured"}` means the secret from 9.1 is missing.
    - `{"error":"forbidden"}` from curl is expected. The route only answers same-site browser requests.
    - A blank page or 403 means the `api` function didn't deploy (see 9.2).
-6. **Report:**
+6. **Custom domain `brophysoccer.forgedreams.ai`.** The Cloudflare DNS side was done by Claude on 2026-11-21:
+   - an `A` record → `199.36.158.100`, DNS only (not proxied)
+   - a `TXT` record `hosting-site=brophy-soccer-app`
+   
+   Muse does the Firebase side:
+   1. Firebase console → **Hosting** → **Add custom domain** → `brophysoccer.forgedreams.ai`. Leave "redirect to an existing website" unticked.
+   2. If Firebase asks for DNS records **different** from the two above, post them in the Claude chat **exactly as shown** (type, host/name, value). Claude adds them in Cloudflare. Muse has no Cloudflare access.
+   3. Wait until Firebase shows **Connected**. The certificate can take up to about an hour.
+   4. Firebase console → **Authentication** → **Settings** → **Authorized domains** → **Add** `brophysoccer.forgedreams.ai`. Without this, sign-in on the new domain fails.
+7. **Report:**
    - the new build number
    - whether the `api` function deployed
    - the food-search result
