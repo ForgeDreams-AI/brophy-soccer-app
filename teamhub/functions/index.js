@@ -243,6 +243,8 @@ exports.onMessageCreated = onDocumentCreated("messages/{id}", async (event) => {
   let body;
   if (data.kind === "poll") body = `📊 ${data.question || "New poll"}`;
   else if (data.attachment?.type === "image") body = "📷 Sent a photo";
+  else if (data.attachment?.type === "video") body = "🎬 Sent a video";
+  else if (data.attachment?.type === "file") body = "📎 Sent a file";
   else body = trunc(data.text);
   if (!body) return;
   // Only the message's own audience — a hidden channel's text must not go out
@@ -417,9 +419,12 @@ exports.sendPushNotification = onCall(async (request) => {
 
 // ── scheduled reminders + polls ─────────────────────────────────────────────
 // Coaches create docs in `scheduled` with a future `sendAt`. This cron sweeps
-// every 5 minutes and fires anything now due: a "reminder" fans out as a push
+// every minute and fires anything now due: a "reminder" fans out as a push
 // to its audience; a "poll" is posted into a chat channel as a normal poll
 // message (which the onMessageCreated trigger then pushes to the team).
+// The 1-minute sweep keeps the "Send now" composer path near-instant: it
+// queues a pushNotifications doc with sendAt set to now, and the direct
+// callable is blocked by the org policy, so this sweep is the only route.
 
 async function channelAudienceKeys(channel) {
   if (!channel || channel === "team") return ["*"];
@@ -475,7 +480,7 @@ function nextRecurring(nowMs, repeatDays, h, mi, tz) {
 // `wellnessNudgeHour` in src/data/teams.js.
 const WELLNESS_NUDGE_HOUR = 8;
 
-exports.runScheduled = onSchedule("every 5 minutes", async () => {
+exports.runScheduled = onSchedule("every 1 minutes", async () => {
   const now = Timestamp.now();
   await processScheduledItems(now);
   await processPushNotifications(now);
