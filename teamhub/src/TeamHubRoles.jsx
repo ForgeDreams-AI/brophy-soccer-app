@@ -4693,9 +4693,16 @@ const SendLineupSheet = ({ title, formation, slots, logoUrl, teamShortName = "",
 // upload a photo for any player who has an account.
 // Players set their own face photo (Settings / Home); coaches can't change
 // it (decision 2026-11-21 — these are minors).
-const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onClose }) => {
+const PlayerPickerSheet = ({ roster, activeTeamId, positionsByUid = EMPTY_OBJ, usedUids, onPick, onClear, onClose }) => {
   const [q, setQ] = useState("");
-  const list = roster.filter((p) => (p.name || p.email || "").toLowerCase().includes(q.toLowerCase()));
+  // Players only, grouped like the roster (GK / DEF / MID / FWD), names
+  // resolved from the coach's sheet when an account has only an email.
+  const { groups } = useMemo(() => groupByPosition(roster, activeTeamId, positionsByUid), [roster, activeTeamId, positionsByUid]);
+  const needle = q.trim().toLowerCase();
+  const hit = (p) => !needle || `${p.name} ${p.email}`.toLowerCase().includes(needle);
+  const sections = [...POSITIONS, { id: "NONE", label: "No position yet" }]
+    .map((pos) => ({ ...pos, list: groups[pos.id].filter(hit) }))
+    .filter((sec) => sec.list.length);
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-3xl w-full max-w-md max-h-[80vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -4704,18 +4711,25 @@ const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onClose }) => {
           <button onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-4 space-y-2">
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search roster…" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players…" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
           <button onClick={onClear} className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-red-500 bg-red-50">Clear this position</button>
-          {list.length === 0 && <p className="text-sm text-slate-400 italic text-center py-4">No players found.</p>}
-          {list.map((p) => (
-            <div key={p.uid || p.email} className={`flex items-center gap-3 px-2 py-2 rounded-xl ${usedUids.has(p.uid) && p.uid ? "opacity-40" : ""}`}>
-              <button onClick={() => onPick(p)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-                <Avatar photoURL={p.photoURL} initials={p.initials} size={38} bg={COLORS.primary} />
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-800 truncate">{p.name || p.email}</div>
-                  {p.role === "admin" && <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Coach</div>}
+          {sections.length === 0 && <p className="text-sm text-slate-400 italic text-center py-4">No players found.</p>}
+          {sections.map((sec) => (
+            <div key={sec.id}>
+              <div className="sticky top-[57px] z-[5] bg-slate-100 rounded-lg px-3 py-1.5 mt-2 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                {sec.label} <span className="text-slate-400">{sec.list.length}</span>
+              </div>
+              {sec.list.map((p) => (
+                <div key={p.id} className={`flex items-center gap-3 px-2 py-2 rounded-xl ${p.uid && usedUids.has(p.uid) ? "opacity-40" : ""}`}>
+                  <button onClick={() => onPick(p)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                    <Avatar photoURL={p.photoURL} initials={p.initials} size={38} bg={COLORS.primary} />
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-slate-800 truncate">{p.name}</div>
+                      {!p.uid && <div className="text-[10px] font-semibold text-slate-400">Not in the app yet</div>}
+                    </div>
+                  </button>
                 </div>
-              </button>
+              ))}
             </div>
           ))}
         </div>
@@ -4724,7 +4738,7 @@ const PlayerPickerSheet = ({ roster, usedUids, onPick, onClear, onClose }) => {
   );
 };
 
-const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup, allUsers = [], invites = [], chatGroups = [], postLineupImage, lineupLogo = "", setLineupLogo, teamShortName = "" }) => {
+const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup, allUsers = [], invites = [], chatGroups = [], postLineupImage, lineupLogo = "", setLineupLogo, teamShortName = "", activeTeamId, positionsByUid = EMPTY_OBJ }) => {
   const [draft, setDraft] = useState(null); // null = list view; object = editor
   const [activeSlot, setActiveSlot] = useState(null); // slot id being assigned
   const [sending, setSending] = useState(null); // lineup being sent to chat
@@ -4760,13 +4774,14 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
     (allUsers || []).forEach((u) => {
       const em = (u.email || "").toLowerCase();
       seen.add(em);
-      rows.push({ uid: u.id, name: u.name || u.email || "Player", initials: u.initials || initialsOf(u.name || u.email || ""), photoURL: u.photoURL || "", email: u.email || "", role: u.role || "player" });
+      if ((u.role || "player") !== "player") return; // players only — no coaches
+      rows.push({ id: u.id, uid: u.id, name: u.name || u.email || "Player", initials: u.initials || initialsOf(u.name || u.email || ""), photoURL: u.photoURL || "", email: u.email || "", role: "player" });
     });
     (invites || []).forEach((inv) => {
       const em = (inv.email || "").toLowerCase();
-      if (em && !seen.has(em)) rows.push({ uid: "", name: inv.email, initials: initialsOf(inv.email), photoURL: "", email: inv.email, role: inv.role || "player" });
+      if (em && !seen.has(em) && (inv.role || "player") === "player") rows.push({ id: em, uid: "", name: inv.email, initials: initialsOf(inv.email), photoURL: "", email: inv.email, role: "player" });
     });
-    return rows.sort((a, b) => (a.role === b.role ? (a.name || "").localeCompare(b.name || "") : a.role === "admin" ? 1 : -1));
+    return rows;
   }, [allUsers, invites]);
 
   const newLineup = () => setDraft({ id: null, name: "", formation: "4-3-3", slots: slotsForFormation(FORMATIONS["4-3-3"]) });
@@ -4932,6 +4947,8 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
       {activeSlot && (
         <PlayerPickerSheet
           roster={roster}
+          activeTeamId={activeTeamId}
+          positionsByUid={positionsByUid}
           usedUids={usedUids}
           onPick={assignPlayer}
           onClear={clearSlot}
@@ -10594,7 +10611,7 @@ export default function TeamHubRolesApp() {
           {activeTab === "practice" && effUser.role === "admin" && (
             <CoachCenterPage
               practiceProps={{ user: { ...effUser, isOrgAdmin: user.role === "orgAdmin" }, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events }}
-              gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId) }}
+              gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId), activeTeamId, positionsByUid }}
               rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", removeUser, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId, positionsByUid, setPlayerPosition }}
               calendarProps={{ user: effUser, events, practices, teamWorkouts, personalEvents, addEvent, updateEvent, addPersonalEvent, updatePersonalEvent, deleteEvent, deletePersonalEvent, importEvents, groups: groupsList, addGroup, updateGroupMembers, deleteGroup, invites, allUsers, chatGroups }}
               documentsProps={{ user: effUser, documents, rosterCount: invites.filter((i) => i.role !== "admin").length, onUpload: addDocument, onDelete: deleteDocument, onSign: signDocument }}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { namesMatch, groupByPosition } from "./rosterPositions";
+import { namesMatch, groupByPosition, emailMatches } from "./rosterPositions";
 
 describe("namesMatch", () => {
   it("matches exact, case and punctuation", () => {
@@ -36,5 +36,22 @@ describe("groupByPosition", () => {
     const { groups } = groupByPosition(players, "jvb", { a: "MID" });
     expect(groups.MID.map((p) => p.id)).toEqual(["a"]);
     expect(groups.NONE).toHaveLength(3);
+  });
+});
+
+describe("emails and nicknames (from the live picker)", () => {
+  it("matches Brophy-style emails", () => {
+    expect(emailMatches("cbyers27@brophybroncos.org", "Conor Byers")).toBe(true);
+    expect(emailMatches("ccicalese30@brophybroncos.org", "Cade Cicalese")).toBe(true);
+    expect(emailMatches("bjaitehkabba27@brophybroncos.org", "Bangally Jaiteh-Kabba")).toBe(true);
+    expect(emailMatches("cbyers27@brophybroncos.org", "Cade Cicalese")).toBe(false);
+  });
+  it("Francisco matches Franco", () => {
+    expect(namesMatch("Francisco Coury", "Franco Coury")).toBe(true);
+  });
+  it("shows the sheet name for email-only accounts", () => {
+    const { groups } = groupByPosition([{ id: "x", name: "cbyers27@brophybroncos.org", email: "cbyers27@brophybroncos.org" }], "varsity");
+    expect(groups.FWD[0].name).toBe("Conor Byers");
+    expect(groups.FWD[0].initials).toBe("CB");
   });
 });
