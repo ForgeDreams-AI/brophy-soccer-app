@@ -174,21 +174,24 @@ Use real accounts, or ask Batman/Anthony to do these. Record pass/fail for each:
 11. **Wellness check-in after 5 PM Arizona time:** it shows on the coach's list for *today*.
 12. **The Drill Library website** (`brophy-drill-library.web.app`) still loads drills for a **signed-in** user. Drills are no longer public. If the site shows drills before sign-in, it needs a sign-in gate; report it.
 
-## 11. Shrink the git repository (DESTRUCTIVE — get Batman's explicit "go" first)
+## 11. Shrink the git repository (DESTRUCTIVE — approved; runs after the merge)
 
 **What this does and why:**
 - About 89 MB of intermediate WAV audio was committed in `videos/walkthrough/`. PR #1 removes it from the files and gitignores it, but it is still in the git **history**, so every clone downloads it (`.git` is about 57 MB).
 - Removing it from history rewrites every commit hash and needs a **force-push to all branches**. Every collaborator must re-clone afterwards.
 - The audio isn't lost. Each WAV has an MP3 next to it, and `videos/walkthrough/README.md` has the commands to rebuild them.
 
-**Do it only after:**
-- PR #1 is merged.
-- No other PRs are open, or their authors have agreed to re-create them.
-- Batman has said "go".
+**Batman approved this (2026-11-21), with this order:**
+1. Finish steps 0–10 and merge PR #1.
+2. **The deploy agent makes the backup (step 11.1 below) on its own machine, and confirms.**
+3. Batman tells the Claude Code session, which does the rewrite (11.2–11.3).
 
-1. **Full backup first:**
+**Deploy agent: do only 11.1, then report the backup folder path and size, and stop.** Don't run 11.2–11.3 unless Batman tells you to.
+
+1. **Full backup first (deploy agent):**
    ```bash
    git clone --mirror https://github.com/ForgeDreams-AI/brophy-soccer-app.git brophy-backup-$(date +%Y%m%d).git
+   du -sh brophy-backup-*.git   # report this
    ```
    Keep this folder until everyone confirms things are fine. It is a complete copy, including the WAVs.
 2. **Rewrite:**
