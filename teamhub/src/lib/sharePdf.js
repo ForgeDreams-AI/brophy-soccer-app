@@ -16,7 +16,7 @@
 // photos/diagrams on screen were silently skipped in the PDF. Now every
 // picture is inlined as a data: URL BEFORE rendering — first by a direct
 // CORS fetch (works once the bucket CORS is set), else through the app's
-// same-origin /api/img proxy (worker/index.js). Anything that still can't
+// same-origin /api/img proxy (the `api` Cloud Function, functions/lib/api.js). Anything that still can't
 // be read is reported instead of silently left blank.
 
 const PROXY_PATH = "/api/img?u=";

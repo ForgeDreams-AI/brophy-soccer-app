@@ -1,3 +1,6 @@
+// UNUSED: the app is on Firebase Hosting (see README). The same routes are
+// served there by the `api` Cloud Function (functions/lib/api.js). Kept only
+// in case the app ever moves to Cloudflare.
 // Cloudflare Worker entrypoint.
 // Serves the static SPA from the ASSETS binding, plus two tiny routes:
 //
