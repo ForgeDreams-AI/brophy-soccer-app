@@ -4478,8 +4478,25 @@ const FORMATIONS = {
 
 // Build empty slots at their formation positions. GK near the bottom, forwards
 // near the top; each row spread evenly across the width.
+// Formations with a hand-set shape instead of even rows. 4-3-3 is the
+// coach's layout: back four, one holding midfielder in the middle, two
+// midfielders ahead of him, three forwards (x/y are 0..1 of the pitch).
+const FORMATION_LAYOUTS = {
+  "4-3-3": [
+    [0.2, 0.745], [0.4, 0.745], [0.6, 0.745], [0.8, 0.745],
+    [0.5, 0.45],
+    [0.34, 0.32], [0.66, 0.32],
+    [0.25, 0.155], [0.5, 0.155], [0.75, 0.155],
+  ],
+};
+
 const slotsForFormation = (rows) => {
   const out = [{ id: lid(), x: 0.5, y: 0.92, label: "GK", uid: "", name: "", initials: "", photoURL: "" }];
+  const layout = Object.entries(FORMATIONS).find(([, r]) => r === rows)?.[0];
+  if (layout && FORMATION_LAYOUTS[layout]) {
+    FORMATION_LAYOUTS[layout].forEach(([x, y]) => out.push({ id: lid(), x, y, label: "", uid: "", name: "", initials: "", photoURL: "" }));
+    return out;
+  }
   const n = rows.length;
   rows.forEach((count, i) => {
     const y = n === 1 ? 0.45 : 0.76 - (i * (0.76 - 0.17)) / (n - 1);
