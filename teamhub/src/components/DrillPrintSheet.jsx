@@ -32,6 +32,12 @@ export default function DrillPrintSheet({ drill, onClose }) {
   // window.print() silently does nothing in iOS in-app browsers, so the
   // button renders a real PDF and opens the share sheet (see lib/sharePdf).
   const [pdfBusy, setPdfBusy] = useState(false);
+  // A stalled picture must not disable the button forever (see PracticePrintSheet).
+  const [waitedOut, setWaitedOut] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setWaitedOut(true), 8000);
+    return () => clearTimeout(t);
+  }, []);
   const savePdf = async () => {
     if (pdfBusy) return;
     setPdfBusy(true);
@@ -91,7 +97,7 @@ export default function DrillPrintSheet({ drill, onClose }) {
           <div className="flex gap-2 flex-shrink-0">
             <button
               onClick={savePdf}
-              disabled={pdfBusy || (needsImg && !imgDone)}
+              disabled={pdfBusy || (needsImg && !imgDone && !waitedOut)}
               className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white text-slate-900 min-h-11 disabled:opacity-50"
             >
               <Printer className="w-4 h-4" /> {pdfBusy ? "Making PDF…" : "Print / Save PDF"}

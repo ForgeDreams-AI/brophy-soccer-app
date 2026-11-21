@@ -3,7 +3,7 @@
 // (name, description, session total, then every drill block in order,
 // numbered, with duration, phase and notes). Opened from the Practices
 // library's "Export all" button; the sheet's Save button renders the
-// sheet to a real PDF file (html2pdf.js) and opens the native share sheet
+// sheet to a real PDF file (html2canvas + jsPDF) and opens the native share sheet
 // (or a new tab) — window.print() silently does nothing in iOS in-app
 // browsers, so a real PDF is generated instead. Print CSS in
 // index.css hides the whole app (.app-shell) and prints only #print-sheet.
@@ -27,18 +27,20 @@ const durLabel = (d) => {
 export default function PracticesPrintSheet({ practices = [], drills = [], teamName = "", onClose }) {
   const drillById = (id) => (drills || []).find((d) => d.id === id);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
 
   const handleSavePdf = async () => {
     if (busy) return;
     setBusy(true);
     try {
       const safe = (teamName || "practices").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "practices";
-      const res = await shareSheetPdf(`${safe}-practices.pdf`);
+      const res = await shareSheetPdf(`${safe}-practices.pdf`, { onProgress: (i, n) => setProgress(n > 1 ? `Page ${i} of ${n}…` : "") });
       if (res?.missingImages) toast(`${res.missingImages} picture${res.missingImages === 1 ? "" : "s"} couldn't be added to the PDF (Storage CORS isn't set up yet — see README).`);
     } catch (e) {
       toast("Couldn't make the PDF — " + (e?.message || "try again."));
     } finally {
       setBusy(false);
+      setProgress("");
     }
   };
 
@@ -60,7 +62,7 @@ export default function PracticesPrintSheet({ practices = [], drills = [], teamN
               disabled={busy}
               className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white text-slate-900 min-h-11 disabled:opacity-50"
             >
-              <Printer className="w-4 h-4" /> {busy ? "Making PDF…" : "Save / Share PDF"}
+              <Printer className="w-4 h-4" /> {busy ? (progress || "Making PDF…") : "Save / Share PDF"}
             </button>
             <button onClick={onClose} className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white/15 text-white min-h-11" aria-label="Close preview">
               <X className="w-4 h-4" /> Close

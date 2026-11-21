@@ -3,7 +3,7 @@
 // session total, and every drill block in order, numbered, with its
 // duration, phase, notes AND its diagram. Opened from the practice
 // editor's "Export / Share PDF" button; the sheet's Save button renders
-// the sheet to a real PDF file (html2pdf.js) and opens the native share
+// the sheet to a real PDF file (html2canvas + jsPDF) and opens the native share
 // sheet (or a new tab) — window.print() silently does nothing in iOS
 // in-app browsers, so a real PDF is generated instead. Print CSS in
 // index.css hides the whole app (.app-shell) and prints only #print-sheet.
@@ -100,22 +100,32 @@ export default function PracticePrintSheet({ practice, drills = [], teamName = "
   const [readyCount, setReadyCount] = useState(0);
   // While the PDF is being rendered, the button shows a busy label.
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
+  // Safety net: a picture that neither loads nor errors (stalled network)
+  // must not leave the button disabled forever. After 8 s, allow export;
+  // anything still missing is reported after the PDF is made.
+  const [waitedOut, setWaitedOut] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setWaitedOut(true), 8000);
+    return () => clearTimeout(t);
+  }, []);
   // Only blocks that actually have a drill render a diagram (and report
   // ready); blocks that are just a name have nothing to wait for.
   const diagramCount = blocks.filter((b) => drillById(b.drillId)).length;
-  const allReady = readyCount >= diagramCount;
+  const allReady = waitedOut || readyCount >= diagramCount;
 
   const handleSavePdf = async () => {
     if (busy || !allReady) return;
     setBusy(true);
     try {
       const safe = (practice.name || "practice").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "practice";
-      const res = await shareSheetPdf(`${safe}.pdf`);
+      const res = await shareSheetPdf(`${safe}.pdf`, { onProgress: (i, n) => setProgress(n > 1 ? `Page ${i} of ${n}…` : "") });
       if (res?.missingImages) toast(`${res.missingImages} picture${res.missingImages === 1 ? "" : "s"} couldn't be added to the PDF (Storage CORS isn't set up yet — see README).`);
     } catch (e) {
       toast("Couldn't make the PDF — " + (e?.message || "try again."));
     } finally {
       setBusy(false);
+      setProgress("");
     }
   };
 
@@ -137,7 +147,7 @@ export default function PracticePrintSheet({ practice, drills = [], teamName = "
               disabled={!allReady || busy}
               className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white text-slate-900 min-h-11 disabled:opacity-50"
             >
-              <Printer className="w-4 h-4" /> {busy ? "Making PDF…" : "Save / Share PDF"}
+              <Printer className="w-4 h-4" /> {busy ? (progress || "Making PDF…") : allReady ? "Save / Share PDF" : "Loading pictures…"}
             </button>
             <button onClick={onClose} className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white/15 text-white min-h-11" aria-label="Close preview">
               <X className="w-4 h-4" /> Close
