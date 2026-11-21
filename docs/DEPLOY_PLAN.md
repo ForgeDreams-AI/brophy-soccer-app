@@ -207,7 +207,14 @@ Use real accounts, or ask Batman/Anthony to do these. Record pass/fail for each:
 11. **Wellness check-in after 5 PM Arizona time:** it shows on the coach's list for *today*.
 12. **The Drill Library website** (`brophy-drill-library.web.app`) still loads drills for a **signed-in** user. Drills are no longer public. If the site shows drills before sign-in, it needs a sign-in gate; report it.
 
-## 11. Shrink the git repository (DESTRUCTIVE — approved; runs after the merge)
+## 11. Shrink the git repository — ✅ DONE 2026-11-21
+
+**Done by Claude after Muse's backup.**
+- The history of `main` and the PR #3 branch was rewritten without the WAVs and force-pushed. A fresh clone is about **24 MB**; it was about 58 MB.
+- Today's files are byte-for-byte unchanged; only the history changed.
+- **Everyone with an old clone (Anthony, Muse, any agent) must delete it and clone again.** Pulling into an old clone brings the WAVs back.
+- Keep Muse's mirror backup until everyone has confirmed things are fine.
+- The steps below are kept for reference only. **Do not run them again.**
 
 **What this does and why:**
 - About 89 MB of intermediate WAV audio was committed in `videos/walkthrough/`. PR #1 removes it from the files and gitignores it, but it is still in the git **history**, so every clone downloads it (`.git` is about 57 MB).
