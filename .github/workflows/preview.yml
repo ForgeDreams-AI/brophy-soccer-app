@@ -1,0 +1,48 @@
+name: Preview link
+
+# Every pull request gets its own preview of the website (a Firebase Hosting
+# preview channel, kept 7 days) and a comment on the PR with the link, so
+# changes can be tried before they go live. Only the website is previewed;
+# rules/functions deploy when the PR is merged (deploy.yml). Skips quietly
+# if the FIREBASE_SERVICE_ACCOUNT secret isn't set yet.
+
+on:
+  pull_request:
+    paths: ['teamhub/**', '.github/workflows/preview.yml']
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Check the deploy secret is set
+        id: secret
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then echo "set=false" >> "$GITHUB_OUTPUT"; echo "::notice::No FIREBASE_SERVICE_ACCOUNT secret yet — preview skipped (see docs/AUTO_DEPLOY.md)"; else echo "set=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.secret.outputs.set == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.secret.outputs.set == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: teamhub/package-lock.json
+      - name: Build
+        if: steps.secret.outputs.set == 'true'
+        working-directory: teamhub
+        run: npm ci && npm run build
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        if: steps.secret.outputs.set == 'true'
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: brophy-soccer-app
+          entryPoint: teamhub
+          expires: 7d
