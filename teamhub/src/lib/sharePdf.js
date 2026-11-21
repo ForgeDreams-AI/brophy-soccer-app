@@ -14,12 +14,9 @@
 // pixels when that site sends CORS headers. Firebase Storage sends none
 // unless the bucket's CORS config is applied (teamhub/cors.json), so drill
 // photos/diagrams on screen were silently skipped in the PDF. Now every
-// picture is inlined as a data: URL BEFORE rendering — first by a direct
-// CORS fetch (works once the bucket CORS is set), else through the app's
-// same-origin /api/img proxy (the `api` Cloud Function, functions/lib/api.js). Anything that still can't
-// be read is reported instead of silently left blank.
-
-const PROXY_PATH = "/api/img?u=";
+// picture is inlined as a data: URL BEFORE rendering, by a direct CORS
+// fetch (the bucket CORS is applied). Anything that still can't be read is
+// reported instead of silently left blank.
 
 const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
   const r = new FileReader();
@@ -37,8 +34,10 @@ async function fetchImageDataUrl(src) {
     if (!type.startsWith("image/")) throw new Error("not an image");
     return blobToDataUrl(await res.blob());
   };
-  try { return await tryFetch(src); } catch { /* no CORS on the source — try the proxy */ }
-  return tryFetch(PROXY_PATH + encodeURIComponent(src));
+  // Works because the Storage bucket's CORS config is applied (DEPLOY_PLAN
+  // step 6). (A same-origin proxy isn't possible: the org blocks public
+  // Cloud Functions.)
+  return tryFetch(src);
 }
 
 const waitForImage = (img) => (img.complete && img.naturalWidth

@@ -275,6 +275,20 @@ service cloud.firestore {
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdByUid', 'path']);
       allow delete: if libScopeOk(rTeam());
     }
+    // USDA food search requests (see functions onFoodSearch): a team member
+    // creates { uid, q, createdAt }; the function writes { foods, done }
+    // back. Readable only by the requester; clients never update/delete.
+    match /foodSearches/{id} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create: if hasTeamRole()
+        && request.resource.data.keys().hasOnly(['uid', 'q', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.q is string
+        && request.resource.data.q.size() >= 2 && request.resource.data.q.size() <= 100;
+      allow update, delete: if false;
+    }
+    // Server-side USDA result cache — function only.
+    match /usdaCache/{id} { allow read, write: if false; }
     match /customExercises/{id} { allow read: if hasTeamRole(); allow write: if isAdmin(); }
 
     // Team documents + e-signatures (redesign 2026-11-21).

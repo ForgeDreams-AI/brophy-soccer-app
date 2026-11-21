@@ -1,37 +1,48 @@
-// USDA FoodData Central search — through the app's own server route.
+// USDA FoodData Central search — through a Firestore-triggered function.
 //
-// The USDA API key used to be baked into the public JS bundle
-// (VITE_USDA_API_KEY), where anyone could copy it. Now the browser calls the
-// same-origin route /api/usda — a Firebase Hosting rewrite to the `api`
-// Cloud Function (functions/lib/api.js), which adds the key from the Secret
-// Manager secret USDA_API_KEY. No key ever reaches the browser.
+// The USDA API key never reaches the browser. The org blocks PUBLIC Cloud
+// Functions, so instead of an HTTP endpoint the app writes a small request
+// doc (foodSearches/{id} = { uid, q }) and the onFoodSearch function (an
+// event trigger, not public) fetches USDA with the Secret Manager key and
+// writes { foods, done } back onto that doc, which we listen for here.
 //
-// If the route isn't available (local `npm run dev`, or the function isn't
-// deployed / has no secret), USDA search is simply skipped and food search
-// uses Open Food Facts only — it never throws at the user.
+// Any problem (offline, function not deployed, no secret, slow) just means
+// no USDA results: food search still shows Open Food Facts. Never throws at
+// the user.
 
-const ENDPOINT = "/api/usda";
+import { addDoc, collection, onSnapshot, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "../firebase";
 
-let available = null; // null = unknown, true/false after the first call
+const TIMEOUT_MS = 9000;
+const cache = new Map(); // normalized query → foods (this page load)
+let available = true;
 
-export const usdaAvailable = () => available !== false;
+export const usdaAvailable = () => available;
 
 export async function searchFoods(query, signal) {
-  const q = (query || "").trim();
-  if (!q || available === false) return [];
-  let res;
+  const q = (query || "").trim().slice(0, 100);
+  const key = q.toLowerCase();
+  const uid = auth.currentUser?.uid;
+  if (q.length < 2 || !uid || !available) return [];
+  if (cache.has(key)) return cache.get(key);
+  let ref;
   try {
-    res = await fetch(`${ENDPOINT}?q=${encodeURIComponent(q.slice(0, 100))}`, { signal });
+    ref = await addDoc(collection(db, "foodSearches"), { uid, q, createdAt: serverTimestamp() });
   } catch (e) {
-    if (e?.name === "AbortError") throw e;
+    if (e?.code === "permission-denied") available = false;
     return [];
   }
-  const type = res.headers.get("content-type") || "";
-  // The SPA fallback answers an unknown path with index.html: no route here.
-  // 503 = the Worker has no USDA_API_KEY secret yet.
-  if (res.status === 404 || res.status === 503 || !type.includes("application/json")) { available = false; return []; }
-  if (!res.ok) throw new Error(`USDA ${res.status}`);
-  available = true;
-  const data = await res.json();
-  return Array.isArray(data.foods) ? data.foods : [];
+  return new Promise((resolve) => {
+    let unsub = () => {};
+    const finish = (foods) => { clearTimeout(timer); unsub(); resolve(foods); };
+    const timer = setTimeout(() => finish([]), TIMEOUT_MS);
+    signal?.addEventListener("abort", () => finish([]), { once: true });
+    unsub = onSnapshot(ref, (snap) => {
+      const d = snap.data();
+      if (!d?.done) return;
+      const foods = Array.isArray(d.foods) ? d.foods : [];
+      if (!d.error) cache.set(key, foods);
+      finish(foods);
+    }, () => finish([]));
+  });
 }

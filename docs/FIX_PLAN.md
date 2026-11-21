@@ -206,3 +206,15 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
   - 3 new unit tests.
   - Emulator check: the rewrite works, cross-site requests get 403, and only this bucket is allowed for images.
 - `DEPLOY_PLAN.md` step 9 is rewritten for Firebase Hosting, and the README and rollback steps are updated.
+
+## 14. Food search without public functions (2026-11-21)
+
+- The org policy blocks public Cloud Functions, so the `api` HTTP function couldn't be reached (HTTP 403).
+- USDA search now uses a **Firestore trigger** instead:
+  1. The app writes `foodSearches/{id}` = `{ uid, q }`.
+  2. `onFoodSearch` fetches USDA with the Secret Manager key.
+  3. The function writes `{ foods, done }` back, cached for a week in `usdaCache`.
+- In the app, Open Food Facts results show right away and USDA results follow.
+- The rules allow only the requester to read their own request; clients can never write results. 1 new rules test (69 total).
+- On the emulator, the round trip worked and the cache answered in about 1 s.
+- The `/api` Hosting rewrite and the image proxy were removed; PDF pictures load directly now that CORS is on.

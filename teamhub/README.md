@@ -3,7 +3,7 @@
 Mobile-first team app for Brophy Soccer. Built per `../TeamHub_Build_Guide.md`.
 
 - **Production URL:** `BrophySoccer.forgedreams.ai`
-- **Hosting:** **Firebase Hosting** at https://brophy-soccer-app.web.app (deploy: `npm run build && npx firebase-tools@14 deploy --only hosting`). Merging to `main` does NOT redeploy the site. `/api/**` is rewritten to the `api` Cloud Function (food search, PDF picture proxy). The Cloudflare files (`wrangler.toml`, `worker/`) are unused leftovers.
+- **Hosting:** **Firebase Hosting** at https://brophy-soccer-app.web.app (deploy: `npm run build && npx firebase-tools@14 deploy --only hosting`). Merging to `main` does NOT redeploy the site. The Cloudflare files (`wrangler.toml`, `worker/`) are unused leftovers.
 - **Backend:** Firebase Auth + Firestore (project: `brophy-soccer-app`)
 - **Stack:** Vite + React + Tailwind v3 + Firebase JS SDK + lucide-react
 
@@ -45,7 +45,7 @@ CI (`.github/workflows/ci.yml`) runs all of the above on every pull request.
 The "Log Something Else" form has built-in auto-fill search powered by USDA's free API.
 
 1. Get a key (instant, no card): <https://fdc.nal.usda.gov/api-key-signup.html>
-2. Store it as a **Firebase secret**, never in the app bundle: `npx firebase-tools@14 functions:secrets:set USDA_API_KEY`, then deploy the `api` function. The browser calls `/api/usda`, and the function adds the key.
+2. Store it as a **Firebase secret**, never in the app bundle: `npx firebase-tools@14 functions:secrets:set USDA_API_KEY`, then deploy functions. The app writes a `foodSearches` request doc, and the `onFoodSearch` trigger (not a public endpoint, because the org blocks those) fetches USDA and writes the results back.
 3. Without the secret (or in local `npm run dev`), food search uses Open Food Facts only.
 
 Values are per 100g — adjust calories/protein after autofill if your portion was different.

@@ -142,12 +142,20 @@ Run these from `teamhub/` on the merged `main`:
       ```bash
       npx -y firebase-tools@14 functions:secrets:set USDA_API_KEY --project brophy-soccer-app
       ```
-2. **Deploy the `api` function.** It serves `/api/usda` (food search) and `/api/img` (PDF picture backup):
+2. **Deploy food search.** The org blocks public functions, so the `api` HTTP function was replaced (2026-11-21) by **`onFoodSearch`**, a Firestore trigger that isn't public. Run:
    ```bash
-   npx -y firebase-tools@14 deploy --only functions:api --project brophy-soccer-app
+   npx -y firebase-tools@14 deploy --only functions --project brophy-soccer-app
    ```
-   - It needs public access, because the browser calls it without signing in.
-   - **If the deploy fails with an IAM / "allUsers" / organization-policy error, report it and continue.** An org policy blocks public functions. The app still works: food search falls back to Open Food Facts only, and PDF pictures load directly now that CORS is on.
+   - When asked to **delete the `api` function**, answer **yes**.
+   - Turn on automatic clean-up of old search requests:
+     ```bash
+     gcloud firestore fields ttls update expireAt --collection-group=foodSearches --enable-ttl --project brophy-soccer-app
+     gcloud firestore fields ttls update expireAt --collection-group=usdaCache --enable-ttl --project brophy-soccer-app
+     ```
+   - Deploy the new rules (they add `foodSearches` and `usdaCache`):
+     ```bash
+     npx -y firebase-tools@14 deploy --only firestore:rules --project brophy-soccer-app
+     ```
 3. **Build and deploy the website:**
    ```bash
    git checkout main && git pull
@@ -157,11 +165,10 @@ Run these from `teamhub/` on the merged `main`:
 4. **Check it's the new version:**
    - `https://brophy-soccer-app.web.app/version.json` shows a new `build` number. The old one was `1795224129750`.
    - In the app: Chat has "Load older messages", and Train has a **Documents** card.
-5. **Check food search:** open `https://brophy-soccer-app.web.app/api/usda?q=chicken` in a browser.
-   - **Expected:** JSON with `foods`.
-   - `{"error":"USDA search is not configured"}` means the secret from 9.1 is missing.
-   - `{"error":"forbidden"}` from curl is expected. The route only answers same-site browser requests.
-   - A blank page or 403 means the `api` function didn't deploy (see 9.2).
+5. **Check food search:** in the app, Train → Nutrition → Log → type "chicken breast".
+   - Packaged foods (Open Food Facts) appear right away.
+   - USDA whole foods (for example "Chicken, broiler, breast…") appear about 1–3 seconds later.
+   - If no USDA results ever appear, check the function's logs with `npx -y firebase-tools@14 functions:log --only onFoodSearch`. "USDA_API_KEY is not set" means step 9.1 was skipped.
 6. **Custom domain `brophysoccer.forgedreams.ai`.** The Cloudflare DNS side was done by Claude on 2026-11-21:
    - an `A` record → `199.36.158.100`, DNS only (not proxied)
    - a `TXT` record `hosting-site=brophy-soccer-app`

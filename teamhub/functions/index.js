@@ -3,9 +3,8 @@
 
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { onRequest } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
-const { handleApi } = require("./lib/api");
+const { searchUsda } = require("./lib/usda");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
@@ -276,23 +275,33 @@ exports.onMessageCreated = onDocumentCreated("messages/{id}", async (event) => {
   });
 });
 
-// Same-origin web API (/api/usda food search, /api/img PDF picture proxy),
-// reached through the Firebase Hosting rewrite /api/** → api. The USDA key
-// is a Secret Manager secret (`firebase functions:secrets:set USDA_API_KEY`).
-// `invoker: "public"` is needed because the browser calls it unauthenticated;
-// if an organization policy forbids public functions, the deploy of THIS
-// function fails and food search simply falls back to Open Food Facts.
+// USDA food search without a public endpoint (the org blocks public
+// functions): the app writes foodSearches/{id} = { uid, q }; this trigger
+// fetches USDA with the Secret Manager key and writes { foods, done } back
+// to the same doc, which the app is listening to. Results are cached for a
+// week in usdaCache/{query}. `expireAt` lets a Firestore TTL policy delete
+// old request docs (DEPLOY_PLAN step 9).
 const USDA_API_KEY = defineSecret("USDA_API_KEY");
-exports.api = onRequest({ secrets: [USDA_API_KEY], invoker: "public", memory: "256MiB", maxInstances: 5 }, async (req, res) => {
+exports.onFoodSearch = onDocumentCreated({ document: "foodSearches/{id}", secrets: [USDA_API_KEY], memory: "256MiB", maxInstances: 5 }, async (event) => {
+  const snap = event.data;
+  const d = snap?.data();
+  if (!d || typeof d.q !== "string") return;
+  const q = d.q.trim().slice(0, 100);
+  const expireAt = Timestamp.fromMillis(Date.now() + 24 * 3600 * 1000);
+  const cacheRef = db.doc(`usdaCache/${encodeURIComponent(q.toLowerCase()).slice(0, 700)}`);
   try {
-    const out = await handleApi(
-      { method: req.method, path: req.path, query: req.query || {}, headers: req.headers || {} },
-      { usdaKey: USDA_API_KEY.value(), fetch },
-    );
-    res.status(out.status).set(out.headers).send(out.body);
+    const cached = await cacheRef.get();
+    let foods;
+    if (cached.exists && (cached.data().fetchedAt?.toMillis?.() || 0) > Date.now() - 7 * 24 * 3600 * 1000) {
+      foods = cached.data().foods || [];
+    } else {
+      foods = await searchUsda(q, { usdaKey: USDA_API_KEY.value(), fetch });
+      await cacheRef.set({ foods, fetchedAt: Timestamp.now(), expireAt: Timestamp.fromMillis(Date.now() + 8 * 24 * 3600 * 1000) });
+    }
+    await snap.ref.update({ foods, done: true, expireAt });
   } catch (e) {
-    console.error("api error", e);
-    res.status(500).set("cache-control", "no-store").json({ error: "server error" });
+    console.error("food search failed:", q, e);
+    await snap.ref.update({ foods: [], done: true, error: String(e?.message || e).slice(0, 200), expireAt }).catch(() => {});
   }
 });
 
