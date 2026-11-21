@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: Lint, build, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            teamhub/package-lock.json
+            teamhub/functions/package-lock.json
+      - name: Install (app)
+        working-directory: teamhub
+        run: npm ci
+      - name: Lint
+        working-directory: teamhub
+        run: npm run lint
+      - name: Build
+        working-directory: teamhub
+        run: npm run build
+      - name: Unit tests (app)
+        working-directory: teamhub
+        run: npm test
+      - name: Install (functions)
+        working-directory: teamhub/functions
+        run: npm ci
+      - name: Unit tests (functions)
+        working-directory: teamhub/functions
+        run: npm test
+
+  rules:
+    name: Security rules tests (emulators)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: teamhub/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Cache Firebase emulators
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-v14
+      - name: Install
+        working-directory: teamhub
+        run: npm ci
+      - name: Rules tests (demo project, emulators only)
+        working-directory: teamhub
+        run: npm run test:rules

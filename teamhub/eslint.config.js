@@ -19,6 +19,13 @@ export default defineConfig([
     },
   },
   {
+    // Build/test config files and the rules tests run on Node (ESM).
+    files: ['*.config.js', 'test/**/*.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
     // Cloud Functions run on Node (CommonJS), not in the browser.
     files: ['functions/**/*.js'],
     languageOptions: {
