@@ -118,3 +118,34 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
 5. Merge to `main` to deploy the frontend.
 6. **Audit existing profiles:** in the console, list `users` where `role == "orgAdmin"` and confirm each one is legitimate. F01 may already have been exploited.
 7. Smoke test: invite-link sign-up, email-invite sign-up, uninvited Google account (must be refused), wellness after 5 PM, chat send/read, scheduled reminder.
+
+---
+
+## 9. Status (implemented on branch `claude/full-app-walkthrough-audit-ytqu45`)
+
+**Verification:**
+- `npm run lint`: 0 problems (it had 31 errors).
+- `npm run build`: passes. The main bundle dropped from 2.55 MB to 1.26 MB.
+- `npm test` (Vitest): 5/5.
+- `functions: npm test`: 11/11.
+- `npm run test:rules` (emulators): **58/58**. 35 of these fail against the old rules.
+- Headless smoke test of the built app: the sign-in screen loads with no runtime errors.
+
+**Not verified here:** signed-in screens against a real project. There are no test accounts, and the app points at production. Please run the §8 smoke test after deploying.
+
+| Status | Findings |
+|---|---|
+| ✅ Fixed | F01, F02, F03, F04, F05, F06, F07, F09, F10, F12, F13, F14, F16, F17, F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, F29, F30, F31, F35, F36, F37, F39, F40, F41, F42, F43, F45, F46, F48, F49, F51, F52, F53, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F68, F69, F70, F71, F72, F73, F74, F75, F76, F77, F78, F79, F80, F83, F84 (root demo), F85, F86, F87 |
+| 🟡 Partial | F11: loading states on the coach readiness list and chat feed only. F38: signatures are append-own only and coaches can't edit them; no audit trail or document hash. F15: undo exists in the Nutrition hero; the Today checklist row is still +1 only. F54: duplicate folder names are blocked; folders are still linked by name. |
+| ⏸ Needs decision (unchanged) | F28, F34, F44, F47, F50, F62, F81, F82, F84 (`drill-bank.json`), F08, F32 |
+| ⏸ Not done | F33 (Storage orphan cleanup): the Storage rules don't allow deletes on these paths, so cleanup needs a rules change or a scheduled function. |
+
+**Behaviour changes to tell coaches about:**
+- Sign-up is now enforced server-side. An account must match a roster email (role and team) or a live invite link.
+- Players no longer see the roster's email list.
+- Line-up logo and "update your profile" prompts are now per team. Each team's coach sets its own, and the old global logo is used until they do.
+- Chat shows the latest 300 messages, with "Load older".
+- "Turn off notifications" now affects only the current device. Signing out stops pushes to that device.
+- Deleting events, videos, drills, announcements, messages or invite links now asks for confirmation.
+- A drill can only be deleted by the coach who created it, or by the program admin.
+- Wellness, water and meal days roll over at midnight Arizona time (not 5 PM). The wellness reminder goes out once a day at 8 AM.
