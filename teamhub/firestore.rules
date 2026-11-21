@@ -258,6 +258,23 @@ service cloud.firestore {
       allow create: if coachCreate();
       allow update, delete: if coachUpdate() || coachDelete();
     }
+    // Shared documents library (Train → Documents, next to Videos): coach-
+    // shared files (uploaded to Storage library/…) or links (Google Drive,
+    // etc.). `teamId` is 'all' (every Brophy team) or one team id.
+    // Read: anyone with a team-app role, for 'all' or a team they're on.
+    // Write: any coach for 'all' items; that team's coach for team items.
+    // The scope can't be changed after creation.
+    function libScopeOk(t) { return t == 'all' ? isAdmin() : (isTeamId(t) && isCoachOf(t)); }
+    match /libraryItems/{id} {
+      allow read: if hasTeamRole() && (rTeam() == 'all' || isMemberOf(rTeam()));
+      allow create: if libScopeOk(wTeam())
+        && request.resource.data.title is string && request.resource.data.title.size() > 0
+        && request.resource.data.kind in ['file', 'link']
+        && request.resource.data.createdByUid == request.auth.uid;
+      allow update: if libScopeOk(rTeam()) && teamUnchanged()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdByUid', 'path']);
+      allow delete: if libScopeOk(rTeam());
+    }
     match /customExercises/{id} { allow read: if hasTeamRole(); allow write: if isAdmin(); }
 
     // Team documents + e-signatures (redesign 2026-11-21).

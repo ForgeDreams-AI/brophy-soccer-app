@@ -151,9 +151,13 @@ Use real accounts, or ask Batman/Anthony to do these. Record pass/fail for each:
    - A player opens it, types their name, draws a signature, ticks the agreement and taps Sign.
    - The coach's "Who" list shows the name, email, time and signature image, and "Download signature log (CSV)" works.
    - The player can't sign twice.
-9. **Food search:** typing "chicken" in the food log shows USDA results, not only packaged products.
-10. **Wellness check-in after 5 PM Arizona time:** it shows on the coach's list for *today*.
-11. **The Drill Library website** (`brophy-drill-library.web.app`) still loads drills for a **signed-in** user. Drills are no longer public. If the site shows drills before sign-in, it needs a sign-in gate; report it.
+9. **Train → Documents:**
+   - A coach shares a PDF ("All teams", Notify on) and a Google Drive link ("<team> only").
+   - Players get the push and can open the PDF.
+   - A player on another team doesn't see the team-only link, and players have no Share button.
+10. **Food search:** typing "chicken" in the food log shows USDA results, not only packaged products.
+11. **Wellness check-in after 5 PM Arizona time:** it shows on the coach's list for *today*.
+12. **The Drill Library website** (`brophy-drill-library.web.app`) still loads drills for a **signed-in** user. Drills are no longer public. If the site shows drills before sign-in, it needs a sign-in gate; report it.
 
 ## 11. Shrink the git repository (DESTRUCTIVE — get Batman's explicit "go" first)
 

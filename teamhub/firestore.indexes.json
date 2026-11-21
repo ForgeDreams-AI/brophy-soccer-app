@@ -520,6 +520,20 @@
         }
       ],
       "queryScope": "COLLECTION"
+    },
+    {
+      "collectionGroup": "libraryItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "teamId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ]
 }
