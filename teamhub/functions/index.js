@@ -3,11 +3,11 @@
 
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
+const { TEAM_TZ, partsInTz, zonedTime, nextRecurring, dateKeyInTz, humanLead } = require("./lib/time");
 
 initializeApp();
 setGlobalOptions({ region: "us-central1", maxInstances: 10 });
@@ -18,14 +18,17 @@ const db = getFirestore();
 
 // Team-scoped token collection. With a teamId, only users on that team
 // (teamIds array-contains teamId) plus the org admin (who belongs to all
-// three teams) get the push. Without a teamId it falls back to everyone —
-// used only for docs that predate teams.
+// three teams) get the push. Without a teamId nobody does — fail closed: a
+// doc with no team (legacy or malformed) must never push to the whole
+// program.
 async function collectTokens({ teamId, excludeUid } = {}) {
-  const snap = teamId
-    ? await db.collection("users").where("teamIds", "array-contains", teamId).get()
-    : await db.collection("users").get();
   const all = [];
   const tokenToUid = new Map();
+  if (!teamId) {
+    console.warn("collectTokens: no teamId — sending to nobody.");
+    return { tokens: all, tokenToUid };
+  }
+  const snap = await db.collection("users").where("teamIds", "array-contains", teamId).get();
   snap.forEach((d) => {
     if (excludeUid && d.id === excludeUid) return;
     // NOTE: org admins carry all three teamIds, so the array-contains
@@ -116,16 +119,11 @@ async function tokensForUids(uids, { excludeUid } = {}) {
   return { tokens: all, tokenToUid };
 }
 
-async function adminUids() {
-  const snap = await db.collection("users").where("role", "==", "admin").get();
-  return snap.docs.map((d) => d.id);
-}
-
 // Coaches of one team (role admin on that team) plus the org admin, who
 // coaches all three. Used wherever a push must reach "the coaches" of the
-// team a doc belongs to — never the whole program.
+// team a doc belongs to — never the whole program, so no teamId = nobody.
 async function coachUidsForTeam(teamId) {
-  if (!teamId) return adminUids();
+  if (!teamId) return [];
   const snap = await db.collection("users").where("teamIds", "array-contains", teamId).get();
   return snap.docs.filter((d) => d.data().role === "admin" || d.data().role === "orgAdmin").map((d) => d.id);
 }
@@ -140,8 +138,9 @@ async function teamCoachUidsForTeam(teamId) {
 }
 
 // Resolve an assignment/visibleTo audience to FCM tokens. Empty audience =
-// everyone; otherwise the union of listed emails + members of listed groups
-// (group memberUids may hold either uids or emails).
+// everyone on the team; otherwise the union of listed emails + members of
+// listed groups (group memberUids may hold either uids or emails) + listed
+// uids, plus the team's coaches (who can see everything on their team).
 async function tokensForAudience(visibleTo, { teamId, excludeUid } = {}) {
   const v = visibleTo || {};
   const emails = (v.emails || []).map((e) => (e || "").toLowerCase());
@@ -158,7 +157,8 @@ async function tokensForAudience(visibleTo, { teamId, excludeUid } = {}) {
   const recipientUids = members
     .filter((m) => emailSet.has((m.email || "").toLowerCase()) || groupMembers.has(m.uid) || groupMembers.has(m.email))
     .map((m) => m.uid);
-  return tokensForUids([...recipientUids, ...directUids], { excludeUid });
+  const coaches = await coachUidsForTeam(teamId);
+  return tokensForUids([...recipientUids, ...directUids, ...coaches], { excludeUid });
 }
 
 // Resolve a doc's flattened `audienceKeys` — the same array the security rules
@@ -181,14 +181,6 @@ async function tokensForAudienceKeys(audienceKeys, { teamId, excludeUid } = {}) 
   }
   (await coachUidsForTeam(teamId)).forEach((uid) => uids.add(uid));
   return tokensForUids([...uids], { excludeUid });
-}
-
-// Human lead-time label, e.g. "1 hour", "30 min", "2 days".
-function humanLead(min) {
-  const m = Math.round(Number(min) || 0);
-  if (m % 1440 === 0) { const d = m / 1440; return `${d} day${d > 1 ? "s" : ""}`; }
-  if (m % 60 === 0) { const h = m / 60; return `${h} hour${h > 1 ? "s" : ""}`; }
-  return `${m} min`;
 }
 
 // ── triggers ─────────────────────────────────────────────────────────────
@@ -313,9 +305,24 @@ exports.onEventDelegated = onDocumentWritten("events/{id}", async (event) => {
 // event-attached "Who's making it?" poll was dropped for Brophy, so event
 // reminders are push-only now. Standalone polls — scheduled from chat or
 // posted directly — still use the `scheduled` poll type and are untouched.)
+//
+// Edits that don't touch anything the reminders are built from (e.g. a
+// readBy / notes change) are skipped, so they don't churn the queue.
+const REMINDER_FIELDS = ["title", "type", "date", "start", "location", "runByUid", "runByName", "teamId"];
+function reminderInputsChanged(before, after) {
+  const ms = (t) => (t && t.toMillis ? t.toMillis() : null);
+  const json = (v) => JSON.stringify(v === undefined ? null : v);
+  if (ms(before.startAt) !== ms(after.startAt)) return true;
+  if (json(before.reminders) !== json(after.reminders)) return true;
+  if (json(before.visibleTo) !== json(after.visibleTo)) return true;
+  return REMINDER_FIELDS.some((k) => (before[k] ?? null) !== (after[k] ?? null));
+}
+
 exports.onEventReminderSync = onDocumentWritten("events/{id}", async (event) => {
   const id = event.params.id;
+  const before = event.data?.before?.data();
   const after = event.data?.after?.data();
+  if (before && after && !reminderInputsChanged(before, after)) return;
   const existing = await db.collection("scheduled").where("eventId", "==", id).get();
   const batch = db.batch();
   existing.forEach((doc) => { if (!doc.data().sent) batch.delete(doc.ref); });
@@ -360,8 +367,8 @@ exports.onEventReminderSync = onDocumentWritten("events/{id}", async (event) => 
     // Automatic: 7:00 AM America/Phoenix on the day of the event. Skipped
     // when 7 AM is already past, or when it falls after kickoff (e.g. a 6 AM
     // session — the morning ping would arrive after the start).
-    const parts = partsInTz(new Date(startMs), "America/Phoenix");
-    const sevenAmMs = zonedTime(+parts.year, +parts.month - 1, +parts.day, 7, 0, "America/Phoenix");
+    const parts = partsInTz(new Date(startMs), TEAM_TZ);
+    const sevenAmMs = zonedTime(+parts.year, +parts.month - 1, +parts.day, 7, 0, TEAM_TZ);
     if (sevenAmMs > Date.now() && sevenAmMs < startMs && !covered.has(Math.round(sevenAmMs / 60000))) {
       const ref = db.collection("scheduled").doc();
       batch.set(ref, {
@@ -375,60 +382,14 @@ exports.onEventReminderSync = onDocumentWritten("events/{id}", async (event) => 
   await batch.commit();
 });
 
-// ── custom push notifications ─────────────────────────────────────────────
-// A coach (or the org admin) sends a custom push now, from the app's "Send
-// notification" tool. The push goes out immediately, team-scoped, to the
-// notification's audience (resolved from `audienceKeys`, the same array the
-// security rules enforce on reads). The send is recorded in
-// `pushNotifications` with status "sent" so the coach sees it in the
-// composer's history. Scheduled / recurring notifications are NOT sent here —
-// they're stored by the client and picked up by runScheduled below.
-exports.sendPushNotification = onCall(async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to send a notification.");
-  const { teamId, title, body, audienceKeys, visibleTo } = request.data || {};
-  if (!teamId || typeof teamId !== "string") throw new HttpsError("invalid-argument", "A team is required.");
-  const cleanTitle = String(title || "").trim();
-  const cleanBody = String(body || "").trim();
-  if (!cleanTitle && !cleanBody) throw new HttpsError("invalid-argument", "Add a title or message.");
-  // Only a coach of that team (or the org admin, who coaches all three) may
-  // push to it — never a player, and never to another team.
-  const caller = await db.doc(`users/${request.auth.uid}`).get();
-  const c = caller.exists ? caller.data() : {};
-  const isOrgAdmin = c.role === "orgAdmin";
-  const isTeamCoach = c.role === "admin" && Array.isArray(c.teamIds) && c.teamIds.includes(teamId);
-  if (!isOrgAdmin && !isTeamCoach) throw new HttpsError("permission-denied", "Only a coach of this team can send notifications.");
-  const bundle = await tokensForAudienceKeys(audienceKeys, { teamId });
-  await sendToTokens(bundle, {
-    title: cleanTitle || "Team notification",
-    body: trunc(cleanBody || "Tap to open the app."),
-    link: "/?tab=home",
-    tag: `push-${Date.now()}`,
-  });
-  const ref = await db.collection("pushNotifications").add({
-    teamId,
-    title: cleanTitle,
-    body: cleanBody,
-    audienceKeys: Array.isArray(audienceKeys) ? audienceKeys : ["*"],
-    visibleTo: visibleTo || { groupIds: [], emails: [] },
-    sendAt: Timestamp.now(),
-    recurrence: { type: "none", time: "", days: [] },
-    status: "sent",
-    sentAt: Timestamp.now(),
-    createdByUid: request.auth.uid,
-    createdByName: c.name || "Coach",
-    createdAt: Timestamp.now(),
-  });
-  return { id: ref.id, sent: true };
-});
-
 // ── scheduled reminders + polls ─────────────────────────────────────────────
 // Coaches create docs in `scheduled` with a future `sendAt`. This cron sweeps
 // every minute and fires anything now due: a "reminder" fans out as a push
 // to its audience; a "poll" is posted into a chat channel as a normal poll
 // message (which the onMessageCreated trigger then pushes to the team).
 // The 1-minute sweep keeps the "Send now" composer path near-instant: it
-// queues a pushNotifications doc with sendAt set to now, and the direct
-// callable is blocked by the org policy, so this sweep is the only route.
+// queues a pushNotifications doc with sendAt set to now, and this sweep is
+// the only route that sends it.
 
 async function channelAudienceKeys(channel) {
   if (!channel || channel === "team") return ["*"];
@@ -437,46 +398,29 @@ async function channelAudienceKeys(channel) {
   return Array.isArray(keys) && keys.length ? keys : ["*"];
 }
 
-// ── recurrence (timezone-aware) ──
-// Repeat is expressed as a set of weekdays (0=Sun … 6=Sat) plus the item's
-// local clock time, evaluated in the coach's IANA timezone. daily = all 7
-// days, weekly = one day, custom = whichever days were picked.
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-function partsInTz(date, tz) {
-  const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz, hour12: false,
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit", weekday: "short",
-  });
-  const p = {};
-  for (const part of dtf.formatToParts(date)) p[part.type] = part.value;
-  return p;
-}
-// Offset (ms) between the given tz's wall clock and UTC at `date`.
-function tzOffsetMs(date, tz) {
-  const p = partsInTz(date, tz);
-  const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
-  return asUTC - (Math.floor(date.getTime() / 1000) * 1000);
-}
-// Absolute ms for a wall-clock time (y,mo,d,h,mi) in tz. Two-pass to settle DST.
-function zonedTime(y, mo, d, h, mi, tz) {
-  let ts = Date.UTC(y, mo, d, h, mi, 0) - tzOffsetMs(new Date(Date.UTC(y, mo, d, h, mi, 0)), tz);
-  ts = Date.UTC(y, mo, d, h, mi, 0) - tzOffsetMs(new Date(ts), tz);
-  return ts;
-}
-// Next instant strictly after `nowMs` that falls on one of `repeatDays` at the
-// local (h:mi) in tz. Looks ahead up to 14 days (covers weekly + custom).
-function nextRecurring(nowMs, repeatDays, h, mi, tz) {
-  const base = partsInTz(new Date(nowMs), tz);
-  const y0 = +base.year, m0 = +base.month - 1, d0 = +base.day;
-  for (let i = 0; i < 14; i++) {
-    const probe = partsInTz(new Date(Date.UTC(y0, m0, d0 + i, 12, 0, 0)), tz);
-    const wd = WEEKDAYS.indexOf(probe.weekday);
-    if (!repeatDays.includes(wd)) continue;
-    const ts = zonedTime(+probe.year, +probe.month - 1, +probe.day, h, mi, tz);
-    if (ts > nowMs) return ts;
+// Recurrence + timezone helpers (partsInTz, zonedTime, nextRecurring, …)
+// live in ./lib/time.js.
+
+// A due item that keeps failing is retried on every sweep until it has
+// failed this many times; then it is marked terminally failed so it stops
+// being picked up (and the coach can see why in `lastError`).
+const MAX_SEND_ATTEMPTS = 5;
+
+// Record one failed attempt on a scheduled / pushNotifications doc. On the
+// MAX_SEND_ATTEMPTS-th failure the doc is marked terminal via `terminal`.
+async function recordFailure(doc, e, terminal) {
+  const failCount = (Number(doc.data().failCount) || 0) + 1;
+  const lastError = String((e && e.message) || e).slice(0, 500);
+  const update = { failCount, lastError };
+  if (failCount >= MAX_SEND_ATTEMPTS) {
+    Object.assign(update, terminal);
+    console.error(`giving up on ${doc.ref.path} after ${failCount} failures`);
   }
-  return null;
+  try {
+    await doc.ref.update(update);
+  } catch (e2) {
+    console.error("could not record failure:", doc.ref.path, e2);
+  }
 }
 
 // Default hour (local, America/Phoenix) after which a player who hasn't
@@ -492,10 +436,10 @@ exports.runScheduled = onSchedule("every 1 minutes", async () => {
 });
 
 async function processScheduledItems(now) {
-  // Range-only query (single-field index, auto-created); filter `sent` in JS so
-  // no composite index is required.
-  const snap = await db.collection("scheduled").where("sendAt", "<=", now).get();
-  const due = snap.docs.filter((d) => !d.data().sent);
+  // Only unsent items (composite index scheduled(sent, sendAt)) — the sweep
+  // no longer re-reads every sent item ever scheduled.
+  const snap = await db.collection("scheduled").where("sent", "==", false).where("sendAt", "<=", now).get();
+  const due = snap.docs;
   if (!due.length) { console.log("No scheduled items due."); return; }
   for (const doc of due) {
     const d = doc.data();
@@ -542,7 +486,7 @@ async function processScheduledItems(now) {
       // next one strictly in the future, so the team isn't spammed.
       const days = Array.isArray(d.repeatDays) ? d.repeatDays : [];
       if (d.repeat && d.repeat !== "none" && days.length) {
-        const tz = d.tz || "America/Phoenix";
+        const tz = d.tz || TEAM_TZ;
         const cur = partsInTz(d.sendAt.toDate(), tz);
         const next = nextRecurring(Date.now(), days, +cur.hour % 24, +cur.minute, tz);
         if (next) await doc.ref.update({ sendAt: Timestamp.fromMillis(next), lastSentAt: Timestamp.now() });
@@ -552,19 +496,20 @@ async function processScheduledItems(now) {
       }
     } catch (e) {
       console.error("scheduled item failed:", doc.id, e);
+      await recordFailure(doc, e, { sent: true, failed: true });
     }
   }
 }
 
-// Custom push notifications (see sendPushNotification above): sweep the
-// `pushNotifications` queue for anything due. A one-off is marked sent; a
-// recurring one advances to its next occurrence (same timezone-aware
+// Custom push notifications: the coach's "Send notification" composer
+// writes a `pushNotifications` doc (status "scheduled"; "Send now" uses
+// sendAt = now). This sweeps the queue for anything due. A one-off is marked
+// sent; a recurring one advances to its next occurrence (same timezone-aware
 // recurrence as scheduled items) instead of finishing.
 async function processPushNotifications(now) {
-  // Range-only query; filter `status` in JS so no composite index is needed
-  // (same pattern as processScheduledItems above).
-  const snap = await db.collection("pushNotifications").where("sendAt", "<=", now).get();
-  const due = snap.docs.filter((d) => d.data().status === "scheduled");
+  // Only queued items (composite index pushNotifications(status, sendAt)).
+  const snap = await db.collection("pushNotifications").where("status", "==", "scheduled").where("sendAt", "<=", now).get();
+  const due = snap.docs;
   if (!due.length) { console.log("No push notifications due."); return; }
   for (const doc of due) {
     const d = doc.data();
@@ -579,7 +524,7 @@ async function processPushNotifications(now) {
       const r = d.recurrence || {};
       const days = Array.isArray(r.days) ? r.days : [];
       if (r.type && r.type !== "none" && days.length) {
-        const tz = d.tz || "America/Phoenix";
+        const tz = d.tz || TEAM_TZ;
         const [hh, mm] = String(r.time || "08:00").split(":").map((n) => parseInt(n, 10) || 0);
         const next = nextRecurring(Date.now(), days, hh, mm, tz);
         if (next) await doc.ref.update({ sendAt: Timestamp.fromMillis(next), lastSentAt: Timestamp.now() });
@@ -589,25 +534,32 @@ async function processPushNotifications(now) {
       }
     } catch (e) {
       console.error("push notification failed:", doc.id, e);
+      await recordFailure(doc, e, { status: "failed" });
     }
   }
 }
 
 // Daily wellness auto-nudge: once the local clock passes the nudge hour
 // (default 8:00 AM America/Phoenix), every player who has NOT logged wellness
-// today gets one push reminder ("Log your wellness for today"). A marker doc
-// in `wellnessNudges` (id `${uid}_${date}`, one per player per day)
-// guarantees nobody is nudged twice in one day, even if the function runs
-// many times or the player is on more than one team. Coaches/admins are not
-// nudged — only players. The "logged today" check is team-agnostic (a player
-// has one wellness doc per day, id `${uid}_${date}`), so logging under any
-// team counts.
+// today gets one push reminder ("Log your wellness for today"). The pass runs
+// at most once per day: a `wellnessNudgeRuns/{date}` doc is written when it
+// finishes and checked first, so the every-minute sweep doesn't re-read every
+// user and check-in all day. A per-player marker in `wellnessNudges` (id
+// `${uid}_${date}`) still guarantees nobody is nudged twice in one day, even
+// if a pass is interrupted and re-run or the player is on more than one team.
+// Coaches/admins are not nudged — only players. The "logged today" check is
+// team-agnostic (a player has one wellness doc per day, id `${uid}_${date}`),
+// so logging under any team counts.
 async function processWellnessNudges() {
-  const tz = "America/Phoenix";
-  const local = partsInTz(new Date(), tz);
-  if (+local.hour < WELLNESS_NUDGE_HOUR) return; // too early — wait for the cutoff
-  // The client's wellness doc date is the UTC date (toISOString), so match it.
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const local = partsInTz(now, TEAM_TZ);
+  if (+local.hour % 24 < WELLNESS_NUDGE_HOUR) return; // too early — wait for the cutoff
+  // "Today" in America/Phoenix — the client stores the wellness `date` in
+  // the team timezone too, so the two agree in the evening (UTC is already
+  // tomorrow after 5 PM Arizona time).
+  const today = dateKeyInTz(now, TEAM_TZ);
+  const runRef = db.doc(`wellnessNudgeRuns/${today}`);
+  if ((await runRef.get()).exists) return; // today's pass already ran
   const loggedSnap = await db.collection("wellnessCheckins").where("date", "==", today).get();
   const loggedUids = new Set(loggedSnap.docs.map((d) => d.data().uid));
   // Teams = the distinct teamIds across player docs (no hard-coded team list).
@@ -645,4 +597,5 @@ async function processWellnessNudges() {
       }
     }
   }
+  await runRef.set({ ranAt: Timestamp.now() });
 }

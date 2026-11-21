@@ -31,6 +31,14 @@ service cloud.firestore {
       return d == null ? [] : d.get('teamIds', []);
     }
     function isOrgAdmin() { return signedIn() && myRole() == 'orgAdmin'; }
+    // The caller has a users/{uid} profile — i.e. they passed the invite
+    // gate. A signed-in account with no profile (anyone can create a
+    // Firebase Auth account) gets nothing beyond creating its own profile.
+    function hasProfile() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    // The caller has a profile with a team-app role (player, coach or org
+    // admin). Excludes drillBuilder (drill-library-only, no team-app access)
+    // and profile-less accounts. Used for the shared (non-team) libraries.
+    function hasTeamRole() { return hasProfile() && myRole() in ['player', 'admin', 'orgAdmin']; }
     // Any coach-level role (a per-team coach or the org admin). Used for
     // shared (non-team) collections only; team-scoped writes use isCoachOf.
     function isAdmin() { return signedIn() && (myRole() == 'admin' || myRole() == 'orgAdmin'); }
@@ -105,33 +113,68 @@ service cloud.firestore {
       allow update, delete: if isOrgAdmin();
     }
 
-    // Profiles: anyone on a shared team can read; you create your own; a
-    // coach edits users on their team (org admin: anyone); only admin
-    // changes roles. A signed-in user can update their own doc, but only the
-    // FCM-token and notification-pref fields (so they can opt themselves
-    // in/out of push without being able to grant themselves admin) — plus a
-    // one-time backfill of their own teamIds/primaryTeamId when the doc
-    // predates teams (a fresh project never hits this).
+    // Whether a new profile doc `d` is backed by a live invite LINK
+    // (inviteLinks/{d.inviteCode}): the link is for the profile's team, has
+    // not expired and has uses left. A link always grants role 'player'.
+    function inviteLinkAllows(d) {
+      let path = /databases/$(database)/documents/inviteLinks/$(d.inviteCode);
+      return d.inviteCode is string && d.inviteCode.size() > 0
+        && exists(path)
+        && get(path).data.get('teamId', '') == d.primaryTeamId
+        && d.role == 'player'
+        && (get(path).data.get('expiresAt', null) == null || get(path).data.expiresAt > request.time)
+        && (get(path).data.get('maxUses', null) == null || get(path).data.get('uses', 0) < get(path).data.maxUses);
+    }
+    // Whether a new profile doc `d` is backed by an EMAIL invite
+    // (invitedEmails/{d.email}): role and team must be exactly what the
+    // roster entry grants (defaults: player on varsity, as in useAuth).
+    function emailInviteAllows(d) {
+      let path = /databases/$(database)/documents/invitedEmails/$(d.email);
+      return exists(path)
+        && d.role == get(path).data.get('role', 'player')
+        && d.role in ['player', 'admin', 'orgAdmin']
+        && d.primaryTeamId == get(path).data.get('teamId', 'varsity');
+    }
+
+    // Profiles: anyone on a shared team can read.
+    //  - create (F01): only your own doc, with a verified email, and only
+    //    the fields the invite gate writes. Role + team are not taken on
+    //    trust from the client: they must match either your email invite
+    //    (invitedEmails/{email}) or a live invite link (inviteCode), in
+    //    which case you are a player on that link's team. Exactly one team.
+    //  - update (F02): team assignment (teamIds / primaryTeamId) AND role are
+    //    org-admin-only — a player may never change their own teams, and a
+    //    team coach may never move a player between teams, add a second
+    //    team, or promote/demote anyone. A coach may set ONLY the photo
+    //    (photoURL / photoPath) of a teammate who is not the org admin. A
+    //    user edits only their own profile fields + FCM-token/notification
+    //    prefs (so they can opt in/out of push without being able to grant
+    //    themselves admin). There is deliberately NO self-backfill clause for
+    //    teamIds: a user doc is created with its teams in useAuth, and the
+    //    hook degrades to in-memory values if a write is denied.
+    //  - delete (F02): org admin only, and never their own doc.
     match /users/{uid} {
       allow read:   if isOwner(uid) || isOrgAdmin() || sharesTeam(resource.data.get('teamIds', []));
-      allow create: if isOwner(uid);
-      // Team assignment (teamIds / primaryTeamId) AND role are org-admin-only:
-      // a player may never change their own teams, and a team coach may never
-      // move a player between teams (JVB -> JVA -> Varsity), add a second
-      // team, or promote/demote anyone — only the org admin (who sees all
-      // three teams) does that. A coach may still edit the other profile
-      // fields of a player they share a team with (photo, name, notification
-      // prefs); a player edits only their own profile fields. There is
-      // deliberately NO self-backfill clause for teamIds: a user doc is
-      // created with its teams in useAuth, and the hook degrades to in-memory
-      // values if a write is denied.
+      allow create: if isOwner(uid)
+        && request.auth.token.email_verified == true
+        && request.resource.data.keys().hasOnly(['name', 'email', 'role', 'teamIds', 'primaryTeamId', 'initials', 'inviteCode'])
+        && request.auth.token.email is string
+        && request.resource.data.email == request.auth.token.email.lower()
+        && isTeamId(request.resource.data.primaryTeamId)
+        && request.resource.data.teamIds == [request.resource.data.primaryTeamId]
+        && request.resource.data.name is string
+        && request.resource.data.initials is string
+        && (request.resource.data.keys().hasAny(['inviteCode'])
+              ? inviteLinkAllows(request.resource.data)
+              : emailInviteAllows(request.resource.data));
       allow update: if isOrgAdmin()
         || (isAdmin() && sharesTeam(resource.data.get('teamIds', []))
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['teamIds', 'primaryTeamId', 'role']))
+            && resource.data.get('role', 'player') != 'orgAdmin'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['photoURL', 'photoPath']))
         || (isOwner(uid)
             && request.resource.data.diff(resource.data).affectedKeys()
                  .hasOnly(['fcmTokens', 'notificationsEnabledAt', 'name', 'initials', 'photoURL', 'photoPath']));
-      allow delete: if isOrgAdmin() || (isAdmin() && sharesTeam(resource.data.get('teamIds', [])));
+      allow delete: if isOrgAdmin() && uid != request.auth.uid;
     }
 
     // Announcements: team-scoped. Coach of the team writes; members read.
@@ -148,12 +191,14 @@ service cloud.firestore {
       allow update, delete: if coachUpdate() || coachDelete();
     }
     // Shared libraries (no teamId — one library for all three Brophy teams).
-    match /videos/{id}        { allow read: if signedIn(); allow write: if isAdmin(); }
+    // Readable by anyone with a team-app profile (hasTeamRole) — not by a
+    // bare signed-in account that never passed the invite gate.
+    match /videos/{id}        { allow read: if hasTeamRole(); allow write: if isAdmin(); }
     // Video folders (Videos & Links under Training): coach-created top-level
     // folders and subfolders. Shared across all three teams, like the videos
     // themselves. A folder doc is { name, parent, createdAt }. Parent is
     // null for a top-level folder, or the parent folder's name for a subfolder.
-    match /videoFolders/{id}  { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /videoFolders/{id}  { allow read: if hasTeamRole(); allow write: if isAdmin(); }
     // ONE shared drill library (unified 2026-11-09): the team app AND the
     // standalone Drill Library site BOTH read and write `drillLibrary` —
     // a drill made in either app shows up in both. The old `drills`
@@ -163,7 +208,9 @@ service cloud.firestore {
     // Public read; coaches and drill builders write (canBuildDrills) —
     // a drillBuilder builds drills in the library but has no team
     // assignment and no team-app access. Create requires createdByUid ==
-    // the caller and a non-empty name. Merged from the drill-library
+    // the caller and a non-empty name. Editing stays collaborative (any
+    // builder) but can never re-attribute a drill (createdByUid is fixed);
+    // delete is the drill's creator or the org admin only. Merged from the drill-library
     // repo's firestore.rules — deploy once with the app's rules, never
     // deploy the library's file on its own (it would overwrite the app's
     // rules).
@@ -173,7 +220,10 @@ service cloud.firestore {
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0;
-      allow update, delete: if canBuildDrills();
+      allow update: if canBuildDrills()
+        && request.resource.data.get('createdByUid', '') == resource.data.get('createdByUid', '');
+      allow delete: if isOrgAdmin()
+        || (canBuildDrills() && resource.data.get('createdByUid', '') == request.auth.uid);
     }
     // Drill suggestions (the review queue / limbo for the standalone Drill
     // Library site): anyone signed in can suggest a video from the Soccer
@@ -207,17 +257,27 @@ service cloud.firestore {
       allow create: if coachCreate();
       allow update, delete: if coachUpdate() || coachDelete();
     }
-    match /customExercises/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /customExercises/{id} { allow read: if hasTeamRole(); allow write: if isAdmin(); }
 
-    // Team documents: coach of the team uploads/deletes; any member of the
-    // team may add their own signature (only the `signatures` field), like
-    // message readBy/votes.
+    // Team documents: coach of the team uploads/edits/deletes, but never
+    // touches `signatures`. Any member of the team may APPEND exactly one
+    // signature — their own (uid == caller) — to the end of the list;
+    // existing signatures can't be removed, reordered or rewritten.
+    function signatureAppendOnly() {
+      let old = resource.data.get('signatures', []);
+      let nu = request.resource.data.get('signatures', []);
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signatures'])
+        && nu is list
+        && nu.size() == old.size() + 1
+        && nu.hasAll(old)
+        && nu[nu.size() - 1].uid == request.auth.uid;
+    }
     match /documents/{id} {
       allow read:   if isMemberOf(rTeam());
       allow create: if coachCreate();
       allow delete: if coachDelete();
-      allow update: if coachUpdate()
-        || (isMemberOf(rTeam()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signatures']));
+      allow update: if (coachUpdate() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['signatures']))
+        || (isMemberOf(rTeam()) && signatureAppendOnly());
     }
 
     // Group chats (channels): coach of the team creates/deletes + sets
@@ -258,8 +318,17 @@ service cloud.firestore {
       allow delete: if isTeamCoachOf(rTeam());
     }
 
-    // App-wide prompts (e.g. "everyone update your profile"): coach sets, all read.
-    match /appConfig/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
+    // App config (line-up logo, "everyone update your profile" prompt).
+    // Team-scoped docs are `lineupLogo_{teamId}` / `profilePrompt_{teamId}`,
+    // written by that team's coach (or the org admin). Any other id —
+    // including the legacy global docs the client still reads as a
+    // fallback — is org-admin-only. Readable by anyone with a team-app
+    // profile.
+    match /appConfig/{id} {
+      allow read:  if hasTeamRole();
+      allow write: if isOrgAdmin()
+        || (id.matches('^(lineupLogo|profilePrompt)_(jvb|jva|varsity)$') && isCoachOf(id.split('_')[1]));
+    }
 
     // Scheduled reminders + polls: coach-only, team-scoped. A Cloud Function
     // (admin SDK, bypasses rules) fires them at their sendAt time.
@@ -280,8 +349,8 @@ service cloud.firestore {
       allow update, delete: if coachUpdate() || coachDelete();
     }
 
-    match /recipes/{id}       { allow read: if signedIn(); allow write: if isAdmin(); }
-    match /categories/{id}    { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /recipes/{id}       { allow read: if hasTeamRole(); allow write: if isAdmin(); }
+    match /categories/{id}    { allow read: if hasTeamRole(); allow write: if isAdmin(); }
     // Quote of the Day: one per team; coach of the team posts, members read.
     match /quotes/{id} {
       allow read:   if isMemberOf(rTeam());
@@ -318,11 +387,22 @@ service cloud.firestore {
     }
 
     // Wellness: player writes only their own, on a team they're on; coach
-    // reads their team's.
+    // reads their team's. An update must also start from the caller's own
+    // doc — otherwise a player could overwrite a teammate's check-in by
+    // writing their own uid into it.
     match /wellnessCheckins/{docId} {
       allow read:  if isCoachOf(rTeam()) || isOwner(resource.data.uid);
-      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid && isMemberOf(wTeam());
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid && isMemberOf(wTeam());
+      allow update: if signedIn() && request.resource.data.uid == request.auth.uid && isMemberOf(wTeam())
+        && resource.data.uid == request.auth.uid;
       allow delete: if coachDelete();
+    }
+
+    // Wellness nudge run markers: one doc per day (id = YYYY-MM-DD in
+    // America/Phoenix) so the scheduler's wellness pass runs at most once a
+    // day. Cloud Function only (admin SDK, bypasses rules).
+    match /wellnessNudgeRuns/{id} {
+      allow read, write: if false;
     }
 
     // Wellness nudge markers: one doc per player per day (id =
@@ -366,13 +446,14 @@ service cloud.firestore {
     }
 
     // Invite roster: a coach manages their team's invites; any signed-in user
-    // can read their own invite (so the first-login gate works) or an invite
-    // for a team they're on.
+    // can read their own invite (so the first-login gate works). Only a coach
+    // of the team (or the org admin) reads the rest of the roster — players
+    // don't see who else has been invited.
     match /invitedEmails/{email} {
       allow read:  if signedIn() && (
         email == (request.auth.token.email == null ? '' : request.auth.token.email.lower())
         || isOrgAdmin()
-        || isMemberOf(resource.data.get('teamId', '')));
+        || isCoachOf(resource.data.get('teamId', '')));
       allow create: if coachCreate();
       // Role changes on a roster entry are org-admin-only (decision
       // 2026-11-08) — the `role` field is what a future first-sign-in
@@ -396,9 +477,10 @@ service cloud.firestore {
     //  - get: anyone signed in who knows the exact code (redemption lookup).
     //  - list: only coaches of that team / org admin (so players can't
     //    enumerate every team's codes).
-    //  - update: coach/org admin may change expiry/cap; anyone signed in may
-    //    bump `uses` by exactly 1 while the link is live (the redemption
-    //    increment) — nothing else.
+    //  - update: coach/org admin may change expiry/cap; a NEW user (no
+    //    profile yet) may bump `uses` by exactly 1 while the link is live —
+    //    and only in the same batch that creates their own users doc with
+    //    this inviteCode (getAfter), so nobody can burn the counter.
     //  - delete: org admin, or the coach who created the link.
     match /inviteLinks/{code} {
       allow get:   if signedIn();
@@ -413,6 +495,8 @@ service cloud.firestore {
         || (isCoachOf(rTeam())
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['expiresAt', 'maxUses']))
         || (signedIn()
+            && !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('inviteCode', '') == code
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses'])
             && request.resource.data.uses == resource.data.get('uses', 0) + 1
             && (resource.data.get('maxUses', null) == null
@@ -423,18 +507,24 @@ service cloud.firestore {
         || (isCoachOf(rTeam()) && resource.data.createdByUid == request.auth.uid);
     }
 
-    // Water tracking: one doc per player per day. Player writes own, reads own.
+    // Water tracking: one doc per player per day. Player writes own, reads
+    // own; an update must start from their own doc. No deletes.
     match /water/{docId} {
-      allow read:  if signedIn() && resource.data.uid == request.auth.uid;
-      allow write: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow read:   if signedIn() && resource.data.uid == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if signedIn() && request.resource.data.uid == request.auth.uid
+        && resource.data.uid == request.auth.uid;
     }
 
     // Meal log activity: small "did this player log today" markers so the
     // coach can see compliance without reading what they actually ate.
-    // Team-scoped: a coach sees only their team's markers.
+    // Team-scoped: a coach sees only their team's markers. An update must
+    // start from the caller's own marker.
     match /mealLogActivity/{docId} {
       allow read:  if isCoachOf(rTeam()) || (signedIn() && resource.data.uid == request.auth.uid);
-      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid && isMemberOf(wTeam());
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid && isMemberOf(wTeam());
+      allow update: if signedIn() && request.resource.data.uid == request.auth.uid && isMemberOf(wTeam())
+        && resource.data.uid == request.auth.uid;
       allow delete: if coachDelete();
     }
 
