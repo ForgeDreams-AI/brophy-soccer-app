@@ -5264,14 +5264,8 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
     setFormNote(`Looking up ${code}…`);
     try {
       const data = await lookupBarcode(code);
-      setManual({
-        name: data.name || `Product ${code}`,
-        cal: data.cal != null ? String(data.cal) : "",
-        p: data.p != null ? String(data.p) : "",
-        c: data.c != null ? String(data.c) : "",
-        f: data.f != null ? String(data.f) : "",
-      });
-      setFormNote(`Open Food Facts · per 100g — adjust if your portion was different.`);
+      applyPer100(data.name || `Product ${code}`, data);
+      setFormNote(`Open Food Facts · values per 100g — set the amount you ate below.`);
       setFormState("done");
     } catch (e) {
       setFormState("error");
@@ -5315,8 +5309,30 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
     }, 300);
     return () => { clearTimeout(timer); ctl.abort(); setSearching(false); };
   }, [searchQuery, searchActive]);
+  // Search and barcode results are per 100 g. Keep the base values and let
+  // the player enter the amount they actually ate; macros scale from it.
+  const [per100, setPer100] = useState(null); // { cal, p, c, f } | null
+  const [grams, setGrams] = useState("100");
+  const scaled = (base, g) => {
+    const k = (Number(g) || 0) / 100;
+    return {
+      cal: String(Math.round((Number(base.cal) || 0) * k)),
+      p: String(Math.round((Number(base.p) || 0) * k)),
+      c: String(Math.round((Number(base.c) || 0) * k)),
+      f: String(Math.round((Number(base.f) || 0) * k)),
+    };
+  };
+  const applyPer100 = (name, base) => {
+    setPer100(base);
+    setGrams("100");
+    setManual((m) => ({ ...m, name, ...scaled(base, 100) }));
+  };
+  const changeGrams = (g) => {
+    setGrams(g);
+    if (per100) setManual((m) => ({ ...m, ...scaled(per100, g) }));
+  };
   const pickFood = (r) => {
-    setManual({ ...manual, name: r.name, cal: String(r.cal), p: String(r.p), c: String(r.c), f: String(r.f) });
+    applyPer100(r.name, r);
     setSearchResults([]);
   };
   // admin recipe management
@@ -5425,6 +5441,8 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
         custom: true,
       });
       setManual({ name: "", cat: timeOfDayCategory(), cal: "", p: "", c: "", f: "" });
+      setPer100(null);
+      setGrams("100");
       setSearchResults([]);
       setFormState("idle");
       setFormNote("");
@@ -5679,7 +5697,16 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
             <select value={manual.cat} onChange={(e) => setManual({ ...manual, cat: e.target.value })} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
               {effectiveCategories.map((c) => <option key={c}>{c}</option>)}
             </select>
+            {per100 && (
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                <span className="font-semibold">Amount eaten</span>
+                <input type="number" min="0" value={grams} onChange={(e) => changeGrams(e.target.value)} className="w-20 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
+                <span>g</span>
+                <span className="text-[10px] text-slate-400">(values scale from per-100 g)</span>
+              </label>
+            )}
             <div className="grid grid-cols-2 gap-2"><input type="number" value={manual.cal} onChange={(e) => setManual({ ...manual, cal: e.target.value })} placeholder="Calories" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" /><input type="number" value={manual.p} onChange={(e) => setManual({ ...manual, p: e.target.value })} placeholder="Protein g" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
+            <div className="grid grid-cols-2 gap-2"><input type="number" value={manual.c} onChange={(e) => setManual({ ...manual, c: e.target.value })} placeholder="Carbs g" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" /><input type="number" value={manual.f} onChange={(e) => setManual({ ...manual, f: e.target.value })} placeholder="Fat g" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" /></div>
             <div className="flex gap-2">
               <button onClick={() => saveFood(manual)} disabled={!manual.name.trim()} title="Save to favorites" className="px-4 py-2 rounded-full text-xs font-bold border-2 bg-white flex items-center gap-1.5 disabled:opacity-40" style={{ borderColor: COLORS.primary, color: COLORS.primary }}><Star className="w-3.5 h-3.5" fill={isSaved(manual.name) ? COLORS.primary : "none"} /> Save</button>
               <button onClick={addManual} className="flex-1 py-2 rounded-full text-xs font-bold text-white" style={{ backgroundColor: COLORS.primary }}>Add to Log</button>
