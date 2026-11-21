@@ -15,6 +15,8 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Printer, X, LayoutGrid, Check } from "lucide-react";
 import { BoardSvg } from "./TacticsBoard";
+import { shareSheetPdf } from "../lib/sharePdf";
+import { toast } from "../lib/toast";
 
 const RED = "#980000";
 const lines = (t) => (t || "").split("\n").map((s) => s.trim()).filter(Boolean);
@@ -27,6 +29,21 @@ const durLabel = (d) => {
 export default function DrillPrintSheet({ drill, onClose }) {
   const s = drill.setup || {};
   const [imgOk, setImgOk] = useState(true);
+  // window.print() silently does nothing in iOS in-app browsers, so the
+  // button renders a real PDF and opens the share sheet (see lib/sharePdf).
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const savePdf = async () => {
+    if (pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      const safe = (drill.name || drill.title || "drill").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "drill";
+      await shareSheetPdf(`${safe}.pdf`);
+    } catch (e) {
+      toast("Couldn't make the PDF — " + (e?.message || "try again."));
+    } finally {
+      setPdfBusy(false);
+    }
+  };
   const [imgReady, setImgReady] = useState(false);
   const [rasterReady, setRasterReady] = useState(false);
   // Detail-view priority: photo wins while it loads; a failed photo falls
@@ -72,11 +89,11 @@ export default function DrillPrintSheet({ drill, onClose }) {
           <p className="text-white text-sm font-bold">Print preview — this is exactly what prints</p>
           <div className="flex gap-2 flex-shrink-0">
             <button
-              onClick={() => window.print()}
-              disabled={needsImg && !imgDone}
+              onClick={savePdf}
+              disabled={pdfBusy || (needsImg && !imgDone)}
               className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white text-slate-900 min-h-11 disabled:opacity-50"
             >
-              <Printer className="w-4 h-4" /> Print / Save PDF
+              <Printer className="w-4 h-4" /> {pdfBusy ? "Making PDF…" : "Print / Save PDF"}
             </button>
             <button onClick={onClose} className="flex items-center gap-1.5 text-xs font-bold px-4 py-2.5 rounded-full bg-white/15 text-white min-h-11" aria-label="Close preview">
               <X className="w-4 h-4" /> Close

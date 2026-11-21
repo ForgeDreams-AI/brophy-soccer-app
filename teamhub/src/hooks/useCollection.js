@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase";
+import { toast } from "../lib/toast";
 import {
   reportSnapshot,
   getResyncGeneration,
@@ -39,6 +40,27 @@ const constraintFingerprint = (c) => {
 const RETRY_DELAYS_MS = [1000, 5000, 15000, 30000, 60000];
 const TRANSIENT_CODES = new Set(["unauthenticated", "unavailable"]);
 
+// Initial value of every list before its first snapshot. Pages can tell
+// "still loading" apart from "really empty" with isLoading(list). It is a
+// normal (empty) array everywhere else, so existing code keeps working.
+const LOADING = Object.freeze(Object.assign([], { loading: true }));
+const EMPTY = Object.freeze([]);
+export const isLoading = (list) => Boolean(list && list.loading);
+
+// A permission error that survives a few seconds is a real problem (a rules
+// change, a wrong query) — say so once instead of silently showing an empty
+// list. Short-lived ones (team switch, sign-out) are cancelled by cleanup.
+const PERMISSION_GRACE_MS = 4000;
+const reportedPermission = new Set();
+function schedulePermissionToast(label) {
+  return setTimeout(() => {
+    if (reportedPermission.has(label)) return;
+    reportedPermission.add(label);
+    console.error(label + ": permission denied");
+    toast("Some data couldn't load (no permission). If this keeps happening, tell your coach.");
+  }, PERMISSION_GRACE_MS);
+}
+
 function useListenerRetry(label) {
   const [retryKey, setRetryKey] = useState(0);
   const attemptsRef = useRef(0);
@@ -56,6 +78,11 @@ function useListenerRetry(label) {
   }, [cancelRetry]);
   const noteError = useCallback((err) => {
     console.warn(label + " listen failed:", err?.code || err);
+    if (err?.code === "permission-denied") {
+      clearTimeout(timerRef.current);
+      timerRef.current = schedulePermissionToast(label);
+      return;
+    }
     if (!TRANSIENT_CODES.has(err?.code)) return;
     const delay = RETRY_DELAYS_MS[Math.min(attemptsRef.current, RETRY_DELAYS_MS.length - 1)];
     attemptsRef.current += 1;
@@ -65,7 +92,7 @@ function useListenerRetry(label) {
 }
 
 export function useCollection(name, ...constraints) {
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(LOADING);
   const fingerprint = constraints.map(constraintFingerprint).join("|");
   const { retryKey, noteSnapshot, noteError, cancelRetry } = useListenerRetry("useCollection " + name);
   // A foreground re-sync bumps this generation, which tears down and
@@ -74,10 +101,7 @@ export function useCollection(name, ...constraints) {
   const resyncGen = useSyncExternalStore(subscribeResyncGeneration, getResyncGeneration);
 
   useEffect(() => {
-    if (!name) {
-      setItems([]);
-      return;
-    }
+    if (!name) return; // disabled subscription → [] (see return below)
     const q = query(collection(db, name), ...constraints);
     // A permission error here is expected during auth/team transitions (e.g.
     // the active team just changed and the old listener is being replaced);
@@ -95,7 +119,7 @@ export function useCollection(name, ...constraints) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, fingerprint, retryKey, resyncGen]);
 
-  return items;
+  return name ? items : EMPTY;
 }
 
 // Audience-scoped collection. Coaches (admin) read the whole collection;
@@ -109,8 +133,10 @@ export function useCollection(name, ...constraints) {
 // players alike only ever read their active team's docs; an org admin
 // switches teams to see the others. Pass null to skip the filter (only for
 // collections that are not team-scoped).
-export function useAudienceCollection(name, user, orderField, teamId) {
-  const [items, setItems] = useState([]);
+// `max` (optional, needs `orderField`) keeps only the most recent `max` docs
+// (ordered newest-first on the server, returned oldest-first).
+export function useAudienceCollection(name, user, orderField, teamId, max = 0) {
+  const [items, setItems] = useState(LOADING);
   const uid = user?.uid;
   const email = user?.email || null;
   const role = user?.role;
@@ -118,20 +144,23 @@ export function useAudienceCollection(name, user, orderField, teamId) {
   const resyncGen = useSyncExternalStore(subscribeResyncGeneration, getResyncGeneration);
 
   useEffect(() => {
-    if (!name || !uid) {
-      setItems([]);
-      return;
-    }
+    if (!name || !uid) return; // disabled → [] (see return below)
     const teamFilter = teamId ? [where("teamId", "==", teamId)] : [];
+    const windowed = Boolean(orderField && max > 0);
+    // Windowed queries read newest-first + limit (indexes: teamId+createdAt
+    // desc, and teamId+audienceKeys+createdAt desc for players).
+    const tail = windowed ? [orderBy(orderField, "desc"), limit(max)] : [];
     let q;
     if (role === "admin" || role === "orgAdmin") {
-      q = orderField
-        ? query(collection(db, name), ...teamFilter, orderBy(orderField))
-        : query(collection(db, name), ...teamFilter);
+      q = windowed
+        ? query(collection(db, name), ...teamFilter, ...tail)
+        : orderField
+          ? query(collection(db, name), ...teamFilter, orderBy(orderField))
+          : query(collection(db, name), ...teamFilter);
     } else {
       const keys = ["*", "uid:" + uid];
       if (email) keys.push("email:" + email);
-      q = query(collection(db, name), ...teamFilter, where("audienceKeys", "array-contains-any", keys));
+      q = query(collection(db, name), ...teamFilter, where("audienceKeys", "array-contains-any", keys), ...tail);
     }
     const unsub = onSnapshot(
       q,
@@ -139,9 +168,10 @@ export function useAudienceCollection(name, user, orderField, teamId) {
         reportSnapshot(snap.metadata.fromCache);
         noteSnapshot();
         let docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        if (orderField && role !== "admin" && role !== "orgAdmin") {
+        if (windowed || (orderField && role !== "admin" && role !== "orgAdmin")) {
           docs = docs.sort(
-            (a, b) => (a[orderField]?.seconds || 0) - (b[orderField]?.seconds || 0),
+            // A just-sent doc has no server timestamp yet: keep it last (newest).
+            (a, b) => (a[orderField]?.seconds ?? 9e15) - (b[orderField]?.seconds ?? 9e15),
           );
         }
         setItems(docs);
@@ -150,9 +180,9 @@ export function useAudienceCollection(name, user, orderField, teamId) {
     );
     return () => { cancelRetry(); unsub(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, uid, email, role, orderField, teamId, retryKey, resyncGen]);
+  }, [name, uid, email, role, orderField, teamId, max, retryKey, resyncGen]);
 
-  return items;
+  return name && uid ? items : EMPTY;
 }
 
 // Single-document subscription. `path` is a Firestore doc path

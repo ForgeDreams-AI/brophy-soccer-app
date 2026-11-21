@@ -1,12 +1,12 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   Home, Calendar as CalendarIcon, Video, Apple, MessageCircle,
   Pin, Clock, MapPin, Plus, X, Trash2, Send, Paperclip,
-  ShoppingCart, Check, Droplet, Flame, Shield, Lock, Play,
+  Check, Droplet, Flame, Shield, Lock, Play,
   Link as LinkIcon, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Wind, Activity, Dumbbell, Snowflake, StretchHorizontal, FileText,
   Image as ImageIcon, Mail, ArrowRight, Layers, Reply, BarChart3, ScanLine, Camera,
-  Bell, BellOff, Pencil, Copy, Download, Printer, Megaphone, Maximize2,
+  Bell, Pencil, Copy, Download, Printer, Megaphone, Maximize2,
   Users, Tag, Target, Footprints, Repeat, Flag, Zap, ImagePlus, Goal, Hash, Eye,
   ClipboardList, ExternalLink, Star, Shuffle, CornerDownRight, Crosshair, Swords, LayoutGrid, SquareDashed,
   RefreshCw,
@@ -21,13 +21,13 @@ import {
 } from "firebase/auth";
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, setDoc, getDoc,
-  orderBy, where, query, getDocs,
+  orderBy, where, query, getDocs, limit,
   serverTimestamp, writeBatch, arrayUnion, deleteField,
 } from "firebase/firestore";
 import { auth, db, storage } from "./firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useAuth } from "./hooks/useAuth";
-import { useCollection, useAudienceCollection, useDoc } from "./hooks/useCollection";
+import { useCollection, useAudienceCollection, useDoc, isLoading } from "./hooks/useCollection";
 
 // Turn a `visibleTo` audience ({ groupIds, uids|emails }) into the flat
 // `audienceKeys` array we store on each doc so security rules can enforce
@@ -52,12 +52,38 @@ import { searchFoods, hasUsdaKey } from "./lib/usda";
 import { loadExercises, exerciseImageUrl } from "./lib/exercises";
 import { searchExercises } from "./lib/exerciseSearch";
 import { lookupBarcode, searchProducts } from "./lib/openfoodfacts";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import {
   notificationsSupported, currentPermission,
-  enablePushNotifications, clearAllPushTokens, onForegroundMessage,
+  enablePushNotifications, disablePushOnThisDevice, pushEnabledOnThisDevice, onForegroundMessage,
 } from "./lib/notifications";
 import { toast } from "./lib/toast";
+import { teamDateKey, teamDateKeyOf, zonedDate } from "./lib/dates";
+
+// Sign out, first removing THIS device's push token so a shared phone stops
+// receiving the previous user's notifications.
+const signOutUser = async (uid) => {
+  try { await disablePushOnThisDevice(uid); } catch { /* offline — still sign out */ }
+  await signOut(auth);
+};
+
+// Error reporter for fire-and-forget actions (delete, pin, rate…): a failed
+// write must never look like it worked. Replaces the old `.catch(() => {})`.
+const reportError = (what = "That didn't save") => (e) => {
+  console.error(what, e);
+  toast(`${what} — ${e?.code === "permission-denied" ? "you don't have permission." : (e?.message || "try again.")}`);
+};
+
+// Unique-ish file stamp for upload paths.
+const uploadStamp = () => Date.now();
+
+// Batched writes in chunks (Firestore allows at most 500 ops per batch).
+const commitInChunks = async (items, apply, size = 450) => {
+  for (let i = 0; i < items.length; i += size) {
+    const batch = writeBatch(db);
+    items.slice(i, i + size).forEach((it) => apply(batch, it));
+    await batch.commit();
+  }
+};
 import WelcomeTour from "./WelcomeTour";
 import {
   newEntry, formatPrescription, groupBySuperset, SUPERSET_LABELS,
@@ -123,6 +149,18 @@ const prettyAuthError = (e) => {
   }
 };
 
+// YouTube start offsets: "90", "90s", "1m30s", "1h2m3s" → seconds.
+const parseYouTubeStart = (t) => {
+  if (!t) return null;
+  if (/^\d+s?$/.test(t)) return parseInt(t, 10) || null;
+  const m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(t);
+  if (!m || (!m[1] && !m[2] && !m[3])) return null;
+  return (+(m[1] || 0)) * 3600 + (+(m[2] || 0)) * 60 + (+(m[3] || 0)) || null;
+};
+// Embedded players get a sandbox (scripts + same-origin are needed by
+// YouTube/Vimeo/Instagram players; no top navigation, no forms).
+const EMBED_SANDBOX = "allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox";
+
 const toEmbedUrl = (url) => {
   if (!url) return null;
   try {
@@ -131,8 +169,7 @@ const toEmbedUrl = (url) => {
     if (host === "youtube.com" || host === "m.youtube.com") {
       const v = u.searchParams.get("v");
       if (v) {
-        const t = u.searchParams.get("t") || u.searchParams.get("start");
-        const start = t ? parseInt(t, 10) : null;
+        const start = parseYouTubeStart(u.searchParams.get("t") || u.searchParams.get("start"));
         return `https://www.youtube.com/embed/${v}${start ? `?start=${start}` : ""}`;
       }
       if (u.pathname.startsWith("/embed/")) return url;
@@ -143,8 +180,7 @@ const toEmbedUrl = (url) => {
     if (host === "youtu.be") {
       const v = u.pathname.replace(/^\//, "");
       if (v) {
-        const t = u.searchParams.get("t");
-        const start = t ? parseInt(t, 10) : null;
+        const start = parseYouTubeStart(u.searchParams.get("t"));
         return `https://www.youtube.com/embed/${v}${start ? `?start=${start}` : ""}`;
       }
     }
@@ -223,13 +259,8 @@ const computeStreak = (entries) => {
 };
 
 // Local YYYY-MM-DD used as a grouping key for date dividers.
-const formatDayKey = (ts) => {
-  const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : new Date());
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-};
+// Team-clock (America/Phoenix) YYYY-MM-DD — see lib/dates.js.
+const formatDayKey = (ts) => teamDateKeyOf(ts);
 
 const formatDateHeader = (ts) => {
   const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : new Date());
@@ -293,8 +324,6 @@ const Toaster = () => {
    SEED DATA  (real app → Firestore)
    ────────────────────────────────────────────── */
 // Starts clean for Brophy — no sample announcements; coaches post real ones.
-const seedAnnouncements = [];
-const seedEvents = [];
 const VIDEO_CATS = ["Film", "Breathing", "Stretching", "Mobility", "Strength", "Cooldown"];
 const CAT_ICON = { Film: Video, Breathing: Wind, Stretching: StretchHorizontal, Mobility: Activity, Strength: Dumbbell, Cooldown: Snowflake };
 
@@ -314,44 +343,6 @@ const DRILL_CAT_ICON = {
 };
 // Session phases — suggested tags on the drill form (how Anthony runs practices).
 const DRILL_PHASES = ["Warmup", "Team game", "Small rondo", "Bigger rondo / passing pattern", "Possession game", "Play / structured play", "Finishing pattern", "Passing pattern"];
-const seedVideos = [
-  { id: "v2", title: "4-7-8 Breathing Technique", cat: "Breathing", type: "video", dur: "5 min", diff: "Easy", desc: "Inhale 4, hold 7, exhale 8. Drops your heart rate before lights out.", url: "https://youtube.com/..." },
-  { id: "v3", title: "Box Breathing Reset", cat: "Breathing", type: "audio", dur: "8 min", diff: "Easy", desc: "Navy SEAL go-to. Use before games and high-pressure moments.", url: "" },
-  { id: "v4", title: "Full-Body Static Stretch", cat: "Stretching", type: "video", dur: "15 min", diff: "Easy", desc: "End-of-day flow. Hold each position 45 seconds.", url: "https://youtube.com/..." },
-  { id: "v5", title: "Explosive Hip Mobility", cat: "Mobility", type: "video", dur: "8 min", diff: "Medium", desc: "Dynamic warm-up. Get loose before sprints.", url: "https://youtube.com/..." },
-  { id: "v6", title: "Thoracic Spine Series", cat: "Mobility", type: "video", dur: "6 min", diff: "Easy", desc: "Unlock your upper back. Critical for overhead athletes.", url: "https://youtube.com/..." },
-  { id: "v7", title: "Posterior Chain Strength", cat: "Strength", type: "video", dur: "20 min", diff: "Hard", desc: "Hamstrings, glutes, lower back. Bodyweight or banded.", url: "https://youtube.com/..." },
-  { id: "v8", title: "Cold Plunge Protocol", cat: "Cooldown", type: "external", dur: "11 min", diff: "Hard", desc: "Evidence-based cold exposure framework.", url: "https://youtube.com/..." },
-  { id: "v9", title: "Post-Practice Foam Rolling", cat: "Cooldown", type: "video", dur: "10 min", diff: "Easy", desc: "Quads, IT band, calves, glutes. Slow and intentional.", url: "https://youtube.com/..." },
-];
-const workoutPlans = [
-  { id: "wp1", title: "Pre-Game Activation", dur: "20 min" },
-  { id: "wp2", title: "Post-Practice Mobility", dur: "15 min" },
-  { id: "wp3", title: "Off-Day Recovery Flow", dur: "30 min" },
-];
-const seedMessages = [
-  { id: "m1", sender: "Coach Cameron", initials: "CC", text: "Film session moved to 6 PM in Team Room A.", time: "9:14 AM", isCoach: true },
-  { id: "m2", sender: "Maya Patel", initials: "MP", text: "Got it — bringing the clips from Saturday.", time: "9:16 AM" },
-  { id: "m3", sender: "Coach Cameron", initials: "CC", text: "Scouting report attached — read before film.", time: "11:48 AM", isCoach: true, attachment: { type: "pdf", name: "Scouting_Report.pdf" } },
-  { id: "m4", sender: "Devin Wallace", initials: "DW", text: "This set play is clean: https://youtube.com/watch?v=abc", time: "12:15 PM" },
-  { id: "m5", sender: "Coach Cameron", initials: "CC", text: "Proud of this group.", time: "1:02 PM", isCoach: true, attachment: { type: "image", name: "team_huddle.jpg" } },
-];
-const seedWellness = [
-  { name: "Maya Patel", initials: "MP", energy: 4, soreness: 4, tiredness: 4, time: "8:10 AM" },
-  { name: "Alex Chen", initials: "AC", energy: 2, soreness: 2, tiredness: 2, time: "7:52 AM" },
-  { name: "Devin Wallace", initials: "DW", energy: 5, soreness: 5, tiredness: 4, time: "9:01 AM" },
-  { name: "Sam Okafor", initials: "SO", energy: 3, soreness: 3, tiredness: 3, time: "8:34 AM" },
-  { name: "Riley Brooks", initials: "RB", energy: 4, soreness: 4, tiredness: 3, time: "8:20 AM" },
-];
-const seedMeals = [
-  { id: "b1", name: "Overnight Oats & Berries", cat: "Breakfast", cal: 380, p: 18, c: 58, f: 9, prep: "5 min" },
-  { id: "b2", name: "Veggie Scramble & Toast", cat: "Breakfast", cal: 420, p: 26, c: 32, f: 22, prep: "10 min" },
-  { id: "l1", name: "Grilled Chicken & Quinoa", cat: "Lunch", cal: 580, p: 45, c: 58, f: 14, prep: "20 min" },
-  { id: "l2", name: "Turkey Avocado Wrap", cat: "Lunch", cal: 510, p: 38, c: 42, f: 20, prep: "8 min" },
-  { id: "d1", name: "Steak & Sweet Potato", cat: "Dinner", cal: 680, p: 50, c: 56, f: 22, prep: "30 min" },
-  { id: "s1", name: "Protein Shake", cat: "Snacks", cal: 280, p: 28, c: 28, f: 6, prep: "3 min" },
-];
-const seedMealCategories = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 const CSV_TEMPLATE = "name,category,calories,protein,carbs,fat,prep\nGreek Yogurt Power Bowl,Breakfast,390,28,45,10,5 min\nGame-Day Pasta,Pre-Game,620,24,98,12,25 min";
 
 const splitCSVLine = (line) => {
@@ -389,16 +380,26 @@ const FEELING_COLOR = { Sluggish: "#EF4444", OK: "#F59E0B", Good: "#10B981", Ene
    ────────────────────────────────────────────── */
 const EMAIL_FOR_SIGNIN_KEY = "emailForSignIn";
 
-const LoginScreen = ({ externalError, clearExternalError }) => {
+const LoginScreen = ({ externalError, clearExternalError, emailLinkPending = false, onCompleteEmailLink }) => {
   const [email, setEmail] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
 
-  // Surface auth-gate errors (e.g. "email not on roster") from useAuth.
-  useEffect(() => {
-    if (externalError) setErr(externalError);
-  }, [externalError]);
+  // Auth-gate errors (e.g. "email not on roster") from useAuth win over
+  // local ones; typing clears both.
+  const shownErr = externalError || err;
+
+  // Magic link opened on another device/browser: ask for the email inline
+  // (the old code used a blocking window.prompt).
+  const confirmEmailLink = async () => {
+    const e = email.trim().toLowerCase();
+    if (!e.includes("@")) { setErr("Enter the email the link was sent to."); return; }
+    setErr(""); setBusy(true);
+    try { await onCompleteEmailLink(e); }
+    catch (ex) { setErr(prettyAuthError(ex)); }
+    finally { setBusy(false); }
+  };
 
   const sendLink = async () => {
     const e = email.trim().toLowerCase();
@@ -471,6 +472,25 @@ const LoginScreen = ({ externalError, clearExternalError }) => {
     );
   }
 
+  if (emailLinkPending) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
+        {bgLayer}
+        <div className="w-full max-w-sm relative z-10 space-y-3">
+          <h1 className="text-white font-black text-2xl tracking-tight text-center">Finish signing in</h1>
+          <p className="text-white/80 text-sm text-center">Confirm the email address the sign-in link was sent to.</p>
+          <input value={email} onChange={(e) => { setEmail(e.target.value); setErr(""); clearExternalError?.(); }} onKeyDown={(e) => e.key === "Enter" && confirmEmailLink()}
+            type="email" placeholder="Email" autoComplete="email" disabled={busy}
+            className="w-full bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60" />
+          {shownErr && <p className="text-red-300 text-xs font-medium px-1 leading-snug">{shownErr}</p>}
+          <button onClick={confirmEmailLink} disabled={busy} className="w-full py-3 rounded-xl font-bold text-sm text-white hover:opacity-90 disabled:opacity-60" style={{ backgroundColor: COLORS.primary }}>
+            {busy ? "Signing in…" : "Continue"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
       {bgLayer}
@@ -492,7 +512,7 @@ const LoginScreen = ({ externalError, clearExternalError }) => {
               type="email" placeholder="Email" autoComplete="email" disabled={busy}
               className="w-full bg-white rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-60" />
           </div>
-          {err && <p className="text-red-300 text-xs font-medium px-1 leading-snug">{err}</p>}
+          {shownErr && <p className="text-red-300 text-xs font-medium px-1 leading-snug">{shownErr}</p>}
           <button onClick={sendLink} disabled={busy} className="w-full py-3 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-60" style={{ backgroundColor: COLORS.primary }}>
             {busy ? "Sending…" : <>Email me a sign-in link <ArrowRight className="w-4 h-4" /></>}
           </button>
@@ -906,7 +926,7 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
   };
   const [wellnessOpen, setWellnessOpen] = useState(false);
   const [saved, setSaved] = useState(false);
-  const todayStr = fmtLocalDate(new Date());
+  const todayStr = teamDateKey();
   const todays = events.filter((e) => e.date === todayStr).sort((a, b) => (a.start || "").localeCompare(b.start || ""));
   const hero = todays[0];
   const upcoming = !hero ? [...events].filter((e) => e.date > todayStr).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))[0] : null;
@@ -1088,14 +1108,25 @@ const TrainHub = ({ onPick }) => {
 };
 
 /* ─── HOME ─── */
-const HomePage = ({ user, practices = [], announcements, events, checkin, setCheckin, wellness, submitWellness, invites, mealLogActivityToday = [], groups = [], addGroup, updateGroupMembers, deleteGroup, documents = [], addDocument, deleteDocument, signDocument, allUsers = [], pushNotifications = [], addPushNotification, deletePushNotification, sendPushNotificationNow, activeTeamId, todayQuote, addQuote }) => {
+// Coach Home. (Players get PlayerTodayPage — this component is only mounted
+// for coaches; see the tab router in TeamHubRolesApp.)
+const HomePage = ({ user, practices = [], announcements = [], events = [], wellness = [], wellnessLoading = false, invites = [], mealLogActivityToday = [], groups = [], addGroup, updateGroupMembers, deleteGroup, allUsers = [], pushNotifications = [], addPushNotification, deletePushNotification, sendPushNotificationNow, activeTeamId, todayQuote, addQuote }) => {
   const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email, u.name])), [allUsers]);
-  const [saved, setSaved] = useState(false);
+  const uidByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email.toLowerCase(), u.id])), [allUsers]);
+  const emailByUid = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.id, u.email])), [allUsers]);
+  // Unique players on the team: signed-up players plus invited emails that
+  // haven't signed up yet (coaches excluded) — one denominator everywhere.
+  const playersTotal = useMemo(() => {
+    const keys = new Set();
+    (allUsers || []).filter((u) => u.role === "player").forEach((u) => keys.add((u.email || u.id).toLowerCase()));
+    (invites || []).filter((i) => i.role !== "admin" && i.role !== "orgAdmin").forEach((i) => keys.add((i.email || i.id).toLowerCase()));
+    return keys.size;
+  }, [allUsers, invites]);
   const [openPlayer, setOpenPlayer] = useState(null);
   const [showPlayers, setShowPlayers] = useState(false);
   const [annOpen, setAnnOpen] = useState(false);
   const [pushModalOpen, setPushModalOpen] = useState(false);
-  const [pushPerm, setPushPerm] = useState(currentPermission());
+  const [pushPerm, setPushPerm] = useState(() => (pushEnabledOnThisDevice() ? "granted" : currentPermission() === "denied" ? "denied" : "default"));
   const [pushBusy, setPushBusy] = useState(false);
   const [pushErr, setPushErr] = useState("");
   const enablePush = async () => {
@@ -1116,25 +1147,20 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
   const isAdmin = user.role === "admin";
 
 
-  const now = new Date();
+  // "Now" refreshes every minute so the next-event card doesn't go stale.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
   const nextEvent = useMemo(() => {
     return [...events]
-      .filter((e) => new Date(e.date + "T" + e.start) >= now)
-      .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))[0];
-  }, [events]);
+      .filter((e) => (zonedDate(e.date, e.start || "00:00")?.getTime() ?? 0) >= nowMs)
+      .sort((a, b) => ((a.date || "") + (a.start || "")).localeCompare((b.date || "") + (b.start || "")))[0];
+  }, [events, nowMs]);
 
   const sorted = [...announcements].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
-  const setMetric = (k, v) => { setCheckin({ ...checkin, [k]: v }); setSaved(false); };
-  const submitCheckin = async () => {
-    if (!checkin.energy || !checkin.soreness || !checkin.tiredness) return;
-    try {
-      await submitWellness(checkin);
-      setSaved(true);
-    } catch (e) {
-      toast("Couldn't submit check-in — " + (e.message || "check Firestore rules."));
-    }
-  };
 
   const avg = (k) => (wellness.length ? wellness.reduce((s, w) => s + w[k], 0) / wellness.length : 0);
   const bars = (value, color) => (
@@ -1145,14 +1171,14 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
   const greeting = (
     <div>
       <p className="text-xs font-medium uppercase tracking-wider text-slate-400">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
-      <h2 className="text-2xl font-bold text-slate-900 mt-1">Welcome,<br /><span style={{ color: COLORS.primary }}>{user.name.split(" ")[0]}.</span></h2>
+      <h2 className="text-2xl font-bold text-slate-900 mt-1">Welcome,<br /><span style={{ color: COLORS.primary }}>{(user.name || "Coach").split(" ")[0]}.</span></h2>
       <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>{getTeam(activeTeamId).name}</span>
     </div>
   );
 
   // Today first: today's session (with its practice plan + drill count) —
   // otherwise the next upcoming event. This is the big card at the top.
-  const todayStr = fmtLocalDate(new Date());
+  const todayStr = teamDateKey();
   const todays = [...events].filter((e) => e.date === todayStr).sort((a, b) => (a.start || "").localeCompare(b.start || ""));
   const hero = todays[0] || null;
   const heroPlan = hero?.practiceId ? practices.find((pl) => pl.id === hero.practiceId) : null;
@@ -1188,27 +1214,6 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
     </section>
   );
 
-  const checkinSection = (
-    <section className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-sm text-slate-900">How are you feeling today?</h3>
-        {saved && <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color: COLORS.success }}><Check className="w-3 h-3" /> Sent</span>}
-      </div>
-      <div className="space-y-3">
-        <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Energy</div><Scale value={checkin.energy} onChange={(v) => setMetric("energy", v)} lowLabel="Wiped out" highLabel="Full tank" /></div>
-        <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Soreness</div><Scale value={checkin.soreness} onChange={(v) => setMetric("soreness", v)} lowLabel="Very sore" highLabel="Feeling great" /></div>
-        <div><div className="text-xs font-semibold text-slate-700 mb-1.5">Tiredness</div><Scale value={checkin.tiredness} onChange={(v) => setMetric("tiredness", v)} lowLabel="Exhausted" highLabel="Fresh" /></div>
-      </div>
-      <button onClick={submitCheckin} disabled={!checkin.energy || !checkin.soreness || !checkin.tiredness}
-        className="w-full mt-3 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>
-        Log wellness
-      </button>
-      <p className="text-[10px] text-slate-400 mt-2 text-center">1 = worst, 5 = ready to go. Your coach sees the team's daily readiness.</p>
-    </section>
-  );
-
-  // News for the team — read-only here. Coaches post, edit, pin and
-  // delete from Coach Tools → Announcements (§9 Option B).
   const announcementsSection = (
     <section>
       <div className="flex items-center justify-between mb-3">
@@ -1272,7 +1277,7 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
       </button>
       {showPlayers && (
       <ul className="space-y-2">
-        {wellness.length === 0 && <p className="text-sm text-slate-400 italic">No check-ins yet today.</p>}
+        {wellness.length === 0 && <p className="text-sm text-slate-400 italic">{wellnessLoading ? "Loading check-ins…" : "No check-ins yet today."}</p>}
         {wellnessSorted.map((w) => {
           const vStyle = VERDICTS[w.verdict] || VERDICTS.Modified;
           const open = openPlayer === w.name;
@@ -1336,7 +1341,11 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
     const toggleMember = (group, uid) => {
       const set = new Set(group.memberUids || []);
       if (set.has(uid)) set.delete(uid); else set.add(uid);
-      updateGroupMembers(group.id, [...set]).catch(() => {});
+      // Store the uid once the player has signed in; drop any legacy email
+      // key for the same player so membership isn't double-counted.
+      const email = emailByUid[uid];
+      if (email) set.delete(email);
+      updateGroupMembers(group.id, [...set]).catch(reportError("Couldn't update the group"));
     };
     return (
       <section>
@@ -1380,8 +1389,11 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
                             // Use email as id for ones without a uid; here we don't know uid for not-yet-signed-in players.
                             // We'll fall back to the doc id (email) — works for filter once player signs in and uid is known.
                             // Better future: resolve email→uid via users collection.
-                            const memberKey = inv.email;
-                            const isMember = members.has(memberKey);
+                            // uid when the player has signed in (preferred),
+                            // else the invite email until they do.
+                            const uid = uidByEmail[(inv.email || "").toLowerCase()];
+                            const memberKey = uid || inv.email;
+                            const isMember = members.has(memberKey) || members.has(inv.email);
                             return (
                               <li key={inv.id} className="flex items-center gap-2 py-1.5">
                                 <button onClick={() => toggleMember(g, memberKey)} className="flex-1 text-left text-xs font-mono text-slate-700 truncate">{inv.email}</button>
@@ -1391,15 +1403,12 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
                           })}
                         </ul>
                       )}
-                      <button onClick={() => { if (confirm(`Delete group "${g.name}"?`)) deleteGroup(g.id).catch(() => {}); }} className="w-full py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 border border-red-100 rounded-full">Delete group</button>
+                      <button onClick={() => { if (confirm(`Delete group "${g.name}"?`)) deleteGroup(g.id).catch(reportError("Couldn't delete the group")); }} className="w-full py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 border border-red-100 rounded-full">Delete group</button>
                     </div>
                   )}
                 </div>
               );
             })}
-            <p className="text-[10px] text-slate-400 px-1 leading-relaxed">
-              Note: group membership is currently keyed by email. Once a player signs in their uid is known and group filtering takes effect. Full uid-based assignment is a v1.1 polish.
-            </p>
           </div>
         )}
       </section>
@@ -1409,7 +1418,7 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
   const nutritionComplianceSection = (() => {
     if (!isAdmin) return null;
     const loggedUids = new Set(mealLogActivityToday.map((a) => a.uid));
-    const rosterEmails = invites?.length || 0;
+    const rosterEmails = playersTotal;
     const loggedCount = loggedUids.size;
     const pct = rosterEmails ? Math.round((loggedCount / rosterEmails) * 100) : 0;
     return (
@@ -1432,7 +1441,6 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
     );
   })();
 
-  const documentsSection = <DocumentsSection user={user} documents={documents} isAdmin={isAdmin} rosterCount={(invites || []).filter((i) => i.role !== "admin").length} onUpload={addDocument} onDelete={deleteDocument} onSign={signDocument} defaultCollapsed />;
 
   // Custom push notifications — the coach's way to reach the team directly
   // (send now, schedule, or set a recurring reminder). The full composer
@@ -1458,12 +1466,12 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
 
   // Compact at-a-glance dashboard so the coach gets the key numbers without
   // scrolling; the full management sections sit collapsed below.
-  const playersTotal = invites.filter((i) => i.role !== "admin").length;
+  const readyCount = wellness.length - restCount - modifiedCount;
   const dashStats = [
-    ["Readiness", wellness.length ? avg("energy").toFixed(1) : "—", "/5"],
+    ["Ready", wellness.length ? readyCount : "—", wellness.length ? `/${wellness.length}` : ""],
     ["Logged", wellness.length, `/${playersTotal}`],
-    ["Meals", mealLogActivityToday.length, `/${playersTotal}`],
-    ["Roster", invites.length, ""],
+    ["Meals", new Set(mealLogActivityToday.map((a) => a.uid)).size, `/${playersTotal}`],
+    ["Players", playersTotal, ""],
   ];
   const coachDashboard = (
     <div className="grid grid-cols-2 gap-2">
@@ -1478,7 +1486,7 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
 
   // Sessions this coach has been delegated to run (assigned on the calendar),
   // surfaced with the head coach's plan + notes so they know what to deliver.
-  const todayKey = fmtLocalDate(new Date());
+  const todayKey = teamDateKey();
   const myRuns = (events || [])
     .filter((e) => e.runByUid === user.uid && (e.date || "") >= todayKey)
     .sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")))
@@ -1527,9 +1535,7 @@ const HomePage = ({ user, practices = [], announcements, events, checkin, setChe
       {greeting}
       {notificationsSection}
       {todaySection}
-      {isAdmin
-        ? (<>{youRunningSection}{coachDashboard}{playersSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{pushSection}{groupsSection}{nutritionComplianceSection}</>)
-        : (<>{checkinSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{documentsSection}</>)}
+      {youRunningSection}{coachDashboard}{playersSection}{announcementsSection}<QuoteOfDay quote={todayQuote} isAdmin={isAdmin} addQuote={addQuote} colors={COLORS} />{pushSection}{groupsSection}{nutritionComplianceSection}
       {pushModalOpen && (
         <PushNotificationModal
           pushNotifications={pushNotifications}
@@ -1576,7 +1582,7 @@ const parseScheduleCSV = (text) => {
   const hasHeader = first.includes("date") && first.includes("title");
   const rows = hasHeader ? lines.slice(1) : lines;
   const validType = (t) => ["Practice", "Game", "Strength", "Recovery", "Meeting"].includes(t) ? t : "Practice";
-  return rows.map((line) => {
+  const parsed = rows.map((line) => {
     const c = splitCSVLine(line);
     return {
       date: (c[0] || "").trim(),
@@ -1586,15 +1592,14 @@ const parseScheduleCSV = (text) => {
       location: (c[4] || "").trim(),
       type: validType((c[5] || "").trim()),
     };
-  }).filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.title);
+  });
+  const kept = parsed.filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.title
+    && /^\d{1,2}:\d{2}$/.test(r.start) && /^\d{1,2}:\d{2}$/.test(r.end) && r.end > r.start);
+  // Rows that were dropped (bad date/time, no title, end before start) are
+  // counted so the import message can say so instead of hiding them.
+  kept.skipped = parsed.length - kept.length;
+  return kept;
 };
-
-// Compact event chip for Month/Week views.
-const EventChip = ({ ev, onClick }) => (
-  <button onClick={onClick} className={`block w-full text-left rounded-md px-1.5 py-0.5 text-[9px] font-semibold leading-tight truncate ${EVENT_STYLE[ev.type] || "bg-slate-100 text-slate-700"} ${ev.isPrivate ? "ring-1 ring-slate-400 ring-inset" : ""}`} title={`${ev.title} · ${formatHourTime(ev.start)}`}>
-    {ev.isPrivate && "🔒 "}{formatHourTime(ev.start).replace(/:00 /, "")} {ev.title}
-  </button>
-);
 
 // Full card for Day/List views.
 const EventCard = ({ ev, isAdmin, onEdit, onDelete, onOpen, nameByUid = {}, practices = [], teamWorkouts = [] }) => {
@@ -1727,7 +1732,6 @@ const GroupsModal = ({ groups, allUsers, invites, onClose, addGroup, updateGroup
 
   // Players already signed in (have uids). Plus optionally those still
   // invited-only (key by email until they sign in once).
-  const signedInUids = new Set(allUsers.map((u) => u.id));
   const signedInEmails = new Set(allUsers.map((u) => (u.email || "").toLowerCase()).filter(Boolean));
   const invitedOnly = (invites || []).filter((i) => !signedInEmails.has((i.email || "").toLowerCase()));
 
@@ -1805,7 +1809,7 @@ const GroupsModal = ({ groups, allUsers, invites, onClose, addGroup, updateGroup
                       </details>
                     )}
 
-                    <button onClick={() => { if (confirm(`Delete group "${g.name}"?`)) deleteGroup(g.id).catch(() => {}); }} className="w-full py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 border border-red-100 rounded-full">Delete group</button>
+                    <button onClick={() => { if (confirm(`Delete group "${g.name}"?`)) deleteGroup(g.id).catch(reportError("Couldn't delete the group")); }} className="w-full py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 border border-red-100 rounded-full">Delete group</button>
                   </div>
                 )}
               </div>
@@ -1893,7 +1897,7 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
   const [silentImport, setSilentImport] = useState(true);
   const [view, setView] = useState("list"); // month | week | day | list
   const [cursor, setCursor] = useState(new Date());
-  const todayStr = fmtLocalDate(new Date());
+  const todayStr = teamDateKey();
   const blank = { title: "", date: todayStr, start: "15:00", end: "17:00", location: "", type: "Practice", runByUid: "", practiceId: "", workoutId: "", coachNotes: "", reminders: [] };
   const [form, setForm] = useState(blank);
   const isAdmin = user.role === "admin";
@@ -1923,7 +1927,7 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
     if (!rows.length) { setImportMsg("No valid rows — needs date,start,end,title,location,type."); return; }
     try {
       await importEvents(rows, { notify: !silentImport });
-      setImportMsg(`Imported ${rows.length} event${rows.length === 1 ? "" : "s"}.`);
+      setImportMsg(`Imported ${rows.length} event${rows.length === 1 ? "" : "s"}.${rows.skipped ? ` Skipped ${rows.skipped} row${rows.skipped === 1 ? "" : "s"} with a bad date, time or title.` : ""}`);
       setCsvText("");
     } catch (e) {
       setImportMsg("Couldn't import — " + (e.message || "check rules?"));
@@ -1941,7 +1945,11 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
         delete data.runByUid; delete data.practiceId; delete data.workoutId; delete data.coachNotes;
         delete data.reminders; delete data.startAt;
         if (editingEvent && editingEvent.isPrivate) await updatePersonalEvent(editingEvent.id, data);
-        else await addPersonalEvent(data);
+        else {
+          await addPersonalEvent(data);
+          // Switched a team event to personal while editing: move it.
+          if (editingEvent && !editingEvent.isPrivate) await deleteEvent(editingEvent.id);
+        }
       } else {
         // Delegation: which coach runs this session + the plan/workout/notes.
         data.runByUid = form.runByUid || null;
@@ -1959,7 +1967,11 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
           type: "reminder",
           offsetMin: Math.max(1, Math.round(Number(r.offsetMin) || 0)),
         }));
-        data.startAt = form.date && form.start ? new Date(`${form.date}T${form.start}:00`) : null;
+        // Team time (America/Phoenix), not the coach's device timezone.
+        data.startAt = zonedDate(form.date, form.start);
+        if (isAdmin && visibility.mode === "custom" && !visibility.groupIds.length && !visibility.uids.length) {
+          toast("Pick at least one group or player, or choose Everyone."); return;
+        }
         if (isAdmin && visibility.mode === "custom" && (visibility.groupIds.length || visibility.uids.length)) {
           data.visibleTo = { groupIds: visibility.groupIds, uids: visibility.uids };
         } else if (editingEvent) {
@@ -1967,7 +1979,11 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
           data.visibleTo = null;
         }
         if (editingEvent && !editingEvent.isPrivate) await updateEvent(editingEvent.id, data);
-        else await addEvent(data);
+        else {
+          await addEvent(data);
+          // Switched a personal event to team while editing: move it.
+          if (editingEvent && editingEvent.isPrivate) await deletePersonalEvent(editingEvent.id);
+        }
       }
       setForm(blank);
       setVisibility({ mode: "everyone", groupIds: [], uids: [] });
@@ -2011,8 +2027,9 @@ const CalendarPage = ({ user, events, personalEvents = [], addEvent, updateEvent
     setAdding(false);
   };
   const del = (ev) => {
-    if (ev.isPrivate) deletePersonalEvent(ev.id).catch(() => {});
-    else deleteEvent(ev.id).catch(() => {});
+    if (!confirm(`Delete "${ev.title || "this event"}"?${ev.isPrivate ? "" : " Players will no longer see it."}`)) return;
+    if (ev.isPrivate) deletePersonalEvent(ev.id).catch(reportError("Couldn't delete the event"));
+    else deleteEvent(ev.id).catch(reportError("Couldn't delete the event"));
   };
 
   // ── View navigation ───────────────────────────────────────────────────
@@ -2349,7 +2366,7 @@ const parseVideoCSV = (text) => {
 };
 
 const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVideos, videoFolders = [], addVideoFolder, renameVideoFolder, deleteVideoFolder }) => {
-  const [cat, setCat] = useState("Film");
+  const [catPref, setCat] = useState("Film");
   const [adding, setAdding] = useState(false);
   const [editingVideoId, setEditingVideoId] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -2371,7 +2388,9 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
     return out;
   }, [customCats]);
   // If the open folder was deleted elsewhere, fall back to the first folder.
-  useEffect(() => { if (!effectiveCats.includes(cat) && effectiveCats.length) setCat(effectiveCats[0]); }, [effectiveCats, cat]);
+  // If the open folder was deleted elsewhere, fall back to the first folder
+  // (derived during render — no state-syncing effect).
+  const cat = effectiveCats.includes(catPref) ? catPref : (effectiveCats[0] || catPref);
 
   // Subfolders in the open folder: coach-created ones plus any typed on a
   // video already (so old videos keep their subfolder pills).
@@ -2470,8 +2489,10 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
     // same as recipe categories on import.
     const newCats = [...new Set(rows.map((r) => r.cat))].filter((c) => c && !effectiveCats.some((e) => e.toLowerCase() === c.toLowerCase()));
     try {
-      for (const c of newCats) await addVideoFolder(c, null);
+      // Import the videos first; only then create any new folders, so a failed
+      // import never leaves empty folders behind.
       await importVideos(rows);
+      for (const c of newCats) await addVideoFolder(c, null);
       setImportMsg(`Imported ${rows.length} video${rows.length === 1 ? "" : "s"}${newCats.length ? `, added ${newCats.length} new folder${newCats.length === 1 ? "" : "s"}` : ""}.`);
       setCsvText("");
     } catch (e) {
@@ -2492,7 +2513,10 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
       toast("Couldn't save video — " + (e.message || "check Firestore rules."));
     }
   };
-  const del = (id) => deleteVideo(id).catch(() => {});
+  const del = (id) => {
+    if (!confirm("Delete this video from the library? All three teams will lose it.")) return;
+    deleteVideo(id).catch(reportError("Couldn't delete the video"));
+  };
 
   return (
     <div className="pt-5 pb-4 space-y-5">
@@ -2652,6 +2676,7 @@ const VideoModal = ({ item, onClose }) => {
                 title={item.title}
                 className="w-full h-full"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                sandbox={EMBED_SANDBOX}
                 allowFullScreen
               />
             </div>
@@ -2672,15 +2697,15 @@ const VideoModal = ({ item, onClose }) => {
 };
 
 /* ─── NUTRITION (log presets + custom food + post-meal rating) ─── */
+const HeroBar = ({ value, target, color }) => {
+  const pct = Math.min(100, target ? (value / target) * 100 : 0);
+  return (
+    <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(255,255,255,0.18)" }}>
+      <div className="h-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+    </div>
+  );
+};
 const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups }) => {
-  const Bar = ({ value, target, color }) => {
-    const pct = Math.min(100, target ? (value / target) * 100 : 0);
-    return (
-      <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(255,255,255,0.18)" }}>
-        <div className="h-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
-      </div>
-    );
-  };
   const waterDots = Array.from({ length: WATER_CUPS_GOAL }, (_, i) => i < waterCups);
   return (
     <div className="rounded-2xl p-4 text-white shadow-md" style={{ background: `linear-gradient(135deg, ${COLORS.primary}, #6E0000)` }}>
@@ -2701,7 +2726,7 @@ const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups }) => {
             </div>
             {goal?.cal > 0 && <span className="text-[10px] font-semibold opacity-70">{Math.round((totals.cal / goal.cal) * 100)}%</span>}
           </div>
-          {goal?.cal > 0 && <Bar value={totals.cal} target={goal.cal} color={COLORS.accent} />}
+          {goal?.cal > 0 && <HeroBar value={totals.cal} target={goal.cal} color={COLORS.accent} />}
         </div>
         <div>
           <div className="flex items-baseline justify-between mb-1">
@@ -2711,7 +2736,7 @@ const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups }) => {
             </div>
             {goal?.protein > 0 && <span className="text-[10px] font-semibold opacity-70">{Math.round((totals.p / goal.protein) * 100)}%</span>}
           </div>
-          {goal?.protein > 0 && <Bar value={totals.p} target={goal.protein} color={COLORS.success} />}
+          {goal?.protein > 0 && <HeroBar value={totals.p} target={goal.protein} color={COLORS.success} />}
         </div>
         <div className="grid grid-cols-2 gap-2 pt-1">
           <div className="rounded-xl px-3 py-2" style={{ backgroundColor: "rgba(255,255,255,0.10)" }}>
@@ -2753,7 +2778,7 @@ const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups }) => {
 // iPhone photos are HEIC by default, and the Image/canvas path can reject
 // on them, so try the bitmap decoder first (it handles HEIC on iOS and
 // respects the photo's orientation), then fall back to the Image path.
-const downscaleToBlob = (file, maxDim = 1600, quality = 0.86) =>
+const downscaleToBlob = (file, maxDim = 1600, quality = 0.86, type = "image/jpeg") =>
   new Promise((resolve, reject) => {
     let triedImage = false;
     const drawToBlob = (source, w, h, onFail) => {
@@ -2768,7 +2793,7 @@ const downscaleToBlob = (file, maxDim = 1600, quality = 0.86) =>
           if (blob) resolve(blob);
           else if (onFail) onFail();
           else reject(new Error("Could not shrink image"));
-        }, "image/jpeg", quality);
+        }, type, quality);
       } catch (e) {
         if (onFail) onFail();
         else reject(e);
@@ -2800,7 +2825,7 @@ const downscaleToBlob = (file, maxDim = 1600, quality = 0.86) =>
 // snapshot and the Storage path.
 const uploadFacePhoto = async (pathBase, file, maxDim = 640, quality = 0.85) => {
   let blob = null;
-  try { blob = await downscaleToBlob(file, maxDim, quality); } catch (e) { blob = null; }
+  try { blob = await downscaleToBlob(file, maxDim, quality); } catch { /* fall back to the original file */ }
   if (blob) {
     const path = `${pathBase}.jpg`;
     const snap = await uploadBytes(storageRef(storage, path), blob, { contentType: "image/jpeg" });
@@ -2841,12 +2866,6 @@ const PhotoCarousel = ({ photos = [], className = "" }) => {
     </div>
   );
 };
-
-const DrillChip = ({ icon: Icon, children }) => (
-  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 rounded-full px-2.5 py-1">
-    <Icon className="w-3 h-3" style={{ color: COLORS.accent }} /> {children}
-  </span>
-);
 
 // Uniform drill diagram: Brophy logo watermark at exactly 20% opacity behind the
 // drill's diagram photo (or behind the category icon tile when no diagram yet).
@@ -2996,7 +3015,7 @@ export const DrillModal = ({ item, onClose }) => {
           {item.photos?.length > 0 && <PhotoCarousel photos={item.photos} />}
           {embedUrl && (
             <div className="aspect-video rounded-2xl bg-slate-900 overflow-hidden">
-              <iframe src={embedUrl} title={title} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+              <iframe src={embedUrl} title={title} className="w-full h-full" sandbox={EMBED_SANDBOX} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
             </div>
           )}
           {item.tags?.length > 0 && (
@@ -3150,7 +3169,10 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
     try { await addDrill(copy); toast("Duplicated — edit the copy for the progression."); }
     catch (e) { toast("Couldn't duplicate — " + (e.message || "check Firestore rules.")); }
   };
-  const del = (id) => deleteDrill(id).catch(() => {});
+  const del = (id) => {
+    if (!confirm("Delete this drill from the shared library? Practices that use it will show it as missing.")) return;
+    deleteDrill(id).catch(reportError("Couldn't delete the drill (only its creator or the program admin can)"));
+  };
 
   return (
     <div className="pt-1 pb-4 space-y-5">
@@ -3384,7 +3406,7 @@ const DrillPicker = ({ drills, onPick, onClose }) => {
   const [search, setSearch] = useState("");
   const q = search.trim().toLowerCase();
   const cats = useMemo(() => [...new Set(drills.map((d) => d.cat).filter(Boolean))], [drills]);
-  const hits = q ? drills.filter((d) => d.name.toLowerCase().includes(q) || (d.tags || []).some((t) => t.toLowerCase().includes(q))) : null;
+  const hits = q ? drills.filter((d) => (d.kind || "drill") === "drill" && ((d.name || d.title || "").toLowerCase().includes(q) || (d.tags || []).some((t) => String(t).toLowerCase().includes(q)))) : null;
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose}>
       <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[85vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -3456,6 +3478,7 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
   const [published, setPublished] = useState(!!practice.published);
   const [targetMin, setTargetMin] = useState(practice.targetMin || 90);
   const [dirty, setDirty] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
   const [picker, setPicker] = useState(false);
   const [pickForBlock, setPickForBlock] = useState(null);
   const [viewDrill, setViewDrill] = useState(null);
@@ -3468,12 +3491,17 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
 
   useEffect(() => {
     if (!dirty || !canEdit) return;
-    const t = setTimeout(() => { onSave({ name, desc, cat, blocks, published, targetMin }); setDirty(false); }, 700);
+    // A failed save shows an error and stays "unsaved" (the next edit or
+    // Back retries) instead of silently dropping the change.
+    const t = setTimeout(() => {
+      setDirty(false);
+      Promise.resolve(onSave({ name, desc, cat, blocks, published, targetMin })).then(() => setSaveErr(""), (e) => { setSaveErr("Not saved — check your connection, then edit again to retry."); reportError("Couldn't save the practice")(e); });
+    }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, desc, cat, blocks, published, targetMin, dirty]);
 
-  const handleBack = () => { if (dirty && canEdit) onSave({ name, desc, cat, blocks, published, targetMin }); onBack(); };
+  const handleBack = () => { if (dirty && canEdit) Promise.resolve(onSave({ name, desc, cat, blocks, published, targetMin })).catch(reportError("Couldn't save the practice")); onBack(); };
   const setBlock = (i, field, value) => { setBlocks(blocks.map((b, j) => (j === i ? { ...b, [field]: value } : b))); setDirty(true); };
   const removeBlock = (i) => { setBlocks(blocks.filter((_, j) => j !== i)); setDirty(true); };
   const moveBlock = (i, dir) => { const j = i + dir; if (j < 0 || j >= blocks.length) return; const n = [...blocks]; [n[i], n[j]] = [n[j], n[i]]; setBlocks(n); setDirty(true); };
@@ -3586,6 +3614,7 @@ const PracticeDetail = ({ practice, drills, canEdit, onSave, onDelete, onBack, c
         </>
       )}
       {dirty && canEdit && <p className="text-[10px] text-slate-400 text-center">Saving…</p>}
+      {!dirty && saveErr && <p className="text-[10px] text-red-500 font-semibold text-center">{saveErr}</p>}
       {picker && <DrillPicker drills={drills} onPick={addBlock} onClose={() => setPicker(false)} />}
       {pickForBlock !== null && <DrillPicker drills={drills} onPick={(d) => fillBlock(pickForBlock, d)} onClose={() => setPickForBlock(null)} />}
       {viewDrill && <DrillModal item={viewDrill} onClose={() => setViewDrill(null)} />}
@@ -3604,7 +3633,7 @@ const PracticesView = ({ practices, drills, canEdit, add, update, del, initialOp
   const catOptions = useMemo(() => [...new Set(practices.map((p) => p.cat).filter(Boolean))].sort(), [practices]);
   const cats = ["All", ...catOptions];
   const open = practices.find((p) => p.id === openId);
-  if (open) return <PracticeDetail practice={open} drills={drills} canEdit={canEdit} catOptions={catOptions} onSave={(d) => update(open.id, d)} onDelete={async () => { await del(open.id); setOpenId(null); }} onBack={() => setOpenId(null)} />;
+  if (open) return <PracticeDetail key={open.id} practice={open} drills={drills} canEdit={canEdit} catOptions={catOptions} onSave={(d) => update(open.id, d)} onDelete={async () => { await del(open.id); setOpenId(null); }} onBack={() => setOpenId(null)} />;
   const create = async () => {
     if (!newName.trim()) return;
     try { const ref = await add(newName); setNewName(""); setCreating(false); if (ref?.id) setOpenId(ref.id); }
@@ -3697,16 +3726,22 @@ const ProgramDetail = ({ program, practices, canEdit, onSave, onDelete, onBack, 
   const [published, setPublished] = useState(!!program.published);
   const [shared, setShared] = useState(!!program.shared);
   const [dirty, setDirty] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
   const [pickFor, setPickFor] = useState(null); // index of day choosing a practice
 
   useEffect(() => {
     if (!dirty || !canEdit) return;
-    const t = setTimeout(() => { onSave({ name, desc, days, published, shared }); setDirty(false); }, 700);
+    // A failed save shows an error and stays "unsaved" (the next edit or
+    // Back retries) instead of silently dropping the change.
+    const t = setTimeout(() => {
+      setDirty(false);
+      Promise.resolve(onSave({ name, desc, days, published, shared })).then(() => setSaveErr(""), (e) => { setSaveErr("Not saved — check your connection, then edit again to retry."); reportError("Couldn't save the program")(e); });
+    }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, desc, days, published, shared, dirty]);
 
-  const handleBack = () => { if (dirty && canEdit) onSave({ name, desc, days, published, shared }); onBack(); };
+  const handleBack = () => { if (dirty && canEdit) Promise.resolve(onSave({ name, desc, days, published, shared })).catch(reportError("Couldn't save the program")); onBack(); };
   const addDay = () => { setDays([...days, { label: `Day ${days.length + 1}`, practiceId: "", note: "" }]); setDirty(true); };
   const setDay = (i, field, value) => { setDays(days.map((d, j) => (j === i ? { ...d, [field]: value } : d))); setDirty(true); };
   const removeDay = (i) => { setDays(days.filter((_, j) => j !== i)); setDirty(true); };
@@ -3769,7 +3804,7 @@ const ProgramDetail = ({ program, practices, canEdit, onSave, onDelete, onBack, 
         <>
           <button onClick={addDay} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200 text-slate-700 bg-white"><Plus className="w-3.5 h-3.5" /> Add day</button>
           <button onClick={() => onAssign({ ...program, name, days })} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 text-white" style={{ backgroundColor: COLORS.accent, color: "#fff" }}><CalendarIcon className="w-3.5 h-3.5" /> Assign to calendar</button>
-          {user?.role === "orgAdmin" && (
+          {user?.isOrgAdmin && (
             <label className="flex items-center justify-between bg-white rounded-2xl px-4 py-3 shadow-sm border border-slate-100">
               <span className="text-sm font-semibold text-slate-700">Shared curriculum <span className="block text-[11px] font-normal text-slate-500">All coaches can follow this program</span></span>
               <button onClick={() => { setShared(!shared); setDirty(true); }} aria-label="Toggle shared curriculum" className="w-11 h-6 rounded-full transition-colors relative bg-slate-200" style={shared ? { backgroundColor: COLORS.success } : {}}><span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${shared ? "left-[22px]" : "left-0.5"}`} /></button>
@@ -3783,6 +3818,7 @@ const ProgramDetail = ({ program, practices, canEdit, onSave, onDelete, onBack, 
         </>
       )}
       {dirty && canEdit && <p className="text-[10px] text-slate-400 text-center">Saving…</p>}
+      {!dirty && saveErr && <p className="text-[10px] text-red-500 font-semibold text-center">{saveErr}</p>}
       {pickFor !== null && <PracticePicker practices={practices} onPick={(p) => { setDay(pickFor, "practiceId", p.id); setPickFor(null); }} onClose={() => setPickFor(null)} />}
     </div>
   );
@@ -3795,7 +3831,7 @@ const ProgramsView = ({ programs, practices, canEdit, add, update, del, onAssign
   const open = programs.find((p) => p.id === openId);
   const sharedPrograms = programs.filter((p) => p.shared);
   const myPrograms = programs.filter((p) => !p.shared);
-  if (open) return <ProgramDetail program={open} practices={practices} canEdit={canEdit} onSave={(d) => update(open.id, d)} onDelete={async () => { await del(open.id); setOpenId(null); }} onBack={() => setOpenId(null)} onAssign={onAssign} user={user} />;
+  if (open) return <ProgramDetail key={open.id} program={open} practices={practices} canEdit={canEdit} onSave={(d) => update(open.id, d)} onDelete={async () => { await del(open.id); setOpenId(null); }} onBack={() => setOpenId(null)} onAssign={onAssign} user={user} />;
   const create = async () => {
     if (!newName.trim()) return;
     try { const ref = await add(newName); setNewName(""); setCreating(false); if (ref?.id) setOpenId(ref.id); }
@@ -3908,10 +3944,13 @@ const NewPracticeChooser = ({ practices, onCreate }) => (
 // each day (no fixed drop time), so other coaches can see what is scheduled
 // and what they need to run.
 const AssignProgramModal = ({ program, practices, importEvents, onClose }) => {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = teamDateKey();
   const [days, setDays] = useState(() =>
     (program.days || []).map((d, i) => {
-      const dt = new Date(todayStr + "T00:00:00"); dt.setDate(dt.getDate() + i);
+      // Calendar-day arithmetic on the date string (UTC noon avoids any
+      // timezone rollover), so day N is exactly N days after today.
+      const [y, m, dd] = todayStr.split("-").map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, dd + i, 12));
       return { date: dt.toISOString().slice(0, 10), start: "15:00", end: "17:00" };
     })
   );
@@ -3974,7 +4013,7 @@ const PracticePage = ({ user, drills, addDrill, updateDrill, deleteDrill, practi
   const home = () => setNav({ section: "home", mode: null, openId: null });
 
   // Today's session is whichever assigned-program event lands on today.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = teamDateKey();
   const todayEvent = events.find((e) => e.date === today && e.practiceId);
   const todayPractice = todayEvent && practices.find((p) => p.id === todayEvent.practiceId);
 
@@ -4336,9 +4375,11 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
     if (!file) return;
     setLogoBusy(true);
     try {
-      const blob = await downscaleToBlob(file, 512, 0.9);
-      const path = `branding/${user.uid}/lineup-logo-${Date.now()}.jpg`;
-      const snap = await uploadBytes(storageRef(storage, path), blob, { contentType: "image/jpeg" });
+      // PNG keeps the logo's transparency on the line-up card (JPEG would
+      // paint a black box behind it).
+      const blob = await downscaleToBlob(file, 512, 0.9, "image/png");
+      const path = `branding/${user.uid}/lineup-logo-${uploadStamp()}.png`;
+      const snap = await uploadBytes(storageRef(storage, path), blob, { contentType: "image/png" });
       const url = await getDownloadURL(snap.ref);
       await setLineupLogo(url, path);
       toast("Line-up logo updated.");
@@ -4365,7 +4406,11 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
 
   const newLineup = () => setDraft({ id: null, name: "", formation: "4-3-3", slots: slotsForFormation(FORMATIONS["4-3-3"]) });
   const editLineup = (l) => setDraft({ id: l.id, name: l.name || "", formation: l.formation || "", slots: (l.slots || []).map((s) => ({ ...s, id: s.id || lid() })) });
-  const changeFormation = (f) => setDraft((d) => ({ ...d, formation: f, slots: slotsForFormation(FORMATIONS[f]) }));
+  const changeFormation = (f) => {
+    const placed = (draft?.slots || []).filter((s) => s.uid || s.email || s.name).length;
+    if (placed && !confirm(`Switch to ${f}? The ${placed} player${placed === 1 ? "" : "s"} you placed will be cleared.`)) return;
+    setDraft((d) => ({ ...d, formation: f, slots: slotsForFormation(FORMATIONS[f]) }));
+  };
 
   const assignPlayer = (player) => {
     setDraft((d) => ({
@@ -4470,7 +4515,7 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
                   </div>
                   <button onClick={() => setSending(l)} aria-label="Send to chat" className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.primary }}><Send className="w-4 h-4" /></button>
                   <button onClick={() => editLineup(l)} aria-label="Edit" className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0"><Pencil className="w-4 h-4 text-slate-500" /></button>
-                  <button onClick={() => { if (window.confirm(`Delete "${l.name || "this line-up"}"?`)) deleteLineup(l.id); }} aria-label="Delete" className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0"><Trash2 className="w-4 h-4 text-slate-400" /></button>
+                  <button onClick={() => { if (window.confirm(`Delete "${l.name || "this line-up"}"?`)) Promise.resolve(deleteLineup(l.id)).catch(reportError("Couldn't delete the line-up")); }} aria-label="Delete" className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0"><Trash2 className="w-4 h-4 text-slate-400" /></button>
                 </div>
               );
             })}
@@ -4551,7 +4596,7 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
 // (§9 Option B, "The Toolbelt"). Same invite system as before: email
 // invites (single + bulk), team-specific invite links, and the roster list
 // with org-admin-only role badges.
-const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks = [], addInviteLink, removeInviteLink, allUsers = [], requestProfileUpdate, activeTeamId }) => {
+const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks = [], addInviteLink, removeInviteLink, allUsers = [], removeUser, requestProfileUpdate, activeTeamId }) => {
   const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email, u.name])), [allUsers]);
   // Teams this coach can invite/link to: the org admin sees all three, a
   // team coach sees only their own team(s).
@@ -4828,7 +4873,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
                     <span className="text-[10px] text-slate-400 ml-1.5">{l.uses || 0}{l.maxUses != null ? `/${l.maxUses}` : ""} uses · expires {l._expiryLabel}</span>
                   </span>
                   <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={status === "Active" ? { backgroundColor: COLORS.success + "1A", color: COLORS.success } : { backgroundColor: "#fee2e2", color: "#dc2626" }}>{status}</span>
-                  <button onClick={() => removeInviteLink(l.id).catch(() => {})} title="Revoke link" aria-label="Revoke link" className="text-slate-300 hover:text-red-500 flex-shrink-0">
+                  <button onClick={() => { if (confirm("Revoke this invite link? Anyone who hasn't joined yet won't be able to use it.")) removeInviteLink(l.id).catch(reportError("Couldn't revoke the link")); }} title="Revoke link" aria-label="Revoke link" className="text-slate-300 hover:text-red-500 flex-shrink-0">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </li>
@@ -4887,7 +4932,7 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
                     {isCoach ? "Coach" : "Player"}
                   </span>
                 )}
-                <button onClick={() => removeInvite(inv.id)} disabled={isSelf} title={isSelf ? "You can't remove yourself." : `Remove ${inv.email}`} aria-label={`Remove ${inv.email}`} className="text-slate-300 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                <button onClick={() => { if (confirm(`Remove ${inv.email} from the roster? They won't be able to sign up with this invite.`)) Promise.resolve(removeInvite(inv.id)).catch(reportError("Couldn't remove the invite")); }} disabled={isSelf} title={isSelf ? "You can't remove yourself." : `Remove ${inv.email}`} aria-label={`Remove ${inv.email}`} className="text-slate-300 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </li>
@@ -4895,9 +4940,8 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
           })}
           {/* Players who joined through an invite link: they have a users
               doc but no invitedEmails entry, so they are listed here with a
-              "Via link" tag. No role toggle and no remove button: they were
-              never invited by email, so there is no invite to change or
-              delete. */}
+              "Via link" tag. Only the program admin can remove one (deletes
+              their profile — firestore.rules users delete). */}
           {linkJoiners.map((u, j) => {
             const isCoach = u.role === "admin";
             const displayName = (u.name || "").trim();
@@ -4912,6 +4956,11 @@ const RosterInvitesPage = ({ user, isOrgAdmin = false, invites, addInvite, remov
                 <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={isCoach ? { backgroundColor: COLORS.primary, color: "white" } : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}>
                   {isCoach ? "Coach" : "Player"}
                 </span>
+                {isOrgAdmin && removeUser && u.id !== user.uid && (
+                  <button onClick={() => { if (confirm(`Remove ${displayName || u.email} from the team? They'll lose access until invited again.`)) Promise.resolve(removeUser(u.id)).catch(reportError("Couldn't remove the player")); }} aria-label={`Remove ${displayName || u.email}`} className="text-slate-300 hover:text-red-500">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </li>
             );
           })}
@@ -4953,8 +5002,11 @@ const AnnouncementsPage = ({ announcements, addAnnouncement, updateAnnouncement,
     setForm({ title: "", body: "" });
     setAdding(false);
   };
-  const togglePin = (id, pinned) => togglePinAnnouncement(id, pinned).catch(() => {});
-  const del = (id) => deleteAnnouncement(id).catch(() => {});
+  const togglePin = (id, pinned) => togglePinAnnouncement(id, pinned).catch(reportError("Couldn't pin the announcement"));
+  const del = (id) => {
+    if (!confirm("Delete this announcement?")) return;
+    deleteAnnouncement(id).catch(reportError("Couldn't delete the announcement"));
+  };
   const sorted = [...announcements].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
   return (
@@ -4964,7 +5016,7 @@ const AnnouncementsPage = ({ announcements, addAnnouncement, updateAnnouncement,
           <h3 className="text-base font-bold text-slate-900">Announcements</h3>
           <p className="text-xs text-slate-500 mt-0.5">{announcements.length} post{announcements.length === 1 ? "" : "s"} · pinned first</p>
         </div>
-        <button onClick={() => { setAdding(!adding); }} className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full text-white flex items-center gap-1 flex-shrink-0" style={{ backgroundColor: COLORS.primary }}><Plus className="w-3 h-3" /> Post</button>
+        <button onClick={() => { setEditingAnnouncementId(null); setForm({ title: "", body: "" }); setAdding(!adding); }} className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full text-white flex items-center gap-1 flex-shrink-0" style={{ backgroundColor: COLORS.primary }}><Plus className="w-3 h-3" /> Post</button>
       </div>
       {adding && (
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2">
@@ -5021,7 +5073,7 @@ const CoachCenterPage = ({ practiceProps, gameDayProps, rosterProps, calendarPro
   const events = calendarProps?.events || [];
   const documents = documentsProps?.documents || [];
   const announcements = announcementsProps?.announcements || [];
-  const todayStr = fmtLocalDate(new Date());
+  const todayStr = teamDateKey();
   const upcomingCount = events.filter((e) => (e.date || "") >= todayStr).length;
   // Pending invites = roster emails nobody has signed in with yet. The
   // roster is small, so this is computed inline (no memo needed).
@@ -5186,10 +5238,8 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
     });
     return out;
   }, [categories]);
-  const [cat, setCat] = useState(effectiveCategories[0] || "Breakfast");
-  useEffect(() => {
-    if (!effectiveCategories.includes(cat) && effectiveCategories.length) setCat(effectiveCategories[0]);
-  }, [effectiveCategories, cat]);
+  const [catPref, setCat] = useState(effectiveCategories[0] || "Breakfast");
+  const cat = effectiveCategories.includes(catPref) ? catPref : (effectiveCategories[0] || catPref);
   const [sub, setSub] = useState(null);
   // Food-type sub-category filter within the active meal category (e.g. Lunch →
   // "Fish & Seafood"). null = "All". A stale pick (from another category) simply
@@ -5229,13 +5279,14 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
     }
   };
 
+  const searchQuery = showManual ? manual.name.trim() : "";
+  const searchActive = searchQuery.length >= 2;
   useEffect(() => {
-    if (!showManual) { setSearchResults([]); return; }
-    const q = manual.name.trim();
-    if (q.length < 2) { setSearchResults([]); setSearchErr(""); return; }
+    if (!searchActive) return;
+    const q = searchQuery;
     const ctl = new AbortController();
-    setSearching(true);
     const timer = setTimeout(async () => {
+      setSearching(true);
       // Query Open Food Facts (no key) + USDA (if a key is set) at once, then
       // merge and de-dupe by name so one box searches everything.
       const tasks = [searchProducts(q, ctl.signal)];
@@ -5262,8 +5313,8 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
       setSearchResults(merged.slice(0, 16));
       setSearching(false);
     }, 300);
-    return () => { clearTimeout(timer); ctl.abort(); };
-  }, [manual.name, showManual]);
+    return () => { clearTimeout(timer); ctl.abort(); setSearching(false); };
+  }, [searchQuery, searchActive]);
   const pickFood = (r) => {
     setManual({ ...manual, name: r.name, cal: String(r.cal), p: String(r.p), c: String(r.c), f: String(r.f) });
     setSearchResults([]);
@@ -5382,8 +5433,8 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
       toast("Couldn't add — " + e.message);
     }
   };
-  const rate = (logId, feeling) => updateLog(logId, { feeling }).catch(() => {});
-  const removeLog = (logId) => deleteLog(logId).catch(() => {});
+  const rate = (logId, feeling) => updateLog(logId, { feeling }).catch(reportError("Couldn't save the rating"));
+  const removeLog = (logId) => deleteLog(logId).catch(reportError("Couldn't remove the entry"));
 
   const addSingle = async () => {
     if (!single.name.trim()) return;
@@ -5393,7 +5444,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
       if (targetCat && !categories.includes(targetCat)) await addCategory(targetCat);
       const data = {
         name, cat: targetCat,
-        sub: single.sub.trim() || "",
+        sub: (single.sub || "").trim(),
         cal: Number(single.cal) || 0,
         p: Number(single.p) || 0,
         c: Number(single.c) || 0,
@@ -5502,7 +5553,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
             <input value={single.ingredients} onChange={(e) => setSingle({ ...single, ingredients: e.target.value })} placeholder="Main ingredients, comma-separated (e.g. chicken, rice, beans)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
             <button onClick={addSingle} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white" style={{ backgroundColor: COLORS.primary }}>{editingRecipeId ? "Save Changes" : "Add Recipe"}</button>
             {editingRecipeId && (
-              <button onClick={() => { setEditingRecipeId(null); setSingle({ name: "", cat: single.cat, cal: "", p: "", c: "", f: "", prep: "", ingredients: "" }); setImportMsg(""); }} className="w-full mt-1 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100">Cancel Edit</button>
+              <button onClick={() => { setEditingRecipeId(null); setSingle({ name: "", cat: single.cat, sub: "", cal: "", p: "", c: "", f: "", prep: "", ingredients: "" }); setImportMsg(""); }} className="w-full mt-1 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100">Cancel Edit</button>
             )}
           </div>
         )}
@@ -5568,7 +5619,7 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
                         <span className="text-[10px] text-slate-400 ml-1.5">{s.cal} cal</span>
                       </button>
                       <button onClick={() => fillFromFood(s)} title="Edit portion" className="px-1.5 py-1.5 text-slate-300 hover:text-slate-600 border-l" style={{ borderColor: COLORS.border }}><Pencil className="w-3 h-3" /></button>
-                      <button onClick={() => deleteSavedFood(s.id)} title="Remove from saved" className="px-2 py-1.5 text-slate-300 hover:text-red-500 border-l" style={{ borderColor: COLORS.border }}><X className="w-3 h-3" /></button>
+                      <button onClick={() => { if (confirm(`Remove "${s.name}" from saved foods?`)) Promise.resolve(deleteSavedFood(s.id)).catch(reportError("Couldn't remove it")); }} title="Remove from saved" className="px-2 py-1.5 text-slate-300 hover:text-red-500 border-l" style={{ borderColor: COLORS.border }}><X className="w-3 h-3" /></button>
                     </div>
                   ))}
                 </div>
@@ -5610,10 +5661,10 @@ const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, i
             )}
             <div className="relative">
               <input value={manual.name} onChange={(e) => setManual({ ...manual, name: e.target.value })} placeholder="Search foods or type your own…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-              {searching && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-semibold">searching…</span>}
+              {searching && searchActive && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-semibold">searching…</span>}
             </div>
             {searchErr && <p className="text-[10px] text-red-500 font-medium px-1">{searchErr}</p>}
-            {searchResults.length > 0 && (
+            {searchActive && searchResults.length > 0 && (
               <ul className="max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 divide-y divide-slate-200">
                 {searchResults.map((r) => (
                   <li key={r.fdcId || r.barcode || r.name}>
@@ -5751,6 +5802,9 @@ const BarcodeScannerModal = ({ onClose, onScan }) => {
     let scanner = null;
     (async () => {
       try {
+        // Loaded on demand — keeps the scanner library out of the main bundle.
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+        if (cancelled) return;
         scanner = new Html5Qrcode("brophy-barcode-scanner", {
           formatsToSupport: [
             Html5QrcodeSupportedFormats.EAN_13,
@@ -6201,7 +6255,7 @@ const ScheduledModal = ({ scheduled = [], onAdd, onDelete, chatGroups = [], grou
                   {options.length > 2 && <button onClick={() => setOptions((arr) => arr.filter((_, j) => j !== i))} className="text-slate-300 hover:text-red-500"><X className="w-4 h-4" /></button>}
                 </div>
               ))}
-              {options.length < 6 && <button onClick={() => setOptions((arr) => [...arr, ""])} className="text-[11px] font-bold" style={{ color: COLORS.primary }}>+ Add option</button>}
+              {options.length < 4 && <button onClick={() => setOptions((arr) => [...arr, ""])} className="text-[11px] font-bold" style={{ color: COLORS.primary }}>+ Add option</button>}
               <div>
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Post to</p>
                 <select value={channel} onChange={(e) => setChannel(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
@@ -6250,7 +6304,7 @@ const ScheduledModal = ({ scheduled = [], onAdd, onDelete, chatGroups = [], grou
                       {recurring
                         ? <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-0.5" style={{ backgroundColor: COLORS.primary, color: "white" }}><Repeat className="w-2.5 h-2.5" />{rep}</span>
                         : s.sent ? <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: COLORS.success }} /> : <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.primary }}>Scheduled</span>}
-                      <button onClick={() => onDelete(s.id)} aria-label="Cancel" className="text-slate-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => { if (confirm("Cancel this scheduled item?")) Promise.resolve(onDelete(s.id)).catch(reportError("Couldn't cancel it")); }} aria-label="Cancel" className="text-slate-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                     </li>
                   );
                 })}
@@ -6431,7 +6485,7 @@ const PushNotificationModal = ({ pushNotifications = [], onAdd, onDelete, onSend
                       {rep
                         ? <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-0.5" style={{ backgroundColor: COLORS.primary, color: "white" }}><Repeat className="w-2.5 h-2.5" />{rep}</span>
                         : sent ? <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: COLORS.success }} /> : <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.primary }}>Scheduled</span>}
-                      <button onClick={() => onDelete(n.id)} aria-label="Delete" className="text-slate-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => { if (confirm("Delete this notification?")) Promise.resolve(onDelete(n.id)).catch(reportError("Couldn't delete it")); }} aria-label="Delete" className="text-slate-300 hover:text-red-500 flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                     </li>
                   );
                 })}
@@ -6495,7 +6549,7 @@ const VideoViewer = ({ url, onClose }) => {
   );
 };
 
-const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, markDMsRead, scheduled = [], addScheduled, deleteScheduled }) => {
+const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages = false, onLoadOlder, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, markDMsRead, scheduled = [], addScheduled, deleteScheduled }) => {
   const isAdmin = user.role === "admin";
   const [input, setInput] = useState("");
   const [showPinned, setShowPinned] = useState(true);
@@ -6568,13 +6622,28 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
   // own team's coach; a coach sees one pill per player who has a thread on
   // their team. The org admin gets none — DMs are player ↔ own team's coach
   // only (decision 2026-11-08).
+  // A coach can also START a thread with any player on the team (the
+  // thread exists locally until the first message is sent).
+  const [startedDm, setStartedDm] = useState(null); // { uid, name }
   const dmThreads = useMemo(() => {
     if (isOrgAdmin) return [];
     if (!isAdmin) return [{ id: "coach-dm", name: coachDmName, dm: true }];
     const byThread = new Map();
     dms.forEach((d) => { if (!byThread.has(d.threadId)) byThread.set(d.threadId, d); });
-    return [...byThread.entries()].map(([tid, d]) => ({ id: `dm:${tid}`, name: (dms.find((x) => x.threadId === tid && !x.isCoach)?.senderName) || d.senderName || "Player", dm: true }));
-  }, [dms, isAdmin, isOrgAdmin, coachDmName]);
+    const threads = [...byThread.entries()].map(([tid, d]) => ({ id: `dm:${tid}`, name: (dms.find((x) => x.threadId === tid && !x.isCoach)?.senderName) || d.senderName || "Player", dm: true }));
+    if (startedDm && !byThread.has(startedDm.uid)) threads.unshift({ id: `dm:${startedDm.uid}`, name: startedDm.name || "Player", dm: true });
+    return threads;
+  }, [dms, isAdmin, isOrgAdmin, coachDmName, startedDm]);
+  const dmPlayers = useMemo(
+    () => (isAdmin && !isOrgAdmin ? allUsers.filter((u) => u.role === "player" && u.id !== user.uid) : []),
+    [allUsers, isAdmin, isOrgAdmin, user.uid],
+  );
+  const startDmWith = (uid) => {
+    const p = dmPlayers.find((u) => u.id === uid);
+    if (!p) return;
+    setStartedDm({ uid, name: p.name || p.email || "Player" });
+    setActiveChannel(`dm:${uid}`);
+  };
   const channels = [
     { id: "team", name: "Team", channel: true },
     ...visibleChannels.map((c) => ({ id: c.id, name: c.name, pinned: !!c.pinned, channel: true })),
@@ -6637,6 +6706,12 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
   };
 
   // File extension from a name, lowercased; fallback when there is none.
+  const FILE_MIME_BY_EXT = {
+    pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    txt: "text/plain", csv: "text/csv", rtf: "application/rtf",
+  };
   const fileExt = (name, fallback) => {
     const parts = String(name || "").split(".");
     const ext = parts.length > 1 ? parts.pop().toLowerCase() : "";
@@ -6678,7 +6753,9 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
       const ext = fileExt(file.name, "bin");
       const path = `chat/${activeTeamId}/${effectiveChannel}/${user.uid}/${Date.now()}.${ext}`;
       const ref = storageRef(storage, path);
-      const snap = await uploadBytes(ref, file, { contentType: file.type || "application/octet-stream" });
+      // Some browsers report an empty type for Office files; Storage rules
+      // reject application/octet-stream, so infer it from the extension.
+      const snap = await uploadBytes(ref, file, { contentType: file.type || FILE_MIME_BY_EXT[ext] || "application/octet-stream" });
       const url = await getDownloadURL(snap.ref);
       if (isDM) {
         await addDM("", dmThreadId, { attachment: { type: "file", url, path, name: file.name || "file" } });
@@ -6790,8 +6867,11 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
     }
   };
 
-  const togglePin = (m) => togglePinMessage(m.id, m.pinned).catch(() => {});
-  const delMsg = (id) => deleteMessage(id).catch(() => {});
+  const togglePin = (m) => togglePinMessage(m.id, m.pinned).catch(reportError("Couldn't pin the message"));
+  const delMsg = (id) => {
+    if (!confirm("Delete this message for everyone?")) return;
+    deleteMessage(id).catch(reportError("Couldn't delete the message"));
+  };
   const startReply = (m) => setReplyTo({ id: m.id, sender: m.sender, text: m.text, kind: m.kind, question: m.question });
   const cancelReply = () => setReplyTo(null);
   const [copiedId, setCopiedId] = useState(null);
@@ -6932,6 +7012,14 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
           {!isOrgAdmin && (
             <>
               <div className="px-4 pt-4 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Direct messages</div>
+              {dmPlayers.length > 0 && (
+                <div className="px-4 pb-2">
+                  <select value="" onChange={(e) => startDmWith(e.target.value)} aria-label="Message a player" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-white text-slate-600">
+                    <option value="">+ Message a player…</option>
+                    {dmPlayers.map((p) => <option key={p.id} value={p.id}>{p.name || p.email}</option>)}
+                  </select>
+                </div>
+              )}
               {dmConvs.length === 0 ? (
                 <p className="px-4 py-2 text-xs text-slate-400 italic">No direct messages yet.</p>
               ) : (
@@ -7106,6 +7194,11 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
 
           <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 min-h-0 overflow-y-auto" style={{ backgroundColor: COLORS.bg }}>
             <div className="min-h-full flex flex-col justify-end space-y-3 px-4 py-4">
+            {hasOlderMessages && onLoadOlder && (
+              <button onClick={onLoadOlder} className="self-center text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-500">Load older messages</button>
+            )}
+            {isLoading(messages) && <p className="text-center text-xs text-slate-400 py-6">Loading messages…</p>}
+            {!isLoading(messages) && stream.length === 0 && <p className="text-center text-xs text-slate-400 italic py-6">No messages here yet. Say hello!</p>}
             {stream.map((item) => {
               if (item.kind === "divider") return <DateDivider key={item.id} label={item.label} />;
               if (item.kind === "announcement") {
@@ -7114,7 +7207,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
                   <div key={item.id} className="rounded-2xl p-3.5 shadow-sm border" style={{ backgroundColor: COLORS.accentSoft, borderColor: COLORS.accent }}>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5" style={{ color: COLORS.accent }}><Bell className="w-3 h-3" /> Announcement</span>
-                      {isAdmin && deleteAnnouncement && <button onClick={() => deleteAnnouncement(a.id).catch(() => {})} className="text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>}
+                      {isAdmin && deleteAnnouncement && <button onClick={() => { if (confirm("Delete this announcement?")) deleteAnnouncement(a.id).catch(reportError("Couldn't delete the announcement")); }} className="text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>}
                     </div>
                     <div className="text-sm font-bold text-slate-900 mt-1">{a.title}</div>
                     {a.body && <div className="text-xs text-slate-600 mt-0.5 leading-snug">{a.body}</div>}
@@ -7187,7 +7280,7 @@ const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, messages, addMes
                           const count = Object.values(reax).filter((v) => v === key).length;
                           const mine = reax[user.uid] === key;
                           return (
-                            <button key={key} onClick={() => reactToMessage(m.id, mine ? null : key)} aria-label={key} className={`text-[11px] leading-none px-1.5 py-1 rounded-full border transition-colors ${mine ? "border-transparent" : "border-slate-200 bg-white hover:bg-slate-50"} ${count ? "" : "opacity-60"}`} style={mine ? { backgroundColor: COLORS.accentSoft } : {}}>
+                            <button key={key} onClick={() => reactToMessage(m.id, mine ? null : key).catch(reportError("Couldn't save your reaction"))} aria-label={key} className={`text-[11px] leading-none px-1.5 py-1 rounded-full border transition-colors ${mine ? "border-transparent" : "border-slate-200 bg-white hover:bg-slate-50"} ${count ? "" : "opacity-60"}`} style={mine ? { backgroundColor: COLORS.accentSoft } : {}}>
                               {emoji}{count > 0 ? <span className="ml-0.5 font-semibold text-slate-600">{count}</span> : ""}
                             </button>
                           );
@@ -7647,6 +7740,7 @@ const WorkoutsView = ({ workouts, canEdit, add, update, del, readOnlyLabel, lib,
   if (open) {
     return (
       <WorkoutDetail
+        key={open.id}
         workout={open}
         canEdit={canEdit}
         lib={lib}
@@ -7772,19 +7866,25 @@ const WorkoutDetail = ({ workout, canEdit, lib, onSave, onDelete, onDuplicate, o
   const [name, setName] = useState(workout.name || "");
   const [exercises, setExercises] = useState(workout.exercises || []);
   const [dirty, setDirty] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
   const [picker, setPicker] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
   const [advanced, setAdvanced] = useState(false); // reveal %/RPE/tempo/superset editors
 
   useEffect(() => {
     if (!dirty || !canEdit) return;
-    const t = setTimeout(() => { onSave({ name, exercises }); setDirty(false); }, 700);
+    // A failed save shows an error and stays "unsaved" (the next edit or
+    // Back retries) instead of silently dropping the change.
+    const t = setTimeout(() => {
+      setDirty(false);
+      Promise.resolve(onSave({ name, exercises })).then(() => setSaveErr(""), (e) => { setSaveErr("Not saved — check your connection, then edit again to retry."); reportError("Couldn't save the workout")(e); });
+    }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, exercises, dirty]);
 
   const handleBack = () => {
-    if (dirty && canEdit) onSave({ name, exercises });
+    if (dirty && canEdit) Promise.resolve(onSave({ name, exercises })).catch(reportError("Couldn't save the workout"));
     onBack();
   };
 
@@ -7931,6 +8031,7 @@ const WorkoutDetail = ({ workout, canEdit, lib, onSave, onDelete, onDuplicate, o
       )}
 
       {dirty && canEdit && <p className="text-[10px] text-slate-400 text-center">Saving…</p>}
+      {!dirty && saveErr && <p className="text-[10px] text-red-500 font-semibold text-center">{saveErr}</p>}
 
       {exercises.length > 0 && (
         <button onClick={() => downloadWorkoutFile({ name, exercises })} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200 text-slate-700 bg-white">
@@ -7999,7 +8100,7 @@ const GymPage = ({ user, myWorkouts, addMyWorkout, updateMyWorkout, deleteMyWork
         <p className="text-[11px] leading-snug text-slate-500 mt-2 px-1">Pre-Practice Prehab — bands only, ~12 min before every practice and at home. Your school lifting (2×/week) is separate.</p>
       </div>
 
-      {view === "library" && <ExerciseLibrary items={mergedLib.items} loading={mergedLib.loading} err={mergedLib.err} myWorkouts={myWorkouts} addMyWorkout={addMyWorkout} updateMyWorkout={updateMyWorkout} canEdit={isAdmin} uid={user.uid} addCustomExercise={addCustomExercise} updateCustomExercise={updateCustomExercise} deleteCustomExercise={deleteCustomExercise} seedLifts={seedLifts} seedTeamWorkouts={seedTeamWorkouts} />}
+      {view === "library" && <ExerciseLibrary items={mergedLib.items} loading={mergedLib.loading} err={mergedLib.err} myWorkouts={myWorkouts} addMyWorkout={addMyWorkout} updateMyWorkout={updateMyWorkout} canEdit={isAdmin} uid={user.uid} addCustomExercise={addCustomExercise} updateCustomExercise={updateCustomExercise} deleteCustomExercise={deleteCustomExercise} seedLifts={seedLifts} />}
       {view === "mine" && (
         <WorkoutsView
           workouts={myWorkouts}
@@ -8218,7 +8319,8 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdmin = fa
       setPhotoBusy(false);
     }
   };
-  const [pushOn, setPushOn] = useState(currentPermission() === "granted");
+  // On = this device has a saved token (permission alone stays granted after Off).
+  const [pushOn, setPushOn] = useState(() => pushEnabledOnThisDevice());
   const [pushBusy, setPushBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -8253,7 +8355,7 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdmin = fa
     setPushBusy(true);
     try {
       if (pushOn) {
-        await clearAllPushTokens(user.uid);
+        await disablePushOnThisDevice(user.uid);
         setPushOn(false);
       } else {
         await enablePushNotifications(user.uid);
@@ -8695,11 +8797,18 @@ export default function TeamHubRolesApp() {
       }
     })();
   }, [user, isCoach, visibleTeams]);
-  const [tab, setTab] = useState("home");
+  // Deep link (?tab=X from a notification or shared link) picks the first tab.
+  // Gym/Nutrition/Videos live under the Train hub.
+  const initialTab = (() => { try { return new URLSearchParams(window.location.search).get("tab") || ""; } catch { return ""; } })();
+  const [tab, setTab] = useState(() => (["gym", "nutrition", "videos"].includes(initialTab) ? "train" : initialTab || "home"));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [previewAsPlayer, setPreviewAsPlayer] = useState(false);
-  const [trainView, setTrainView] = useState(null); // player Train sub-page: gym | nutrition | videos
+  const [trainView, setTrainView] = useState(() => (["gym", "nutrition", "videos"].includes(initialTab) ? initialTab : null)); // Train sub-page: gym | nutrition | videos
   const [showTour, setShowTour] = useState(false);
+  // First-login welcome tour, once per device (localStorage). Derived during
+  // render instead of set from an effect.
+  const [tourSeen, setTourSeen] = useState(() => { try { return Boolean(localStorage.getItem(TOUR_SEEN_KEY)); } catch { return true; } });
+  const tourOpen = showTour || (Boolean(user) && !tourSeen);
   // Offer a refresh when a newer build is deployed while the app is open.
   const { updateReady, reload } = useAppUpdate();
   // Automatic live-data recovery: re-sync Firestore whenever the app comes
@@ -8712,10 +8821,10 @@ export default function TeamHubRolesApp() {
   // First-login welcome tour. "Seen" is tracked per-device in localStorage, so
   // it auto-runs once and never nags again (no backend/rules change needed).
   // Bump the key suffix to re-show the tour to everyone after a big update.
-  useEffect(() => {
-    if (user && !localStorage.getItem(TOUR_SEEN_KEY)) setShowTour(true);
-  }, [user]);
-  const closeTour = () => { setShowTour(false); localStorage.setItem(TOUR_SEEN_KEY, "1"); };
+  const closeTour = () => {
+    setShowTour(false); setTourSeen(true);
+    try { localStorage.setItem(TOUR_SEEN_KEY, "1"); } catch { /* private mode */ }
+  };
 
   // Shared face-photo upload for the welcome tour and the Home nudge.
   // Same flow as Settings: downscale, store under avatars/{uid}/{ts}.jpg,
@@ -8733,25 +8842,38 @@ export default function TeamHubRolesApp() {
     } catch (e) {
       const msg = "Couldn't add photo. " + (e.message || "Try again.");
       toast(msg);
-      throw new Error(msg);
+      throw new Error(msg, { cause: e });
     }
   };
 
-  // If we're returning from a magic-link email, finish the sign-in.
+  // Returning from a magic-link email: finish the sign-in. If the link was
+  // opened on a different device/browser (no stored email), LoginScreen asks
+  // for the email inline instead of a blocking window.prompt.
+  const [emailLinkPending, setEmailLinkPending] = useState(() => {
+    try { return isSignInWithEmailLink(auth, window.location.href); } catch { return false; }
+  });
+  const completeEmailLink = async (email) => {
+    await signInWithEmailLink(auth, email.trim().toLowerCase(), window.location.href);
+    try { localStorage.removeItem(EMAIL_FOR_SIGNIN_KEY); } catch { /* private mode */ }
+    window.history.replaceState({}, "", "/");
+    setEmailLinkPending(false);
+  };
   useEffect(() => {
-    if (!isSignInWithEmailLink(auth, window.location.href)) return;
-    let email = localStorage.getItem(EMAIL_FOR_SIGNIN_KEY);
-    if (!email) email = window.prompt("Confirm the email this link was sent to:");
-    if (!email) return;
+    if (!emailLinkPending) return;
+    let email = "";
+    try { email = localStorage.getItem(EMAIL_FOR_SIGNIN_KEY) || ""; } catch { /* private mode */ }
+    if (!email) return; // LoginScreen shows the confirm-email form
     signInWithEmailLink(auth, email, window.location.href)
       .then(() => {
-        localStorage.removeItem(EMAIL_FOR_SIGNIN_KEY);
+        try { localStorage.removeItem(EMAIL_FOR_SIGNIN_KEY); } catch { /* private mode */ }
         window.history.replaceState({}, "", "/");
+        setEmailLinkPending(false);
       })
       .catch((e) => {
         console.error("email-link sign-in failed:", e);
         toast("Couldn't finish sign-in — " + (e.message || "link expired."));
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Deep-link to the right tab when arriving via ?tab=X or notification click.
@@ -8766,9 +8888,7 @@ export default function TeamHubRolesApp() {
     }
   };
   useEffect(() => {
-    const fromQuery = new URLSearchParams(window.location.search).get("tab");
-    if (fromQuery) {
-      routeToTab(fromQuery);
+    if (new URLSearchParams(window.location.search).get("tab")) {
       window.history.replaceState({}, "", window.location.pathname);
     }
     if ("serviceWorker" in navigator) {
@@ -8807,15 +8927,20 @@ export default function TeamHubRolesApp() {
       createdAt: serverTimestamp(),
     });
 
-  // App-wide prompts (e.g. "everyone update your profile"). One doc per kind.
+  // Team-scoped app prompts + branding: one doc per kind PER TEAM
+  // (`profilePrompt_{teamId}`, `lineupLogo_{teamId}`) so a coach of one team
+  // can't change another team's settings (firestore.rules appConfig). The
+  // legacy global docs are still read as a fallback until each team sets its own.
   const appConfig = useCollection(lockedOut ? null : ("appConfig"));
-  const profilePrompt = appConfig.find((d) => d.id === "profilePrompt");
+  const profilePrompt = appConfig.find((d) => d.id === `profilePrompt_${activeTeamId}`)
+    || appConfig.find((d) => d.id === "profilePrompt");
   // Team logo used as the centered watermark on every game-day line-up.
-  const lineupLogo = appConfig.find((d) => d.id === "lineupLogo");
+  const lineupLogo = appConfig.find((d) => d.id === `lineupLogo_${activeTeamId}`)
+    || appConfig.find((d) => d.id === "lineupLogo");
   const setLineupLogo = (url, path) =>
-    setDoc(doc(db, "appConfig", "lineupLogo"), { url: url || "", path: path || "", updatedByName: user.name }, { merge: true });
+    setDoc(doc(db, "appConfig", `lineupLogo_${activeTeamId}`), { url: url || "", path: path || "", updatedByName: user.name }, { merge: true });
   const requestProfileUpdate = async () => {
-    await setDoc(doc(db, "appConfig", "profilePrompt"), { requestedAt: new Date().toISOString(), byName: user.name }, { merge: true });
+    await setDoc(doc(db, "appConfig", `profilePrompt_${activeTeamId}`), { requestedAt: new Date().toISOString(), byName: user.name }, { merge: true });
     // Reuse the announcement fan-out so it also lands as a push to everyone.
     await addAnnouncement("Update your profile", "Please add your full name so the team roster shows who's who. Tap Update now or open Settings.");
   };
@@ -8884,6 +9009,9 @@ export default function TeamHubRolesApp() {
     const batch = writeBatch(db);
     rows.forEach((r) => batch.set(doc(collection(db, "events")), {
       ...r,
+      // Absolute start (team time) so the reminder function can schedule the
+      // 1-hour and 7 AM pings for imported / program-assigned sessions too.
+      startAt: r.startAt || zonedDate(r.date, r.start),
       teamId: activeTeamId,
       audienceKeys: audienceKeysFor(r.visibleTo, groupsList),
       createdAt: serverTimestamp(),
@@ -8923,15 +9051,30 @@ export default function TeamHubRolesApp() {
         n++;
       }
     });
+    const affectedChannels = [];
     chatGroups.forEach((c) => {
-      if ((c.visibleTo?.groupIds || []).includes(id)) {
-        batch.update(doc(db, "chatGroups", c.id), { audienceKeys: audienceKeysFor(c.visibleTo, nextGroups) });
-        n++;
-      }
+      if ((c.visibleTo?.groupIds || []).includes(id)) affectedChannels.push(c);
     });
     if (n) await batch.commit();
+    // Channels addressed to this group: re-stamp their messages FIRST, then
+    // the channel (same order as updateChatGroup), so removed members lose
+    // the history and added members gain it — enforced by the rules.
+    for (const c of affectedChannels) {
+      await restampChannel(c.id, audienceKeysFor(c.visibleTo, nextGroups), c.teamId || activeTeamId);
+    }
+  };
+  // Re-stamp EVERY message of a channel with the channel's audience. Queried
+  // from the server (not just the messages loaded in this session), so older
+  // history outside the chat window is covered too.
+  const restampChannel = async (channelId, audienceKeys, teamId) => {
+    const snap = await getDocs(query(collection(db, "messages"), where("teamId", "==", teamId), where("channel", "==", channelId)));
+    await commitInChunks(snap.docs, (b, d) => b.update(d.ref, { audienceKeys }));
+    await updateDoc(doc(db, "chatGroups", channelId), { audienceKeys });
   };
   const deleteGroup = (id) => deleteDoc(doc(db, "groups", id));
+  // Org admin: remove a player's profile (e.g. someone who joined by link).
+  // Their sign-in stops working until they're invited again.
+  const removeUser = (uid) => deleteDoc(doc(db, "users", uid));
 
   const videos = useCollection(lockedOut ? null : ("videos"), orderBy("createdAt", "desc"));
   const addVideo = (data) =>
@@ -9090,8 +9233,11 @@ export default function TeamHubRolesApp() {
   // (Energy 1 = wiped out, Soreness 1 = very sore, Tiredness 1 = exhausted).
   // A readiness verdict (Ready / Modified / Rest) is stored on the doc at
   // submit time and normalized on read, so older docs still render.
-  const today = new Date().toISOString().slice(0, 10);
-  const wellnessRaw = useCollection(lockedOut ? null : ("wellnessCheckins"), where("teamId", "==", activeTeamId), where("date", "==", today));
+  // "Today" on the team clock (America/Phoenix) — see lib/dates.js.
+  const today = teamDateKey();
+  // Coach-only: the whole team's check-ins (players' read rule only allows
+  // their own doc, so players don't open this query at all).
+  const wellnessRaw = useCollection(lockedOut || !isCoach ? null : ("wellnessCheckins"), where("teamId", "==", activeTeamId), where("date", "==", today));
   const wellness = useMemo(
     () => wellnessRaw.map((w) => normalizeWellness({ ...w, time: formatAgo(w.updatedAt) })),
     [wellnessRaw],
@@ -9111,7 +9257,9 @@ export default function TeamHubRolesApp() {
 
   // Food log — private subcollection per player (guide §4 + §5)
   const logsPath = user ? `logs/${user.uid}/entries` : null;
-  const logged = useCollection(lockedOut ? null : (logsPath), orderBy("createdAt", "desc"));
+  // Most recent 400 entries — enough for today's totals, recents and a
+  // year-long streak without downloading the whole history every launch.
+  const logged = useCollection(lockedOut ? null : (logsPath), orderBy("createdAt", "desc"), limit(400));
   const addLog = async (data) => {
     const ref = await addDoc(collection(db, logsPath), { ...data, createdAt: serverTimestamp() });
     // Bump the activity marker so coach compliance view sees this player today.
@@ -9120,7 +9268,7 @@ export default function TeamHubRolesApp() {
       uid: user.uid,
       date: today,
       lastLoggedAt: serverTimestamp(),
-    }, { merge: true }).catch(() => {});
+    }, { merge: true }).catch(reportError("Couldn't update today's meal check-in"));
     return ref;
   };
   const updateLog = (id, data) =>
@@ -9231,7 +9379,8 @@ export default function TeamHubRolesApp() {
   //    team (useAuth redeems ?invite=CODE at first sign-in). The doc id IS
   //    the code (a random token = the capability); shape documented in
   //    src/data/teams.js, rules in firestore.rules.
-  const invites = useCollection(lockedOut ? null : ("invitedEmails"), where("teamId", "==", activeTeamId), orderBy("email"));
+  // Coach-only: the roster's emails are not visible to players (rules).
+  const invites = useCollection(lockedOut || !isCoach ? null : ("invitedEmails"), where("teamId", "==", activeTeamId), orderBy("email"));
   const addInvite = (email, teamId) => {
     const e = email.trim().toLowerCase();
     if (!e.includes("@")) return Promise.reject(new Error("Invalid email."));
@@ -9291,7 +9440,7 @@ export default function TeamHubRolesApp() {
   // Invite links for the team being viewed. Single-field query (no composite
   // index needed); sorted client-side in the roster UI. Players can't list
   // them (rules) — the hook swallows that permission error.
-  const inviteLinks = useCollection(lockedOut ? null : ("inviteLinks"), where("teamId", "==", activeTeamId));
+  const inviteLinks = useCollection(lockedOut || !isCoach ? null : ("inviteLinks"), where("teamId", "==", activeTeamId));
   // Toggle a roster entry between player and admin. Updates the invite doc
   // (controls role for future first-sign-ins) AND any existing users doc with
   // that email (changes role for already-signed-up players immediately).
@@ -9335,7 +9484,7 @@ export default function TeamHubRolesApp() {
     // the admin picked. Primary is the first picked team (or the existing
     // primary if it's still one of them).
     const finalTeams = finalRole === "orgAdmin" ? [...TEAM_IDS] : validTeams;
-    const finalPrimary = finalTeams.includes(primaryTeamId) ? primaryTeamId : finalTeams[0];
+    const finalPrimary = finalTeams.includes(primaryTeamId) ? primaryTeamId : (finalTeams[0] || null);
     await updateDoc(doc(db, "users", uid), { role: finalRole, teamIds: finalTeams, primaryTeamId: finalPrimary });
     // Keep the invite record in sync so a future re-sign-in doesn't revert
     // the role. Best-effort: invite-link sign-ups have no invitedEmails doc.
@@ -9396,7 +9545,13 @@ export default function TeamHubRolesApp() {
   };
 
   // Chat — pinned status lives on each message doc (guide §4)
-  const messages = useAudienceCollection(lockedOut ? null : ("messages"), user, "createdAt", activeTeamId);
+  // Most recent `msgLimit` messages of the team (all channels); "Load older"
+  // in the chat raises the window. Keeps launches fast as history grows.
+  const MSG_PAGE = 300;
+  const [msgLimit, setMsgLimit] = useState(MSG_PAGE);
+  const messages = useAudienceCollection(lockedOut ? null : ("messages"), user, "createdAt", activeTeamId, msgLimit);
+  const loadOlderMessages = () => setMsgLimit((n) => n + MSG_PAGE);
+  const hasOlderMessages = messages.length >= msgLimit;
   const addMessage = (text, { attachment, pinned, replyTo, poll, channel } = {}) => {
     // A message inherits the audience of its channel so hidden channels stay
     // private server-side; the Team channel is visible to everyone.
@@ -9412,7 +9567,7 @@ export default function TeamHubRolesApp() {
       // active team's main channel). Rules + queries scope by this field.
       teamId: ch?.teamId || activeTeamId,
       audienceKeys: ch?.audienceKeys?.length ? ch.audienceKeys : ["*"],
-      isCoach: user.role === "admin",
+      isCoach: user.role === "admin" || user.role === "orgAdmin",
       readBy: { [user.uid]: serverTimestamp() },
       createdAt: serverTimestamp(),
     };
@@ -9439,7 +9594,7 @@ export default function TeamHubRolesApp() {
   const postLineupImage = async (blob, channel, name) => {
     const ch = channel || "team";
     const chDoc = ch !== "team" ? chatGroups.find((c) => c.id === ch) : null;
-    const path = `chat/${chDoc?.teamId || activeTeamId}/${ch}/${user.uid}/${Date.now()}.jpg`;
+    const path = `chat/${chDoc?.teamId || activeTeamId}/${ch}/${user.uid}/${uploadStamp()}.jpg`;
     const r = storageRef(storage, path);
     const snap = await uploadBytes(r, blob, { contentType: "image/jpeg" });
     const url = await getDownloadURL(snap.ref);
@@ -9453,13 +9608,10 @@ export default function TeamHubRolesApp() {
   const deleteMessage = (id) => deleteDoc(doc(db, "messages", id));
   const markMessagesRead = async (ids) => {
     if (!ids?.length) return;
-    const batch = writeBatch(db);
-    ids.forEach((id) => {
-      batch.update(doc(db, "messages", id), {
-        [`readBy.${user.uid}`]: serverTimestamp(),
-      });
-    });
-    await batch.commit();
+    // Chunked: a single batch over 500 writes always fails.
+    await commitInChunks(ids, (b, id) => b.update(doc(db, "messages", id), {
+      [`readBy.${user.uid}`]: serverTimestamp(),
+    }));
   };
   const voteOnPoll = (messageId, optionIndex) =>
     updateDoc(doc(db, "messages", messageId), {
@@ -9493,12 +9645,8 @@ export default function TeamHubRolesApp() {
   // than leaving a private channel whose backlog is still world-readable.
   const updateChatGroup = async (id, visibleTo) => {
     const audienceKeys = audienceKeysFor(visibleTo, groupsList);
-    const channelMessages = messages.filter((m) => m.channel === id);
-    for (let i = 0; i < channelMessages.length; i += 400) {
-      const batch = writeBatch(db);
-      channelMessages.slice(i, i + 400).forEach((m) => batch.update(doc(db, "messages", m.id), { audienceKeys }));
-      await batch.commit();
-    }
+    const ch = chatGroups.find((c) => c.id === id);
+    await restampChannel(id, audienceKeys, ch?.teamId || activeTeamId);
     await updateDoc(doc(db, "chatGroups", id), { visibleTo, audienceKeys });
   };
 
@@ -9589,6 +9737,8 @@ export default function TeamHubRolesApp() {
     lockedOut ? null : (user && user.role !== "orgAdmin" ? "dms" : null),
     where("teamId", "==", activeTeamId),
     ...(isTeamCoach ? [] : [where("threadId", "==", user?.uid || "_")]),
+    orderBy("createdAt", "desc"),
+    limit(msgLimit),
   );
   const addDM = (text, threadId, { attachment } = {}) => {
     const data = {
@@ -9609,13 +9759,9 @@ export default function TeamHubRolesApp() {
   // Mark DM messages read (readBy only — same pattern as channel messages).
   const markDMsRead = async (ids) => {
     if (!ids?.length) return;
-    const batch = writeBatch(db);
-    ids.forEach((id) => {
-      batch.update(doc(db, "dms", id), {
-        [`readBy.${user.uid}`]: serverTimestamp(),
-      });
-    });
-    await batch.commit();
+    await commitInChunks(ids, (b, id) => b.update(doc(db, "dms", id), {
+      [`readBy.${user.uid}`]: serverTimestamp(),
+    }));
   };
 
   // Quote of the Day — latest coach-posted quote; posting one fans out a push.
@@ -9642,7 +9788,7 @@ export default function TeamHubRolesApp() {
       </div>
     );
   }
-  if (!user) return <LoginScreen externalError={authError} clearExternalError={clearError} />;
+  if (!user) return <LoginScreen externalError={authError} clearExternalError={clearError} emailLinkPending={emailLinkPending} onCompleteEmailLink={completeEmailLink} />;
   // Locked door: drill-library-only accounts (role drillBuilder, or any role
   // outside the three team roles) see the no-access screen instead of the
   // app shell — no team views render, and every subscription above was
@@ -9652,7 +9798,8 @@ export default function TeamHubRolesApp() {
   // Force a real first+last name before using the app (auto name = email prefix).
   const emailPrefix = (user.email || "").split("@")[0];
   const needsProfile = !user.name || user.name.trim() === emailPrefix || !user.name.trim().includes(" ");
-  if (needsProfile) return <NameGate user={user} onDone={() => window.location.reload()} />;
+  // The live profile (useAuth) picks up the saved name — no reload needed.
+  if (needsProfile) return <NameGate user={user} />;
 
   // "View as player" preview — a real coach can drop their effective role to
   // player to see exactly what the team sees. Identity (uid/name) stays real.
@@ -9770,8 +9917,8 @@ export default function TeamHubRolesApp() {
         {updateReady && <UpdateBanner onReload={reload} color={COLORS.primary} />}
         <Header title={title} user={effUser} onAvatarClick={() => setSettingsOpen(true)} onPreview={() => { setPreviewAsPlayer(true); setTab("home"); }} onRefresh={resyncFirestore} refreshing={firestoreSyncing} stale={firestoreStale} />
         {canSeeMultipleTeams && <TeamSwitcher teams={visibleTeams} activeTeamId={activeTeamId} onSelect={setPreferredTeamId} />}
-        {settingsOpen && <SettingsModal user={user} onClose={() => setSettingsOpen(false)} onSignOut={() => signOut(auth)} onReplayTour={() => { setSettingsOpen(false); setShowTour(true); }} isOrgAdmin={user.role === "orgAdmin"} orgUsers={orgUsers} setUserRoleAndTeams={setUserRoleAndTeams} />}
-        <WelcomeTour open={showTour} role={effUser.role} onClose={closeTour} user={user} onUploadPhoto={uploadOwnPhoto} />
+        {settingsOpen && <SettingsModal user={user} onClose={() => setSettingsOpen(false)} onSignOut={() => signOutUser(user.uid)} onReplayTour={() => { setSettingsOpen(false); setShowTour(true); }} isOrgAdmin={user.role === "orgAdmin"} orgUsers={orgUsers} setUserRoleAndTeams={setUserRoleAndTeams} />}
+        <WelcomeTour key={tourOpen ? "tour-open" : "tour-closed"} open={tourOpen} role={effUser.role} onClose={closeTour} user={user} onUploadPhoto={uploadOwnPhoto} />
         {previewAsPlayer && realIsAdmin && (
           <button onClick={() => setPreviewAsPlayer(false)} className="w-full flex items-center justify-center gap-2 py-2 text-[11px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: COLORS.primary }}>
             <Eye className="w-3.5 h-3.5" /> Viewing as a player — tap to exit
@@ -9781,7 +9928,7 @@ export default function TeamHubRolesApp() {
           {/* Desktop content cap: the column goes wide on a laptop, but the
               pages stay readable (and the pitch stays usable) at 72rem. */}
           <div className="w-full lg:max-w-6xl lg:mx-auto h-full flex flex-col">
-          {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} isOrgAdmin={user.role === "orgAdmin"} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} checkin={checkin} setCheckin={setCheckin} wellness={wellness} submitWellness={submitWellness} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} inviteLinks={inviteLinks} addInviteLink={addInviteLink} removeInviteLink={removeInviteLink} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
+          {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} isOrgAdmin={user.role === "orgAdmin"} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} wellness={wellness} wellnessLoading={isLoading(wellnessRaw)} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} inviteLinks={inviteLinks} addInviteLink={addInviteLink} removeInviteLink={removeInviteLink} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
           {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} practices={practices} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} nutritionTarget={myNutritionGoal} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} onUploadPhoto={uploadOwnPhoto} />}
           {activeTab === "train" && (
             trainView ? (
@@ -9795,16 +9942,16 @@ export default function TeamHubRolesApp() {
           )}
           {activeTab === "practice" && effUser.role === "admin" && (
             <CoachCenterPage
-              practiceProps={{ user: effUser, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events }}
+              practiceProps={{ user: { ...effUser, isOrgAdmin: user.role === "orgAdmin" }, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events }}
               gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, setPlayerPhoto, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId) }}
-              rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId }}
+              rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", removeUser, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId }}
               calendarProps={{ user: effUser, events, practices, teamWorkouts, personalEvents, addEvent, updateEvent, addPersonalEvent, updatePersonalEvent, deleteEvent, deletePersonalEvent, importEvents, groups: groupsList, addGroup, updateGroupMembers, deleteGroup, invites, allUsers, chatGroups }}
               documentsProps={{ user: effUser, documents, rosterCount: invites.filter((i) => i.role !== "admin").length, onUpload: addDocument, onDelete: deleteDocument, onSign: signDocument }}
               announcementsProps={{ announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement }}
             />
           )}
           {activeTab === "calendar" && <CalendarPage user={effUser} events={events} practices={practices} teamWorkouts={teamWorkouts} personalEvents={personalEvents} addEvent={addEvent} updateEvent={updateEvent} addPersonalEvent={addPersonalEvent} updatePersonalEvent={updatePersonalEvent} deleteEvent={deleteEvent} deletePersonalEvent={deletePersonalEvent} importEvents={importEvents} groups={groupsList} addGroup={addGroup} updateGroupMembers={updateGroupMembers} deleteGroup={deleteGroup} invites={invites} allUsers={allUsers} chatGroups={chatGroups} />}
-          {activeTab === "messages" && <MessagesPage user={effUser} activeTeamId={activeTeamId} isOrgAdmin={user.role === "orgAdmin"} allUsers={allUsers} messages={messages} addMessage={addMessage} togglePinMessage={togglePinMessage} deleteMessage={deleteMessage} markMessagesRead={markMessagesRead} voteOnPoll={voteOnPoll} reactToMessage={reactToMessage} rosterCount={invites.length} chatGroups={chatGroups} addChatGroup={addChatGroup} deleteChatGroup={deleteChatGroup} updateChatGroup={updateChatGroup} onPinChannel={pinChatGroup} groups={groupsList} invites={invites} announcements={announcements} addAnnouncement={addAnnouncement} deleteAnnouncement={deleteAnnouncement} dms={dms} addDM={addDM} markDMsRead={markDMsRead} scheduled={scheduled} addScheduled={addScheduled} deleteScheduled={deleteScheduled} />}
+          {activeTab === "messages" && <MessagesPage user={effUser} activeTeamId={activeTeamId} hasOlderMessages={hasOlderMessages} onLoadOlder={loadOlderMessages} isOrgAdmin={user.role === "orgAdmin"} allUsers={allUsers} messages={messages} addMessage={addMessage} togglePinMessage={togglePinMessage} deleteMessage={deleteMessage} markMessagesRead={markMessagesRead} voteOnPoll={voteOnPoll} reactToMessage={reactToMessage} rosterCount={invites.length} chatGroups={chatGroups} addChatGroup={addChatGroup} deleteChatGroup={deleteChatGroup} updateChatGroup={updateChatGroup} onPinChannel={pinChatGroup} groups={groupsList} invites={invites} announcements={announcements} addAnnouncement={addAnnouncement} deleteAnnouncement={deleteAnnouncement} dms={dms} addDM={addDM} markDMsRead={markDMsRead} scheduled={scheduled} addScheduled={addScheduled} deleteScheduled={deleteScheduled} />}
           </div>
         </main>
         <nav className="lg:hidden flex-shrink-0 w-full bg-white border-t border-slate-200 z-20" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>

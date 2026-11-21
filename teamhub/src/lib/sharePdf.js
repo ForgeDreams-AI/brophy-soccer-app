@@ -11,7 +11,6 @@
 // Returns true when the PDF was produced (shared, opened, or the user
 // cancelled the share sheet); false only when there was nothing to render.
 
-import html2pdf from "html2pdf.js";
 
 export async function shareSheetPdf(filename) {
   const el = document.getElementById("print-sheet");
@@ -24,6 +23,9 @@ export async function shareSheetPdf(filename) {
     jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
     pagebreak: { mode: ["css", "legacy"] },
   };
+  // Loaded on demand — html2pdf (html2canvas + jsPDF) is large and only
+  // needed when someone exports a sheet.
+  const { default: html2pdf } = await import("html2pdf.js");
   const blob = await html2pdf().set(opt).from(el).outputPdf("blob");
   const file = new File([blob], filename, { type: "application/pdf" });
   // Native share sheet (iOS Safari): Save to Files, Print, AirDrop, …

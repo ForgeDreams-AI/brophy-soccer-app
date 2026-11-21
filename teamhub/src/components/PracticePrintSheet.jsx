@@ -21,6 +21,7 @@ import { createPortal } from "react-dom";
 import { Printer, X, LayoutGrid } from "lucide-react";
 import { BoardSvg } from "./TacticsBoard";
 import { shareSheetPdf } from "../lib/sharePdf";
+import { toast } from "../lib/toast";
 
 const RED = "#980000";
 const durLabel = (d) => {
@@ -110,6 +111,8 @@ export default function PracticePrintSheet({ practice, drills = [], teamName = "
     try {
       const safe = (practice.name || "practice").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "practice";
       await shareSheetPdf(`${safe}.pdf`);
+    } catch (e) {
+      toast("Couldn't make the PDF — " + (e?.message || "try again."));
     } finally {
       setBusy(false);
     }
