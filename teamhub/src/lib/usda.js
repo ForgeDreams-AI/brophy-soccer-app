@@ -1,48 +1,37 @@
-// Thin wrapper around USDA FoodData Central search.
-// Get a free key at https://fdc.nal.usda.gov/api-key-signup.html
-// then put it in .env.local as VITE_USDA_API_KEY=...
-// (See teamhub/README.md → "Food search".)
+// USDA FoodData Central search — through the app's own server route.
+//
+// The USDA API key used to be baked into the public JS bundle
+// (VITE_USDA_API_KEY), where anyone could copy it. Now the browser calls
+// the same-origin Cloudflare Worker route /api/usda (worker/index.js), which
+// adds the key from a Worker secret (USDA_API_KEY) and returns a trimmed
+// result list. No key ever reaches the browser.
+//
+// If the route isn't available (local `npm run dev`, or a host without the
+// Worker), USDA search is simply skipped and food search uses Open Food
+// Facts only — it never throws at the user.
 
-const KEY = import.meta.env.VITE_USDA_API_KEY;
-const BASE = "https://api.nal.usda.gov/fdc/v1";
+const ENDPOINT = "/api/usda";
 
-// USDA nutrient IDs — stable across the API.
-const N = { cal: 1008, p: 1003, c: 1005, f: 1004 };
+let available = null; // null = unknown, true/false after the first call
 
-const pickNutrients = (food) => {
-  const out = { cal: 0, p: 0, c: 0, f: 0 };
-  for (const n of food.foodNutrients || []) {
-    const id = n.nutrientId ?? n.nutrient?.id;
-    const val = n.value ?? n.amount;
-    if (val == null) continue;
-    if (id === N.cal) out.cal = Math.round(val);
-    else if (id === N.p) out.p = Math.round(val);
-    else if (id === N.c) out.c = Math.round(val);
-    else if (id === N.f) out.f = Math.round(val);
-  }
-  return out;
-};
-
-export const hasUsdaKey = () => Boolean(KEY);
+export const usdaAvailable = () => available !== false;
 
 export async function searchFoods(query, signal) {
-  if (!query?.trim()) return [];
-  if (!KEY) throw new Error("Missing VITE_USDA_API_KEY (see README → Food search)");
-
-  const url = new URL(`${BASE}/foods/search`);
-  url.searchParams.set("api_key", KEY);
-  url.searchParams.set("query", query.trim());
-  url.searchParams.set("pageSize", "8");
-  url.searchParams.set("dataType", "Foundation,SR Legacy,Survey (FNDDS)");
-
-  const res = await fetch(url, { signal });
+  const q = (query || "").trim();
+  if (!q || available === false) return [];
+  let res;
+  try {
+    res = await fetch(`${ENDPOINT}?q=${encodeURIComponent(q.slice(0, 100))}`, { signal });
+  } catch (e) {
+    if (e?.name === "AbortError") throw e;
+    return [];
+  }
+  const type = res.headers.get("content-type") || "";
+  // The SPA fallback answers an unknown path with index.html: no route here.
+  // 503 = the Worker has no USDA_API_KEY secret yet.
+  if (res.status === 404 || res.status === 503 || !type.includes("application/json")) { available = false; return []; }
   if (!res.ok) throw new Error(`USDA ${res.status}`);
-
+  available = true;
   const data = await res.json();
-  return (data.foods || []).map((f) => ({
-    fdcId: f.fdcId,
-    name: f.description,
-    brand: f.brandName || f.brandOwner || "",
-    ...pickNutrients(f), // values are per 100g for Foundation/SR/FNDDS
-  }));
+  return Array.isArray(data.foods) ? data.foods : [];
 }
