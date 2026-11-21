@@ -34,11 +34,26 @@ npm run test:rules           # emulators: all pass (62 tests at time of writing)
 
 ## 2. Back up Firestore (rollback safety)
 
-```bash
-gcloud firestore export gs://brophy-soccer-app.firebasestorage.app/backups/$(date +%Y%m%d-%H%M) --project brophy-soccer-app
-```
+**Where backups go: `gs://brophy-soccer-app-backups/firestore-backups/`.**
 
-Wait until it reports success. Note the backup path in your report.
+This bucket is in **us-central1**, the same region as the Firestore database. Firestore can only export to a bucket in `us` or `us-central1`, so the Storage bucket (`brophy-soccer-app.firebasestorage.app`) **cannot** be used: it is in us-east1 and the export fails.
+
+1. **Confirm the bucket and its region:**
+   ```bash
+   gcloud storage buckets describe gs://brophy-soccer-app-backups --project brophy-soccer-app --format="value(location)"
+   ```
+   - **Expected:** `US-CENTRAL1`.
+   - If the bucket doesn't exist, create it in the same region (a multi-region `US` bucket would also work):
+     ```bash
+     gcloud storage buckets create gs://brophy-soccer-app-backups --project brophy-soccer-app --location=us-central1 --uniform-bucket-level-access
+     ```
+2. **Take a fresh backup right before deploying the rules:**
+   ```bash
+   gcloud firestore export gs://brophy-soccer-app-backups/firestore-backups/$(date +%Y-%m-%d-%H%M) --project brophy-soccer-app
+   ```
+   - Wait until it reports success.
+   - Note the full backup path in your report. You need it for **Rollback → Data**.
+3. **Earlier restore point:** `gs://brophy-soccer-app-backups/firestore-backups/2026-11-20` was taken during the first deploy attempt, before anything was deployed. Keep it. Still take the fresh backup above, so the rollback point matches the data at deploy time.
 
 ## 3. Deploy security rules (Firestore + Storage)
 
@@ -203,7 +218,11 @@ Use real accounts, or ask Batman/Anthony to do these. Record pass/fail for each:
   ```
   Then `git checkout -- .` to restore the files.
 - **Functions:** redeploy from the previous commit (`git checkout fda7cbc -- functions && npx -y firebase-tools@14 deploy --only functions`).
-- **Data:** `gcloud firestore import <backup path from step 2>`. This is a last resort, because it overwrites changes made since the backup.
+- **Data:** last resort, because it overwrites changes made since the backup. Use the path noted in step 2:
+  ```bash
+  gcloud firestore import gs://brophy-soccer-app-backups/firestore-backups/<YYYY-MM-DD-HHMM> --project brophy-soccer-app
+  ```
+  The older restore point is `gs://brophy-soccer-app-backups/firestore-backups/2026-11-20`.
 - **Frontend:** in Cloudflare Pages, "Rollback to this deployment" on the previous build. For a Worker, use `npx wrangler rollback`.
 
 ## Report back
