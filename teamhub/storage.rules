@@ -27,6 +27,28 @@ service firebase.storage {
     function isMemberOfTeam(teamId) {
       return request.auth != null && (isOrgAdminUser() || myTeamIds().hasAny([teamId]));
     }
+    // The caller has a users/{uid} profile (passed the invite gate). A bare
+    // signed-in account with no profile reads nothing.
+    function hasProfile() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid));
+    }
+    // A coach of this team: the org admin (coaches all three) or a per-team
+    // coach (role admin with this team in teamIds).
+    function isTeamCoach(teamId) {
+      return request.auth != null
+        && (myRole() == 'orgAdmin' || (myRole() == 'admin' && myTeamIds().hasAny([teamId])));
+    }
+    // A per-team coach of this team ONLY — the org admin is excluded, same
+    // as the Firestore DM rules (DMs are between a player and their own
+    // team's coach; decision 2026-11-08).
+    function isPerTeamCoach(teamId) {
+      return request.auth != null && myRole() == 'admin' && myTeamIds().hasAny([teamId]);
+    }
+    // Shared-library uploads (drills, drill PDFs): coaches and drill builders.
+    function canBuildDrills() {
+      return request.auth != null && myRole() in ['admin', 'orgAdmin', 'drillBuilder'];
+    }
     // The caller shares at least one team with the user who owns `uid`'s
     // profile (used for avatars). Returns false when either doc is missing.
     // NOTE: Storage rules functions are single expressions — `if` statements
@@ -46,13 +68,23 @@ service firebase.storage {
     // only read/write under a team they're on. Reads are additionally
     // gated to the channel's audience so files in a hidden channel stay
     // private, matching the message rules. Uploader writes their own folder.
+    // DM attachments live under channel 'coach-dm' (a player's upload into
+    // their own thread, uid = the player) or 'dm:{playerUid}' (a coach's
+    // upload into that player's thread): readable only by that player and
+    // their team's per-team coach — never other players, and not the org
+    // admin (matches the dms rules). DM channels never hit the chatGroups
+    // lookup.
     // Size caps: images 10 MB, videos 100 MB, documents 25 MB.
     match /chat/{teamId}/{channel}/{uid}/{filename} {
       allow read: if request.auth != null && isMemberOfTeam(teamId) && (
         channel == 'team'
-        || isAdminUser()
-        || firestore.get(/databases/(default)/documents/chatGroups/$(channel))
-             .data.get('audienceKeys', ['*']).hasAny(myAudienceKeys())
+        || (channel == 'coach-dm'
+              ? (request.auth.uid == uid || isPerTeamCoach(teamId))
+              : channel.matches('^dm:.+')
+                ? (request.auth.uid == channel.split(':')[1] || isPerTeamCoach(teamId))
+                : (isAdminUser()
+                   || firestore.get(/databases/(default)/documents/chatGroups/$(channel))
+                        .data.get('audienceKeys', ['*']).hasAny(myAudienceKeys())))
       );
       allow write: if request.auth != null
         && isMemberOfTeam(teamId)
@@ -66,12 +98,12 @@ service firebase.storage {
 
     // Legacy chat images uploaded before team-scoped paths existed
     // (chat/{channel}/{uid}/{filename} and chat/{uid}/{filename}).
-    // Read-only for signed-in members; no new writes.
+    // Read-only for anyone with a profile; no new writes.
     match /chat/{channel}/{uid}/{filename} {
-      allow read: if request.auth != null;
+      allow read: if hasProfile();
     }
     match /chat/{uid}/{filename} {
-      allow read: if request.auth != null;
+      allow read: if hasProfile();
     }
 
     // Profile photos. Path shape: avatars/{uid}/{filename}. Readable by the
@@ -90,67 +122,72 @@ service firebase.storage {
     }
 
     // Team branding — e.g. the logo watermarked onto game-day line-ups.
-    // Path shape: branding/{uid}/{filename}. Any signed-in member reads; only
-    // the uploader (a coach) writes to their own folder (image, max 10MB).
+    // Path shape: branding/{uid}/{filename}. Anyone with a profile reads;
+    // only a coach writes, to their own folder (image, max 10MB).
     match /branding/{uid}/{filename} {
-      allow read: if request.auth != null;
+      allow read: if hasProfile();
       allow write: if request.auth != null
         && request.auth.uid == uid
+        && isAdminUser()
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
 
     // Drill photos + diagrams. Path shape: drills/{uid}/{filename}.
-    // The drill library is shared across all three Brophy teams, so any
-    // signed-in team member can read; only the uploader writes to their
-    // own folder, must be an image, max 10MB.
+    // The drill library is shared across all three Brophy teams, so anyone
+    // with a profile can read; only a coach or drill builder uploads, to
+    // their own folder, must be an image, max 10MB.
     match /drills/{uid}/{filename} {
-      allow read: if request.auth != null;
+      allow read: if hasProfile();
       allow write: if request.auth != null
         && request.auth.uid == uid
+        && canBuildDrills()
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
 
     // Session PDFs (Practice Plans). Path shape: drillPdfs/{uid}/{filename}.
-    // The drill library is shared across all three Brophy teams, so any
-    // signed-in team member can read; only the uploader writes to their
-    // own folder, must be a PDF, max 50MB.
+    // The drill library is shared across all three Brophy teams, so anyone
+    // with a profile can read; only a coach or drill builder uploads, to
+    // their own folder, must be a PDF, max 50MB.
     match /drillPdfs/{uid}/{filename} {
-      allow read: if request.auth != null;
+      allow read: if hasProfile();
       allow write: if request.auth != null
         && request.auth.uid == uid
+        && canBuildDrills()
         && request.resource.size < 50 * 1024 * 1024
         && request.resource.contentType.matches('application/pdf');
     }
 
     // Coach-authored exercise photos. Path shape: exercises/{uid}/{filename}.
-    // Shared exercise library — same as drills.
+    // Shared exercise library: anyone with a profile reads; only a coach
+    // uploads, to their own folder.
     match /exercises/{uid}/{filename} {
-      allow read: if request.auth != null;
+      allow read: if hasProfile();
       allow write: if request.auth != null
         && request.auth.uid == uid
+        && isAdminUser()
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
 
     // Team documents (PDF, Office files, images, etc.). Path shape:
     // documents/{teamId}/{uid}/{filename}. Readable only by members of that
-    // team; only a member of the team writes, under their own uid folder,
-    // max 50MB (presentations with media run large). No content-type
-    // restriction — the app curates which types coaches can pick.
+    // team; only a coach of the team (or the org admin) writes, under their
+    // own uid folder, max 50MB (presentations with media run large). No
+    // content-type restriction — the app curates which types coaches can pick.
     match /documents/{teamId}/{uid}/{filename} {
       allow read: if request.auth != null && isMemberOfTeam(teamId);
       allow write: if request.auth != null
-        && isMemberOfTeam(teamId)
+        && isTeamCoach(teamId)
         && request.auth.uid == uid
         && request.resource.size < 50 * 1024 * 1024;
     }
 
     // Legacy team documents uploaded before team-scoped paths existed
-    // (documents/{uid}/{filename}). Read-only for signed-in members; no new writes.
+    // (documents/{uid}/{filename}). Read-only for anyone with a profile; no new writes.
     match /documents/{uid}/{filename} {
-      allow read: if request.auth != null;
+      allow read: if hasProfile();
     }
   }
 }
