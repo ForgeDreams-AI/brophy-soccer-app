@@ -9249,6 +9249,11 @@ export default function TeamHubRolesApp() {
   // behind the lock screen. Firestore rules fail closed anyway; this is
   // the UX lock. Defined here, before the first subscription.
   const lockedOut = Boolean(user) && isLockedOutRole(user.role);
+  // No subscriptions until someone is signed in (and never for a locked-out
+  // role). Listening while signed out was denied by the rules, popped a
+  // "Some data couldn't load" toast on the login screen, and those dead
+  // listeners did not restart after sign-in.
+  const noData = !user || lockedOut;
   // A per-team coach (role 'admin' only — NOT the org admin). DMs are
   // between a player and their own team's coach, so the org admin never
   // subscribes to DM threads (decision 2026-11-08).
@@ -9416,7 +9421,7 @@ export default function TeamHubRolesApp() {
   }, [user, lockedOut]);
 
   // Live from Firestore — see Build Guide §4 + §8
-  const announcements = useCollection(lockedOut ? null : ("announcements"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
+  const announcements = useCollection(noData ? null : ("announcements"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const addAnnouncement = (title, body) =>
     addDoc(collection(db, "announcements"), {
       teamId: activeTeamId,
@@ -9430,7 +9435,7 @@ export default function TeamHubRolesApp() {
   // (`profilePrompt_{teamId}`, `lineupLogo_{teamId}`) so a coach of one team
   // can't change another team's settings (firestore.rules appConfig). The
   // legacy global docs are still read as a fallback until each team sets its own.
-  const appConfig = useCollection(lockedOut ? null : ("appConfig"));
+  const appConfig = useCollection(noData ? null : ("appConfig"));
   const profilePrompt = appConfig.find((d) => d.id === `profilePrompt_${activeTeamId}`)
     || appConfig.find((d) => d.id === "profilePrompt");
   // Team logo used as the centered watermark on every game-day line-up.
@@ -9449,14 +9454,14 @@ export default function TeamHubRolesApp() {
     updateDoc(doc(db, "announcements", id), { title: title.trim(), body: (body || "").trim() });
   const deleteAnnouncement = (id) => deleteDoc(doc(db, "announcements", id));
 
-  const eventsRaw = useAudienceCollection(lockedOut ? null : ("events"), user, null, activeTeamId);
-  const groupsList = useCollection(lockedOut ? null : ("groups"), where("teamId", "==", activeTeamId), orderBy("name"));
+  const eventsRaw = useAudienceCollection(noData ? null : ("events"), user, null, activeTeamId);
+  const groupsList = useCollection(noData ? null : ("groups"), where("teamId", "==", activeTeamId), orderBy("name"));
   // Admin-only view of signed-in players for the Groups picker. Defer the
   // listener until the user is known + actually an admin (rules deny otherwise).
   // Roster for the active team only (a coach picks players from their own
   // team; the org admin switches teams to see the others).
   const allUsers = useCollection(
-    lockedOut ? null : (isCoach ? "users" : null),
+    noData ? null : (isCoach ? "users" : null),
     where("teamIds", "array-contains", activeTeamId),
     orderBy("name"),
   );
@@ -9464,7 +9469,7 @@ export default function TeamHubRolesApp() {
   // the Settings admin model (§10): the program admin manages roles and team
   // assignments here. A team coach never subscribes (rules deny otherwise).
   const orgUsers = useCollection(
-    lockedOut ? null : (user?.role === "orgAdmin" ? "users" : null),
+    noData ? null : (user?.role === "orgAdmin" ? "users" : null),
     orderBy("name"),
   );
   const events = useMemo(() => {
@@ -9521,7 +9526,7 @@ export default function TeamHubRolesApp() {
 
   // Personal events — own subcollection, never seen by others.
   const personalPath = user ? `users/${user.uid}/personalEvents` : null;
-  const personalEvents = useCollection(lockedOut ? null : (personalPath));
+  const personalEvents = useCollection(noData ? null : (personalPath));
   const addPersonalEvent = (data) =>
     addDoc(collection(db, personalPath), { ...data, createdAt: serverTimestamp() });
   const updatePersonalEvent = (id, data) =>
@@ -9575,7 +9580,7 @@ export default function TeamHubRolesApp() {
   // Their sign-in stops working until they're invited again.
   const removeUser = (uid) => deleteDoc(doc(db, "users", uid));
 
-  const videos = useCollection(lockedOut ? null : ("videos"), orderBy("createdAt", "desc"));
+  const videos = useCollection(noData ? null : ("videos"), orderBy("createdAt", "desc"));
   const addVideo = (data) =>
     addDoc(collection(db, "videos"), { ...data, createdAt: serverTimestamp() });
   const updateVideo = (id, data) => updateDoc(doc(db, "videos", id), data);
@@ -9592,7 +9597,7 @@ export default function TeamHubRolesApp() {
   // parent is null for a top-level folder, or the parent folder's name for
   // a subfolder. The six built-in folders (VIDEO_CATS) always show; custom
   // folders from here join them.
-  const videoFolderDocs = useCollection(lockedOut ? null : ("videoFolders"), orderBy("name"));
+  const videoFolderDocs = useCollection(noData ? null : ("videoFolders"), orderBy("name"));
   const addVideoFolder = (name, parent) =>
     addDoc(collection(db, "videoFolders"), { name: name.trim(), parent: parent || null, createdAt: serverTimestamp() });
   const deleteVideoFolder = (id) => deleteDoc(doc(db, "videoFolders", id));
@@ -9614,7 +9619,7 @@ export default function TeamHubRolesApp() {
 
   // Shared documents library (Train → Documents): items for all teams plus
   // the active team's own. Coaches upload to Storage library/{scope}/{uid}/.
-  const libraryItems = useCollection(lockedOut ? null : ("libraryItems"), where("teamId", "in", ["all", activeTeamId]), orderBy("createdAt", "desc"));
+  const libraryItems = useCollection(noData ? null : ("libraryItems"), where("teamId", "in", ["all", activeTeamId]), orderBy("createdAt", "desc"));
   const addLibraryItem = async ({ kind, file, url, title, folder, desc, scope, notify }, onProgress) => {
     const teamId = scope === "all" ? "all" : activeTeamId;
     const base = { teamId, title, folder: folder || "", desc: desc || "", notify: Boolean(notify), createdByUid: user.uid, createdByName: user.name, createdAt: serverTimestamp() };
@@ -9637,7 +9642,7 @@ export default function TeamHubRolesApp() {
   // this app AND the standalone Drill Library site — a drill made in either
   // shows up in both. The shared document shape lives in src/lib/drillDoc.js.
   // `createdByUid` is stamped on create: the drillLibrary rules require it.
-  const drillsRaw = useCollection(lockedOut ? null : ("drillLibrary"), orderBy("createdAt", "desc"));
+  const drillsRaw = useCollection(noData ? null : ("drillLibrary"), orderBy("createdAt", "desc"));
   const drills = useMemo(() => drillsRaw.map(normalizeDrillDoc), [drillsRaw]);
   const addDrill = (data) =>
     addDoc(collection(db, "drillLibrary"), {
@@ -9650,7 +9655,7 @@ export default function TeamHubRolesApp() {
   const deleteDrill = (id) => deleteDoc(doc(db, "drillLibrary", id));
 
   // Practices — saved sessions assembled from drills (mirrors teamWorkouts).
-  const practices = useCollection(lockedOut ? null : ("practices"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
+  const practices = useCollection(noData ? null : ("practices"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   // Accepts a plain name (string) or a full template object (blank / starter / copy).
   const addPractice = (input) => {
     const base = typeof input === "string" ? { name: input } : (input || {});
@@ -9666,7 +9671,7 @@ export default function TeamHubRolesApp() {
   const deletePractice = (id) => deleteDoc(doc(db, "practices", id));
 
   // Programs — ordered sequences of practices (dates assigned at assign-time).
-  const programs = useCollection(lockedOut ? null : ("programs"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
+  const programs = useCollection(noData ? null : ("programs"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   // Accepts a plain name (string) or a full object (copy / shared curriculum).
   const addProgram = (input) => {
     const base = typeof input === "string" ? { name: input } : (input || {});
@@ -9681,7 +9686,7 @@ export default function TeamHubRolesApp() {
 
   // Game-day starting line-ups — coach assembles players onto a pitch and
   // saves the "field" under a custom name (mirrors practices CRUD).
-  const lineups = useCollection(lockedOut ? null : ("lineups"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
+  const lineups = useCollection(noData ? null : ("lineups"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const addLineup = (data) =>
     addDoc(collection(db, "lineups"), {
       teamId: activeTeamId,
@@ -9693,7 +9698,7 @@ export default function TeamHubRolesApp() {
 
   // Coach-authored exercises — mixed into the public Exercise Library, same
   // shape so they slot under the same equipment/muscle tags.
-  const customExercises = useCollection(lockedOut ? null : ("customExercises"), orderBy("createdAt", "desc"));
+  const customExercises = useCollection(noData ? null : ("customExercises"), orderBy("createdAt", "desc"));
   const addCustomExercise = (data) =>
     addDoc(collection(db, "customExercises"), { ...data, createdAt: serverTimestamp() });
   const updateCustomExercise = (id, data) => updateDoc(doc(db, "customExercises", id), data);
@@ -9710,7 +9715,7 @@ export default function TeamHubRolesApp() {
     return { added: fresh.length, skipped: liftSeedDocs().length - fresh.length };
   };
 
-  const recipeDocs = useCollection(lockedOut ? null : ("recipes"), orderBy("createdAt", "desc"));
+  const recipeDocs = useCollection(noData ? null : ("recipes"), orderBy("createdAt", "desc"));
   const recipes = recipeDocs; // already shaped {id, name, cat, cal, p, c, f, prep, createdAt}
   const addRecipe = (data) =>
     addDoc(collection(db, "recipes"), { ...data, createdAt: serverTimestamp() });
@@ -9722,7 +9727,7 @@ export default function TeamHubRolesApp() {
     await batch.commit();
   };
 
-  const categoryDocs = useCollection(lockedOut ? null : ("categories"), orderBy("name"));
+  const categoryDocs = useCollection(noData ? null : ("categories"), orderBy("name"));
   const categories = useMemo(() => categoryDocs.map((c) => c.name).filter(Boolean), [categoryDocs]);
   const addCategory = (name) =>
     addDoc(collection(db, "categories"), { name: name.trim() });
@@ -9751,7 +9756,7 @@ export default function TeamHubRolesApp() {
   const today = teamDateKey();
   // Coach-only: the whole team's check-ins (players' read rule only allows
   // their own doc, so players don't open this query at all).
-  const wellnessRaw = useCollection(lockedOut || !isCoach ? null : ("wellnessCheckins"), where("teamId", "==", activeTeamId), where("date", "==", today));
+  const wellnessRaw = useCollection(noData || !isCoach ? null : ("wellnessCheckins"), where("teamId", "==", activeTeamId), where("date", "==", today));
   const wellness = useMemo(
     () => wellnessRaw.map((w) => normalizeWellness({ ...w, time: formatAgo(w.updatedAt) })),
     [wellnessRaw],
@@ -9773,7 +9778,7 @@ export default function TeamHubRolesApp() {
   const logsPath = user ? `logs/${user.uid}/entries` : null;
   // Most recent 400 entries — enough for today's totals, recents and a
   // year-long streak without downloading the whole history every launch.
-  const logged = useCollection(lockedOut ? null : (logsPath), orderBy("createdAt", "desc"), limit(400));
+  const logged = useCollection(noData ? null : (logsPath), orderBy("createdAt", "desc"), limit(400));
   const addLog = async (data) => {
     const ref = await addDoc(collection(db, logsPath), { ...data, createdAt: serverTimestamp() });
     // Bump the activity marker so coach compliance view sees this player today.
@@ -9791,7 +9796,7 @@ export default function TeamHubRolesApp() {
 
   // Saved / favorite foods — private per player, for one-tap re-logging.
   const savedFoodsPath = user ? `logs/${user.uid}/savedFoods` : null;
-  const savedFoods = useCollection(lockedOut ? null : (savedFoodsPath), orderBy("createdAt", "desc"));
+  const savedFoods = useCollection(noData ? null : (savedFoodsPath), orderBy("createdAt", "desc"));
   const addSavedFood = (data) =>
     addDoc(collection(db, savedFoodsPath), { ...data, createdAt: serverTimestamp() });
   const deleteSavedFood = (id) => deleteDoc(doc(db, savedFoodsPath, id));
@@ -9799,7 +9804,7 @@ export default function TeamHubRolesApp() {
   // Water tracking — one doc per player per day.
   const waterDocId = user ? `${user.uid}_${today}` : null;
   const waterToday = useCollection(
-    lockedOut ? null : (user ? "water" : null),
+    noData ? null : (user ? "water" : null),
     where("uid", "==", user?.uid || "_"),
     where("date", "==", today),
   );
@@ -9818,7 +9823,7 @@ export default function TeamHubRolesApp() {
   // The Today page and the nutrition hero only ever show the player their
   // own goal. (Path must be a valid Firestore document: an even number of
   // segments. logs/{uid}/goal has 3 and crashes the app on sign-in.)
-  const myNutritionGoal = useDoc(lockedOut ? null : (user ? `logs/${user.uid}/goals/main` : null));
+  const myNutritionGoal = useDoc(noData ? null : (user ? `logs/${user.uid}/goals/main` : null));
   const saveMyNutritionGoal = ({ cal, protein }) =>
     setDoc(doc(db, "logs", user.uid, "goals", "main"), {
       cal: Number(cal) || 0,
@@ -9839,7 +9844,7 @@ export default function TeamHubRolesApp() {
 
   // Coach-only compliance view — players' read rule would deny these.
   const mealLogActivityToday = useCollection(
-    lockedOut ? null : (isCoach ? "mealLogActivity" : null),
+    noData ? null : (isCoach ? "mealLogActivity" : null),
     where("teamId", "==", activeTeamId),
     where("date", "==", today),
   );
@@ -9847,7 +9852,7 @@ export default function TeamHubRolesApp() {
   // Player "Today" completion signals — scoped to the current user so the
   // queries satisfy the per-owner read rules.
   const myWellnessDocs = useCollection(
-    lockedOut ? null : (user ? "wellnessCheckins" : null),
+    noData ? null : (user ? "wellnessCheckins" : null),
     where("uid", "==", user?.uid || "_"),
     where("date", "==", today),
   );
@@ -9864,7 +9869,7 @@ export default function TeamHubRolesApp() {
   );
 
   // Team documents + e-sign — coach uploads, everyone signs (signatures array).
-  const documents = useCollection(lockedOut ? null : ("documents"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
+  const documents = useCollection(noData ? null : ("documents"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const addDocument = async ({ title, file }) => {
     if (!file) throw new Error("No file selected.");
     const path = `documents/${activeTeamId}/${user.uid}/${Date.now()}-${file.name}`;
@@ -9909,7 +9914,7 @@ export default function TeamHubRolesApp() {
   //    the code (a random token = the capability); shape documented in
   //    src/data/teams.js, rules in firestore.rules.
   // Coach-only: the roster's emails are not visible to players (rules).
-  const invites = useCollection(lockedOut || !isCoach ? null : ("invitedEmails"), where("teamId", "==", activeTeamId), orderBy("email"));
+  const invites = useCollection(noData || !isCoach ? null : ("invitedEmails"), where("teamId", "==", activeTeamId), orderBy("email"));
   const addInvite = (email, teamId) => {
     const e = email.trim().toLowerCase();
     if (!e.includes("@")) return Promise.reject(new Error("Invalid email."));
@@ -9969,7 +9974,7 @@ export default function TeamHubRolesApp() {
   // Invite links for the team being viewed. Single-field query (no composite
   // index needed); sorted client-side in the roster UI. Players can't list
   // them (rules) — the hook swallows that permission error.
-  const inviteLinks = useCollection(lockedOut || !isCoach ? null : ("inviteLinks"), where("teamId", "==", activeTeamId));
+  const inviteLinks = useCollection(noData || !isCoach ? null : ("inviteLinks"), where("teamId", "==", activeTeamId));
   // Toggle a roster entry between player and admin. Updates the invite doc
   // (controls role for future first-sign-ins) AND any existing users doc with
   // that email (changes role for already-signed-up players immediately).
@@ -10024,7 +10029,7 @@ export default function TeamHubRolesApp() {
 
   // Workouts — personal (private subcollection) + team-published
   const myWorkoutsPath = user ? `users/${user.uid}/workouts` : null;
-  const myWorkouts = useCollection(lockedOut ? null : (myWorkoutsPath), orderBy("updatedAt", "desc"));
+  const myWorkouts = useCollection(noData ? null : (myWorkoutsPath), orderBy("updatedAt", "desc"));
   const addMyWorkout = (input) => {
     const base = typeof input === "string" ? { name: input } : (input || {});
     return addDoc(collection(db, myWorkoutsPath), {
@@ -10039,7 +10044,7 @@ export default function TeamHubRolesApp() {
     updateDoc(doc(db, myWorkoutsPath, id), { ...data, updatedAt: serverTimestamp() });
   const deleteMyWorkout = (id) => deleteDoc(doc(db, myWorkoutsPath, id));
 
-  const teamWorkouts = useCollection(lockedOut ? null : ("teamWorkouts"), where("teamId", "==", activeTeamId), orderBy("updatedAt", "desc"));
+  const teamWorkouts = useCollection(noData ? null : ("teamWorkouts"), where("teamId", "==", activeTeamId), orderBy("updatedAt", "desc"));
   const addTeamWorkout = (input) => {
     const base = typeof input === "string" ? { name: input } : (input || {});
     return addDoc(collection(db, "teamWorkouts"), {
@@ -10078,7 +10083,7 @@ export default function TeamHubRolesApp() {
   // in the chat raises the window. Keeps launches fast as history grows.
   const MSG_PAGE = 300;
   const [msgLimit, setMsgLimit] = useState(MSG_PAGE);
-  const messages = useAudienceCollection(lockedOut ? null : ("messages"), user, "createdAt", activeTeamId, msgLimit);
+  const messages = useAudienceCollection(noData ? null : ("messages"), user, "createdAt", activeTeamId, msgLimit);
   const loadOlderMessages = () => setMsgLimit((n) => n + MSG_PAGE);
   const hasOlderMessages = messages.length >= msgLimit;
   const addMessage = (text, { attachment, pinned, replyTo, poll, channel } = {}) => {
@@ -10161,7 +10166,7 @@ export default function TeamHubRolesApp() {
 
   // Chat channels ("group chats") — admin creates, sets who can see each one.
   // Empty visibleTo = everyone. `audienceKeys` enforces this server-side.
-  const chatGroups = useAudienceCollection(lockedOut ? null : ("chatGroups"), user, "createdAt", activeTeamId);
+  const chatGroups = useAudienceCollection(noData ? null : ("chatGroups"), user, "createdAt", activeTeamId);
   const addChatGroup = (name, visibleTo) =>
     addDoc(collection(db, "chatGroups"), {
       teamId: activeTeamId,
@@ -10188,7 +10193,7 @@ export default function TeamHubRolesApp() {
 
   // Scheduled reminders + polls — coach queues them; a Cloud Function fires
   // each at its sendAt time (see functions/index.js runScheduled).
-  const scheduled = useCollection(lockedOut ? null : (isCoach ? "scheduled" : null), where("teamId", "==", activeTeamId), orderBy("sendAt"));
+  const scheduled = useCollection(noData ? null : (isCoach ? "scheduled" : null), where("teamId", "==", activeTeamId), orderBy("sendAt"));
   const addScheduled = (data) =>
     addDoc(collection(db, "scheduled"), {
       ...data,
@@ -10206,7 +10211,7 @@ export default function TeamHubRolesApp() {
   // both paths store a doc in `pushNotifications` for the `runScheduled`
   // runner, which also handles the daily wellness auto-nudge. Team-scoped,
   // same audience pattern as announcements.
-  const pushNotifications = useCollection(lockedOut ? null : (isCoach ? "pushNotifications" : null), where("teamId", "==", activeTeamId), orderBy("sendAt", "desc"));
+  const pushNotifications = useCollection(noData ? null : (isCoach ? "pushNotifications" : null), where("teamId", "==", activeTeamId), orderBy("sendAt", "desc"));
   const addPushNotification = (data) =>
     addDoc(collection(db, "pushNotifications"), {
       ...data,
@@ -10269,7 +10274,7 @@ export default function TeamHubRolesApp() {
   // team's coach only (decision 2026-11-08). (No orderBy in the query to
   // avoid a composite index.)
   const dms = useCollection(
-    lockedOut ? null : (user && user.role !== "orgAdmin" ? "dms" : null),
+    noData ? null : (user && user.role !== "orgAdmin" ? "dms" : null),
     where("teamId", "==", activeTeamId),
     ...(isTeamCoach ? [] : [where("threadId", "==", user?.uid || "_")]),
     orderBy("createdAt", "desc"),
@@ -10300,7 +10305,7 @@ export default function TeamHubRolesApp() {
   };
 
   // Quote of the Day — latest coach-posted quote; posting one fans out a push.
-  const quotes = useCollection(lockedOut ? null : ("quotes"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
+  const quotes = useCollection(noData ? null : ("quotes"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
   const todayQuote = quotes[0] || null;
   const addQuote = ({ text, author }) =>
     addDoc(collection(db, "quotes"), { teamId: activeTeamId, text, author: author || "", createdByName: user.name, createdAt: serverTimestamp() });
