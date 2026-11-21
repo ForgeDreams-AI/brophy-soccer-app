@@ -1,7 +1,7 @@
 name: Deploy to Firebase
 
 # Merging to main = live. Builds, tests, then deploys the whole TeamHub app
-# (rules, indexes, Storage rules, Cloud Functions, website) to the
+# (rules, indexes, Storage rules, website, then Cloud Functions) to the
 # brophy-soccer-app Firebase project. Needs ONE repo secret,
 # FIREBASE_SERVICE_ACCOUNT (a Google service-account JSON key — see
 # docs/AUTO_DEPLOY.md). Without it the workflow stops with a clear message.
@@ -58,12 +58,19 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-      - name: Deploy rules, indexes, functions and website
+      # The website and rules go first, so a Cloud Functions problem (e.g. a
+      # missing IAM role) can never keep app changes off the live site.
+      - name: Deploy rules, indexes and website
         run: >
           npx -y firebase-tools@14 deploy
-          --only firestore:rules,firestore:indexes,storage,functions,hosting
+          --only firestore:rules,firestore:indexes,storage,hosting
           --project brophy-soccer-app --force --non-interactive
       - name: Live
         run: |
           echo "Live: https://brophy-soccer-app.web.app" >> "$GITHUB_STEP_SUMMARY"
           curl -s "https://brophy-soccer-app.web.app/version.json?ts=$(date +%s)" >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Deploy Cloud Functions
+        run: >
+          npx -y firebase-tools@14 deploy
+          --only functions
+          --project brophy-soccer-app --force --non-interactive

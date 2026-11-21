@@ -22,6 +22,7 @@ The GitHub workflows `.github/workflows/deploy.yml` (deploys on merge) and `prev
    - **Cloud Functions Admin**
    - **Service Account User**
    - **Secret Manager Secret Accessor**
+   - **Secret Manager Viewer** (the functions deploy looks the USDA key up before reading it; without this it fails with `secretmanager.secrets.get` denied)
 
    Click **Continue**, then **Done**.
 4. Click the new `github-deploy` account → **Keys** tab → **Add key** → **Create new key** → **JSON** → **Create**.
