@@ -25,7 +25,7 @@ export const TEAM_ACTIONS = [
   { id: "corner", label: "Our corner" },
   { id: "opp_corner", label: "Their corner" },
 ];
-export const ACTION_LABEL = Object.fromEntries([...PLAYER_ACTIONS, ...TEAM_ACTIONS, { id: "sub", label: "Substitution" }].map((a) => [a.id, a.label]));
+export const ACTION_LABEL = Object.fromEntries([...PLAYER_ACTIONS, ...TEAM_ACTIONS, { id: "sub", label: "Substitution" }, { id: "pass", label: "Pass" }].map((a) => [a.id, a.label]));
 
 const SHOT_TYPES = new Set(["goal", "shot_on", "shot_off"]);
 export const isShot = (type) => SHOT_TYPES.has(type);
@@ -60,13 +60,51 @@ export function switchPossession(pos, holder, now = Date.now()) {
 }
 
 // Clock paused → stop counting but remember who had the ball; clock resumed
-// → carry on with them.
+// → carry on with them. `carrier` = uid of our player on the ball.
 export function pausePossession(pos, now = Date.now()) {
-  return { ...switchPossession(pos, null, now), resume: pos?.holder || pos?.resume || null };
+  return { ...switchPossession(pos, null, now), resume: pos?.holder || pos?.resume || null, carrier: pos?.carrier || null };
 }
 export function resumePossession(pos, now = Date.now()) {
   const holder = pos?.holder || pos?.resume || null;
-  return { ...switchPossession({ ...pos, holder: null }, holder, now), resume: null };
+  return { ...switchPossession({ ...pos, holder: null }, holder, now), resume: null, carrier: pos?.carrier || null };
+}
+
+// Who has the ball right now: { side: "us" | "them" | null, uid }.
+export function ballOwner(pos) {
+  const side = pos?.holder || pos?.resume || null;
+  return { side, uid: side === "us" ? pos?.carrier || null : null };
+}
+
+// Give the ball to a side (and, for us, a player). While the clock is paused
+// the time isn't counted, but who has it is remembered for the restart.
+export function takeBall(pos, side, carrier = null, running = true, now = Date.now()) {
+  const c = side === "us" ? carrier || null : null;
+  if (running) return { ...switchPossession(pos, side, now), resume: null, carrier: c };
+  return { ...possessionTotalsOnly(pos), holder: null, since: null, resume: side || null, carrier: c };
+}
+const possessionTotalsOnly = (pos) => ({ usMs: Number(pos?.usMs) || 0, themMs: Number(pos?.themMs) || 0 });
+
+// The stats a change of possession creates on its own:
+//   them → our player        : "won"  for that player
+//   our player → our player  : "pass" from the first to the second
+//   our player → them        : "lost" for that player
+// Each event remembers where the ball was (prevSide/prevUid) so Undo can put
+// it back.
+export function possessionEvents(prev, next) {
+  const meta = { prevSide: prev?.side || null, prevUid: prev?.uid || null };
+  if (next.side === "us" && next.uid) {
+    if (prev?.side === "them") return [{ type: "won", uid: next.uid, ...meta }];
+    if (prev?.side === "us" && prev.uid && prev.uid !== next.uid) return [{ type: "pass", uid: prev.uid, toUid: next.uid, ...meta }];
+  }
+  if (next.side === "them" && prev?.side === "us" && prev.uid) return [{ type: "lost", uid: prev.uid, ...meta }];
+  return [];
+}
+
+// If the most recent tap was a pass to `uid`, who passed it (for the assist
+// / key pass that goes with a shot).
+export function lastPasserTo(events, uid) {
+  const last = [...events].filter((e) => e.type !== "sub").sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
+  return last && last.type === "pass" && last.toUid === uid ? last.uid : null;
 }
 
 export function score(events) {
@@ -79,7 +117,7 @@ export function score(events) {
   return { us, them };
 }
 
-const emptyLine = () => ({ goal: 0, assist: 0, shots: 0, shot_on: 0, shot_off: 0, key_pass: 0, won: 0, lost: 0, save: 0, foul: 0, yellow: 0, red: 0, minutes: 0, games: 0 });
+const emptyLine = () => ({ goal: 0, assist: 0, shots: 0, shot_on: 0, shot_off: 0, pass: 0, key_pass: 0, won: 0, lost: 0, save: 0, foul: 0, yellow: 0, red: 0, minutes: 0, games: 0 });
 
 // Minutes each player was on the field: starters from 0, subs move people
 // on/off at the event's clock time; open spells end at endMs.
@@ -127,7 +165,7 @@ export function playerLines(game, events, now = Date.now()) {
 
 // Team totals for one game.
 export function teamTotals(game, events, now = Date.now()) {
-  const t = { goals: 0, oppGoals: 0, shots: 0, shotsOn: 0, oppShots: 0, corners: 0, oppCorners: 0, fouls: 0, yellow: 0, red: 0 };
+  const t = { goals: 0, oppGoals: 0, shots: 0, shotsOn: 0, oppShots: 0, corners: 0, oppCorners: 0, fouls: 0, yellow: 0, red: 0, passes: 0, turnovers: 0 };
   for (const e of events) {
     if (e.type === "goal") { t.goals += 1; t.shots += 1; t.shotsOn += 1; }
     else if (e.type === "shot_on") { t.shots += 1; t.shotsOn += 1; }
@@ -139,6 +177,8 @@ export function teamTotals(game, events, now = Date.now()) {
     else if (e.type === "foul") t.fouls += 1;
     else if (e.type === "yellow") t.yellow += 1;
     else if (e.type === "red") t.red += 1;
+    else if (e.type === "pass") t.passes += 1;
+    else if (e.type === "lost") t.turnovers += 1;
   }
   t.possession = possessionTotals(game?.possession, now).usPct;
   return t;

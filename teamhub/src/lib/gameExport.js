@@ -11,7 +11,7 @@ export const toCsv = (rows) => rows.map((r) => r.map(cell).join(",")).join("\r\n
 
 export const STAT_COLUMNS = [
   ["minutes", "Minutes"], ["goal", "Goals"], ["assist", "Assists"], ["shots", "Shots"], ["shot_on", "Shots on target"],
-  ["key_pass", "Key passes"], ["won", "Won ball"], ["lost", "Lost ball"], ["save", "Saves"], ["foul", "Fouls"],
+  ["pass", "Passes"], ["key_pass", "Key passes"], ["won", "Won ball"], ["lost", "Lost ball"], ["save", "Saves"], ["foul", "Fouls"],
   ["yellow", "Yellow cards"], ["red", "Red cards"],
 ];
 
@@ -31,13 +31,15 @@ export function gameCsv(game, events, playerById) {
   const rows = [
     ["Game", gameTitle(game)], ["Date", game.date || ""], ["Result", `${resultLetter(s)} ${s.us}-${s.them}`],
     ["Possession %", t.possession ?? ""], ["Shots", t.shots], ["Shots on target", t.shotsOn], ["Opponent shots", t.oppShots],
-    ["Corners", t.corners], ["Opponent corners", t.oppCorners], [],
+    ["Passes", t.passes], ["Turnovers", t.turnovers], ["Corners", t.corners], ["Opponent corners", t.oppCorners], [],
     ["Player", ...STAT_COLUMNS.map(([, label]) => label)],
     ...sortRows(lines, playerById).map(([uid, l]) => [nameOf(playerById, uid), ...STAT_COLUMNS.map(([k]) => l[k])]),
     [], ["Minute", "Event", "Player"],
     ...[...events].sort((a, b) => (a.ms || 0) - (b.ms || 0) || (a.ts || 0) - (b.ts || 0)).map((e) => [
       minuteOf(e.ms || 0), ACTION_LABEL[e.type] || e.type,
-      e.type === "sub" ? `${nameOf(playerById, e.inUid)} on${e.outUid && e.outUid !== "__none__" ? ` for ${nameOf(playerById, e.outUid)}` : ""}` : (e.uid ? nameOf(playerById, e.uid) : ""),
+      e.type === "sub" ? `${nameOf(playerById, e.inUid)} on${e.outUid && e.outUid !== "__none__" ? ` for ${nameOf(playerById, e.outUid)}` : ""}`
+        : e.type === "pass" ? `${nameOf(playerById, e.uid)} → ${nameOf(playerById, e.toUid)}`
+          : (e.uid ? nameOf(playerById, e.uid) : ""),
     ]),
   ];
   return toCsv(rows);

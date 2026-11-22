@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clockMs, possessionTotals, switchPossession, pausePossession, resumePossession, score, minutesPlayed, onFieldNow, playerLines, teamTotals, seasonLines, record } from "./gameStats";
+import { clockMs, possessionTotals, switchPossession, pausePossession, resumePossession, ballOwner, takeBall, possessionEvents, lastPasserTo, score, minutesPlayed, onFieldNow, playerLines, teamTotals, seasonLines, record } from "./gameStats";
 
 describe("clock and possession", () => {
   it("adds running time", () => {
@@ -91,5 +91,46 @@ describe("edge cases", () => {
     const t = teamTotals({}, [{ type: "yellow", uid: "a" }, { type: "red", uid: "a" }, { type: "foul", uid: "b" }]);
     expect([t.yellow, t.red, t.fouls]).toEqual([1, 1, 1]);
     expect(t.possession).toBeNull();
+  });
+});
+
+describe("tap-to-possess", () => {
+  const them = { side: "them", uid: null };
+  const joey = { side: "us", uid: "j" };
+  const kel = { side: "us", uid: "k" };
+  it("won / pass / lost are automatic", () => {
+    expect(possessionEvents(them, joey)).toEqual([{ type: "won", uid: "j", prevSide: "them", prevUid: null }]);
+    expect(possessionEvents(joey, kel)).toEqual([{ type: "pass", uid: "j", toUid: "k", prevSide: "us", prevUid: "j" }]);
+    expect(possessionEvents(kel, them)).toEqual([{ type: "lost", uid: "k", prevSide: "us", prevUid: "k" }]);
+  });
+  it("no stat for kickoff, same player, or unknown carrier", () => {
+    expect(possessionEvents({ side: null }, joey)).toEqual([]);
+    expect(possessionEvents(joey, joey)).toEqual([]);
+    expect(possessionEvents({ side: "us", uid: null }, joey)).toEqual([]);
+    expect(possessionEvents(them, them)).toEqual([]);
+  });
+  it("takeBall counts time only while running and keeps the carrier", () => {
+    let p = takeBall(null, "us", "j", true, 0);
+    expect(ballOwner(p)).toEqual({ side: "us", uid: "j" });
+    p = takeBall(p, "them", null, true, 30_000);
+    expect(possessionTotals(p, 40_000)).toMatchObject({ usMs: 30_000, themMs: 10_000 });
+    p = pausePossession(p, 40_000);
+    p = takeBall(p, "us", "k", false, 50_000); // tapped during a stoppage
+    expect(possessionTotals(p, 90_000)).toMatchObject({ usMs: 30_000, themMs: 10_000 });
+    expect(ballOwner(p)).toEqual({ side: "us", uid: "k" });
+    p = resumePossession(p, 100_000);
+    expect(ballOwner(p)).toEqual({ side: "us", uid: "k" });
+    expect(possessionTotals(p, 105_000).usMs).toBe(35_000);
+  });
+  it("last passer only when the pass was the latest tap", () => {
+    const ev = [{ type: "pass", uid: "j", toUid: "k", ts: 2 }, { type: "won", uid: "j", ts: 1 }];
+    expect(lastPasserTo(ev, "k")).toBe("j");
+    expect(lastPasserTo([...ev, { type: "lost", uid: "k", ts: 3 }], "k")).toBeNull();
+    expect(lastPasserTo(ev, "x")).toBeNull();
+  });
+  it("passes and turnovers count", () => {
+    const t = teamTotals({}, [{ type: "pass", uid: "j", toUid: "k" }, { type: "lost", uid: "k" }]);
+    expect([t.passes, t.turnovers]).toEqual([1, 1]);
+    expect(playerLines({}, [{ type: "pass", uid: "j", toUid: "k" }]).j.pass).toBe(1);
   });
 });

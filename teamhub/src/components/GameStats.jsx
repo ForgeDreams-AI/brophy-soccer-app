@@ -20,7 +20,7 @@ import { teamDateKey } from "../lib/dates";
 import { groupByPosition } from "../data/rosterPositions";
 import {
   PLAYER_ACTIONS, ACTION_LABEL, isShot, clockMs, fmtClock, minuteOf,
-  possessionTotals, switchPossession, pausePossession, resumePossession, score, onFieldNow, playerLines, teamTotals, seasonLines, record,
+  possessionTotals, switchPossession, pausePossession, resumePossession, ballOwner, takeBall, possessionEvents, lastPasserTo, score, onFieldNow, playerLines, teamTotals, seasonLines, record,
 } from "../lib/gameStats";
 
 const RED = "#980000";
@@ -102,13 +102,18 @@ const TONE = {
 };
 
 // ─── Live tracker (full screen) ────────────────────────────────────────────
-function LiveTracker({ game, events, players, playerById, user, onClose }) {
+// Possession is "tap who has the ball": tap one of our players (or the
+// Opponent tile). Won / lost ball and completed passes are worked out from
+// who had it before (lib/gameStats possessionEvents). Shots, goals etc. are
+// one tap on the action bar for whoever has the ball.
+function LiveTracker({ game, events, players, playerById, gkIds = [], user, onClose }) {
   const [now, setNow] = useState(nowMs);
-  const [who, setWho] = useState(null);         // player whose action we're picking
-  const [spotFor, setSpotFor] = useState(null); // { uid, type } waiting for a shot location
-  const [assistFor, setAssistFor] = useState(null); // goal scorer uid → pick assist
+  const [who, setWho] = useState(null);         // player whose full action sheet is open
+  const [spotFor, setSpotFor] = useState(null); // { uid, type, passer } waiting for a shot location
+  const [assistFor, setAssistFor] = useState(null); // { scorer, passer } → pick assist
   const [subStep, setSubStep] = useState(null); // null | { out } (picking who comes on)
-  const [feedOpen, setFeedOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [pickFor, setPickFor] = useState(false); // "More → stat for a player" picker
   const running = Boolean(game.clock?.running);
 
   // Tick the clock display; keep the screen awake while tracking.
@@ -126,11 +131,14 @@ function LiveTracker({ game, events, players, playerById, user, onClose }) {
   const ms = clockMs(game.clock, now);
   const sc = score(events);
   const poss = possessionTotals(game.possession, now);
+  const owner = ballOwner(game.possession);
   const onField = onFieldNow(game.starters || [], events);
   const onSet = new Set(onField);
   const bench = players.filter((p) => !onSet.has(p.id));
   const fieldPlayers = onField.map((u) => playerById[u] || { id: u, name: "Player", initials: "?" });
+  const keeper = fieldPlayers.find((p) => gkIds.includes(p.id)) || null;
   const lines = useMemo(() => playerLines(game, events, now), [game, events, now]);
+  const carrier = owner.side === "us" && owner.uid ? playerById[owner.uid] : null;
 
   const gameRef = doc(db, "games", game.id);
   const save = (patch) => updateDoc(gameRef, patch).catch((e) => toast("Couldn't save — " + (e?.message || "")));
@@ -144,29 +152,41 @@ function LiveTracker({ game, events, players, playerById, user, onClose }) {
     } catch (e) { toast("Couldn't save — " + (e?.message || "")); }
   };
 
+  // Move the ball. `auto` = also record won/lost/pass for the change.
+  const give = (side, uid = null, { auto = true } = {}) => {
+    const t = nowMs();
+    const next = { side, uid: side === "us" ? uid : null };
+    if (next.side === owner.side && next.uid === owner.uid) return;
+    const startClock = !running && clockMs(game.clock, t) === 0; // first tap = kick off
+    const patch = { possession: takeBall(game.possession, side, uid, running || startClock, t) };
+    if (startClock) patch.clock = { ...game.clock, running: true, startedAt: t };
+    save(patch);
+    if (auto) possessionEvents(owner, next).forEach(({ type, ...extra }) => add(type, extra));
+    else buzz();
+  };
+  const tapPlayer = (p) => {
+    if (!running && clockMs(game.clock) > 0) toast("Clock is paused — tap it to restart. The ball is marked anyway.", "info");
+    give("us", p.id);
+  };
+
   const toggleClock = () => {
     buzz();
     const t = nowMs();
     if (running) save({ clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t) }, possession: pausePossession(game.possession, t) });
     else save({ clock: { ...game.clock, running: true, startedAt: t }, possession: resumePossession(game.possession, t) });
   };
-  const setPoss = (holder) => {
-    if (!running) { toast("Start the clock first.", "info"); return; }
-    if (game.possession?.holder === holder) return; // already theirs
-    buzz();
-    save({ possession: switchPossession(game.possession, holder) });
-  };
+  const stopPossession = (t) => ({ ...switchPossession(game.possession, null, t), resume: null, carrier: null });
   const endHalf = () => {
     const t = nowMs();
     const half = game.clock?.half || 1;
     if (half >= 2) {
       if (!confirm(`End the game? Final score ${sc.us}–${sc.them}.`)) return;
-      save({ status: "final", clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t) }, possession: { ...switchPossession(game.possession, null, t), resume: null } });
+      save({ status: "final", clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t) }, possession: stopPossession(t) });
       onClose();
       return;
     }
-    save({ clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t), half: 2 }, possession: { ...switchPossession(game.possession, null, t), resume: null } });
-    toast("Halftime. Tap play to start the 2nd half.", "success");
+    save({ clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t), half: 2 }, possession: stopPossession(t) });
+    toast("Halftime. Tap the player who kicks off, or the clock, to start the 2nd half.", "success");
   };
   const undo = async () => {
     const last = [...events].sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
@@ -174,35 +194,77 @@ function LiveTracker({ game, events, players, playerById, user, onClose }) {
     buzz();
     try {
       await deleteDoc(doc(db, "gameEvents", last.id));
+      // A won/lost/pass tap also moved the ball: put it back.
+      if (last.prevSide !== undefined) save({ possession: takeBall(game.possession, last.prevSide, last.prevUid, running) });
       const p = playerById[last.uid];
       toast(`Undid: ${ACTION_LABEL[last.type] || last.type}${p ? ` — ${shortName(p.name)}` : ""}`, "success");
     } catch (e) { toast("Couldn't undo — " + (e?.message || "")); }
   };
 
-  const pickAction = (a) => {
-    const uid = who.id;
+  // Shots / goals by the player on the ball (or anyone, from their sheet).
+  const shoot = (uid, type) => {
     setWho(null);
-    if (a.needsSpot) { setSpotFor({ uid, type: a.id }); return; }
-    add(a.id, { uid });
+    setSpotFor({ uid, type, passer: lastPasserTo(events, uid) });
   };
   const placeShot = (spot) => {
-    const { uid, type } = spotFor;
+    const { uid, type, passer } = spotFor;
     setSpotFor(null);
     add(type, { uid, ...(spot || {}) });
-    if (type === "goal") setAssistFor(uid);
+    if (type === "goal") { setAssistFor({ scorer: uid, passer }); return; }
+    if (passer) { add("key_pass", { uid: passer }); toast(`Key pass: ${shortName(playerById[passer]?.name)}`, "success"); }
+    give("them", null, { auto: false }); // goal kick / keeper's ball — not a turnover
+  };
+  const pickAssist = (uid) => {
+    if (uid) add("assist", { uid });
+    setAssistFor(null);
+    give("them", null, { auto: false }); // they kick off
+  };
+  const pickAction = (a) => {
+    const uid = who.id;
+    if (a.needsSpot) { shoot(uid, a.id); return; }
+    setWho(null);
+    add(a.id, { uid });
+  };
+  const oppGoal = () => {
+    if (!confirm(`Goal for ${game.opponent || "the opponent"}?`)) return;
+    add("opp_goal");
+    give("us", null, { auto: false }); // our kick off: tap who takes it
+  };
+  const oppShot = () => add("opp_shot");
+  const save_ = () => {
+    if (!keeper) { setPickFor("save"); return; }
+    add("save", { uid: keeper.id });
+    give("us", keeper.id, { auto: false });
+    toast(`Save: ${shortName(keeper.name)}`, "success");
   };
 
   const half = game.clock?.half || 1;
+  const tile = (p) => {
+    const l = lines[p.id];
+    const bits = l ? [l.goal && `${l.goal}G`, l.assist && `${l.assist}A`, l.shots && `${l.shots}Sh`, l.pass && `${l.pass}P`].filter(Boolean).join(" · ") : "";
+    const has = carrier?.id === p.id;
+    return (
+      <button key={p.id} onClick={() => tapPlayer(p)} onContextMenu={(e) => { e.preventDefault(); setWho(p); }}
+        className={`relative rounded-2xl border shadow-sm active:scale-[.97] transition flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 min-h-[68px] ${has ? "border-transparent text-white" : "bg-white border-slate-200 active:bg-slate-50"}`}
+        style={has ? { backgroundColor: RED } : undefined}>
+        {has && <span className="absolute top-1 right-1.5 text-sm" aria-label="has the ball">⚽</span>}
+        <span className={has ? "rounded-full ring-2 ring-white" : ""}><Face p={p} size={30} /></span>
+        <span className={`text-[13px] font-bold leading-tight text-center break-words ${has ? "" : "text-slate-900"}`}>{shortName(p.name)}</span>
+        <span className={`text-[10px] font-semibold h-3 leading-none ${has ? "text-white/80" : "text-slate-400"}`}>{bits}</span>
+      </button>
+    );
+  };
+  const oppHas = owner.side === "them";
   return (
     <div className="fixed inset-0 z-[60] bg-slate-50 flex flex-col" style={{ paddingTop: "env(safe-area-inset-top)" }}>
       {/* Score + clock */}
-      <div className="text-white px-3 pt-2 pb-3" style={{ backgroundColor: RED }}>
+      <div className="text-white px-3 pt-2 pb-2.5" style={{ backgroundColor: RED }}>
         <div className="flex items-center justify-between">
           <button onClick={onClose} aria-label="Close tracker" className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center"><ChevronLeft className="w-5 h-5" /></button>
           <div className="text-[11px] font-bold uppercase tracking-wider text-white/80">{half === 1 ? "1st half" : "2nd half"}</div>
           <button onClick={endHalf} className="text-[11px] font-bold uppercase tracking-wider px-3 h-10 rounded-full bg-white/15">{half === 1 ? "Halftime" : "End game"}</button>
         </div>
-        <div className="flex items-center justify-center gap-4 mt-1">
+        <div className="flex items-center justify-center gap-4 mt-0.5">
           <div className="text-center"><div className="text-[11px] font-bold text-white/80">BRO</div><div className="text-4xl font-black leading-none tabular-nums">{sc.us}</div></div>
           <button onClick={toggleClock} className="flex flex-col items-center px-4 py-1.5 rounded-2xl bg-white/15 active:bg-white/25 min-w-[112px]" aria-label={running ? "Pause clock" : "Start clock"}>
             <span className="text-2xl font-black tabular-nums leading-tight">{fmtClock(ms)}</span>
@@ -210,52 +272,51 @@ function LiveTracker({ game, events, players, playerById, user, onClose }) {
           </button>
           <div className="text-center"><div className="text-[11px] font-bold text-white/80">{abbr(game.opponent)}</div><div className="text-4xl font-black leading-none tabular-nums">{sc.them}</div></div>
         </div>
+        <div className="h-1.5 rounded-full bg-white/25 mt-2 overflow-hidden"><div className="h-full bg-white" style={{ width: `${poss.usPct ?? 50}%` }} /></div>
+        <div className="flex justify-between text-[10px] font-bold text-white/80 mt-1"><span>Possession {poss.usPct ?? "–"}%</span><span>{poss.usPct == null ? "–" : 100 - poss.usPct}%</span></div>
       </div>
 
-      {/* Possession */}
-      <div className="px-3 pt-3">
-        <div className="grid grid-cols-2 gap-2">
-          {[["us", "Our ball"], ["them", "Their ball"]].map(([h, label]) => {
-            const active = game.possession?.holder === h;
-            return (
-              <button key={h} onClick={() => setPoss(h)}
-                className={`h-12 rounded-2xl text-sm font-black uppercase tracking-wide transition ${active ? "text-white shadow" : "bg-white text-slate-500 border border-slate-200"} ${running ? "" : "opacity-50"}`}
-                style={active ? { backgroundColor: h === "us" ? RED : "#334155" } : undefined}>
-                {label}
-              </button>
-            );
-          })}
+      {/* Who has the ball — the Opponent tile stays put; players scroll if needed */}
+      <div className="px-3 pt-2">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1 pb-1.5">
+          {carrier ? <>⚽ {shortName(carrier.name)} has the ball</> : oppHas ? <>{game.opponent || "Opponent"} has the ball</> : <>Tap who has the ball{ms === 0 ? " — that starts the clock" : ""}</>}
         </div>
-        <div className="h-1.5 rounded-full bg-slate-300 mt-2 overflow-hidden"><div className="h-full" style={{ width: `${poss.usPct ?? 50}%`, backgroundColor: RED }} /></div>
-        <div className="flex justify-between text-[10px] font-bold text-slate-500 mt-1"><span>Possession {poss.usPct ?? "–"}%</span><span>{poss.usPct == null ? "–" : 100 - poss.usPct}%</span></div>
+        <button onClick={() => give("them")} className={`w-full h-12 mb-2 rounded-2xl font-black uppercase tracking-wide text-sm flex items-center justify-center gap-2 active:scale-[.99] transition ${oppHas ? "text-white shadow" : "bg-white text-slate-600 border border-slate-200"}`} style={oppHas ? { backgroundColor: "#334155" } : undefined}>
+          {oppHas && <span>⚽</span>}{game.opponent || "Opponent"}{oppHas ? "" : " — tap when they have it"}
+        </button>
       </div>
-
-      {/* Players on the field */}
-      <div className="flex-1 overflow-y-auto px-3 pt-2 pb-3">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1 pb-1.5">Tap a player</div>
-        <div className="grid grid-cols-3 gap-2">
-          {fieldPlayers.map((p) => {
-            const l = lines[p.id];
-            const bits = l ? [l.goal && `${l.goal}G`, l.assist && `${l.assist}A`, l.shots && `${l.shots}Sh`].filter(Boolean).join(" · ") : "";
-            return (
-              <button key={p.id} onClick={() => { buzz(); setWho(p); }} className="bg-white rounded-2xl border border-slate-200 shadow-sm active:scale-[.97] active:bg-slate-50 transition flex flex-col items-center justify-center gap-1 py-2.5 px-1 min-h-[92px]">
-                <Face p={p} size={40} />
-                <span className="text-[13px] font-bold text-slate-900 leading-tight text-center break-words">{shortName(p.name)}</span>
-                <span className="text-[10px] font-semibold text-slate-400 h-3 leading-none">{bits}</span>
-              </button>
-            );
-          })}
+      <div className="flex-1 overflow-y-auto px-3 pb-2">
+        <div className="grid grid-cols-3 gap-1.5">
+          {fieldPlayers.map(tile)}
           {fieldPlayers.length === 0 && <p className="col-span-3 text-sm text-slate-400 text-center py-6">No starters set. Use Sub to put players on.</p>}
         </div>
+        <p className="text-[10px] text-slate-400 text-center mt-2">Won/lost ball and passes are counted automatically. Press and hold a player for more stats.</p>
       </div>
 
-      {/* Bottom bar */}
-      <div className="bg-white border-t border-slate-200 px-2 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] grid grid-cols-5 gap-1.5">
-        <button onClick={undo} disabled={!events.length} className="h-14 rounded-xl bg-slate-100 text-slate-700 flex flex-col items-center justify-center text-[10px] font-bold disabled:opacity-40"><Undo2 className="w-5 h-5" />Undo</button>
-        <button onClick={() => add("opp_shot")} className="h-14 rounded-xl bg-slate-100 text-slate-700 flex flex-col items-center justify-center text-[10px] font-bold leading-tight text-center">Opp<br />shot</button>
-        <button onClick={() => { if (confirm(`Goal for ${game.opponent || "the opponent"}?`)) add("opp_goal"); }} className="h-14 rounded-xl bg-slate-800 text-white flex flex-col items-center justify-center text-[10px] font-bold leading-tight text-center">Opp<br />goal</button>
-        <button onClick={() => setSubStep({})} className="h-14 rounded-xl bg-slate-100 text-slate-700 flex flex-col items-center justify-center text-[10px] font-bold"><ArrowLeftRight className="w-5 h-5" />Sub</button>
-        <button onClick={() => setFeedOpen(true)} className="h-14 rounded-xl bg-slate-100 text-slate-700 flex flex-col items-center justify-center text-[10px] font-bold"><Flag className="w-5 h-5" />More</button>
+      {/* Actions for whoever has the ball */}
+      <div className="bg-white border-t border-slate-200 px-2 pt-2">
+        {carrier ? (
+          <div className="grid grid-cols-4 gap-1.5">
+            <button onClick={() => shoot(carrier.id, "goal")} className={`h-14 rounded-xl text-sm font-black ${TONE.goal}`}>⚽ Goal</button>
+            <button onClick={() => shoot(carrier.id, "shot_on")} className={`h-14 rounded-xl text-[12px] font-bold leading-tight ${TONE.good}`}>Shot on<br />target</button>
+            <button onClick={() => shoot(carrier.id, "shot_off")} className={`h-14 rounded-xl text-[12px] font-bold leading-tight ${TONE.plain}`}>Shot off<br />target</button>
+            <button onClick={() => setWho(carrier)} className="h-14 rounded-xl text-[12px] font-bold bg-slate-100 text-slate-700 leading-tight">More<br />stats</button>
+          </div>
+        ) : oppHas ? (
+          <div className="grid grid-cols-4 gap-1.5">
+            <button onClick={oppShot} className="h-14 rounded-xl text-[12px] font-bold bg-slate-100 text-slate-700 leading-tight">Opp<br />shot</button>
+            <button onClick={oppGoal} className="h-14 rounded-xl text-[12px] font-black bg-slate-800 text-white leading-tight">Opp<br />goal</button>
+            <button onClick={save_} className={`h-14 rounded-xl text-[12px] font-bold leading-tight ${TONE.good}`}>Save{keeper ? <><br />{shortName(keeper.name)}</> : ""}</button>
+            <button onClick={() => add("opp_corner")} className="h-14 rounded-xl text-[12px] font-bold bg-slate-100 text-slate-700 leading-tight">Their<br />corner</button>
+          </div>
+        ) : (
+          <p className="h-14 flex items-center justify-center text-sm text-slate-400">Tap the player on the ball (or {game.opponent || "Opponent"})</p>
+        )}
+        <div className="grid grid-cols-3 gap-1.5 pt-1.5 pb-[calc(8px+env(safe-area-inset-bottom))]">
+          <button onClick={undo} disabled={!events.length} className="h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center gap-1.5 text-xs font-bold disabled:opacity-40"><Undo2 className="w-4 h-4" />Undo</button>
+          <button onClick={() => setSubStep({})} className="h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center gap-1.5 text-xs font-bold"><ArrowLeftRight className="w-4 h-4" />Sub</button>
+          <button onClick={() => setMoreOpen(true)} className="h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center gap-1.5 text-xs font-bold"><Flag className="w-4 h-4" />More</button>
+        </div>
       </div>
 
       {who && (
@@ -277,15 +338,36 @@ function LiveTracker({ game, events, players, playerById, user, onClose }) {
       )}
 
       {assistFor && (
-        <Sheet title="Assist by?" onClose={() => setAssistFor(null)}>
+        <Sheet title="Assist by?" onClose={() => pickAssist(null)}>
+          {assistFor.passer && playerById[assistFor.passer] && (
+            <button onClick={() => pickAssist(assistFor.passer)} className="w-full h-14 mb-2 rounded-2xl text-white font-black flex items-center justify-center gap-2" style={{ backgroundColor: RED }}>
+              <Face p={playerById[assistFor.passer]} size={30} /> {shortName(playerById[assistFor.passer].name)} <span className="font-semibold text-white/80 text-xs">passed it</span>
+            </button>
+          )}
           <div className="grid grid-cols-3 gap-2">
-            {fieldPlayers.filter((p) => p.id !== assistFor).map((p) => (
-              <button key={p.id} onClick={() => { add("assist", { uid: p.id }); setAssistFor(null); }} className="rounded-2xl border border-slate-200 py-2 flex flex-col items-center gap-1 active:bg-slate-50">
+            {fieldPlayers.filter((p) => p.id !== assistFor.scorer && p.id !== assistFor.passer).map((p) => (
+              <button key={p.id} onClick={() => pickAssist(p.id)} className="rounded-2xl border border-slate-200 py-2 flex flex-col items-center gap-1 active:bg-slate-50">
                 <Face p={p} size={34} /><span className="text-xs font-bold text-slate-800 text-center leading-tight">{shortName(p.name)}</span>
               </button>
             ))}
           </div>
-          <button onClick={() => setAssistFor(null)} className="w-full h-12 mt-3 rounded-2xl text-sm font-bold text-slate-500 bg-slate-100">No assist</button>
+          <button onClick={() => pickAssist(null)} className="w-full h-12 mt-3 rounded-2xl text-sm font-bold text-slate-500 bg-slate-100">No assist</button>
+        </Sheet>
+      )}
+
+      {pickFor && (
+        <Sheet title={pickFor === "save" ? "Who made the save?" : "Stat for which player?"} onClose={() => setPickFor(false)}>
+          <div className="grid grid-cols-3 gap-2">
+            {fieldPlayers.map((p) => (
+              <button key={p.id} onClick={() => {
+                setPickFor(false);
+                if (pickFor === "save") { add("save", { uid: p.id }); give("us", p.id, { auto: false }); return; }
+                setWho(p);
+              }} className="rounded-2xl border border-slate-200 py-2 flex flex-col items-center gap-1 active:bg-slate-50">
+                <Face p={p} size={34} /><span className="text-xs font-bold text-slate-800 text-center leading-tight">{shortName(p.name)}</span>
+              </button>
+            ))}
+          </div>
         </Sheet>
       )}
 
@@ -296,6 +378,7 @@ function LiveTracker({ game, events, players, playerById, user, onClose }) {
               <button key={p.id} onClick={() => {
                 if (!subStep.out) { setSubStep({ out: p.id }); return; }
                 add("sub", { outUid: subStep.out, inUid: p.id });
+                if (owner.uid && owner.uid === subStep.out) give("us", null, { auto: false }); // the player on the ball left
                 toast(subStep.out === "__none__" ? `${shortName(p.name)} on` : `${shortName(p.name)} on for ${shortName(playerById[subStep.out]?.name)}`, "success");
                 setSubStep(null);
               }} className="rounded-2xl border border-slate-200 py-2 flex flex-col items-center gap-1 active:bg-slate-50">
@@ -309,11 +392,14 @@ function LiveTracker({ game, events, players, playerById, user, onClose }) {
         </Sheet>
       )}
 
-      {feedOpen && (
-        <Sheet title="More" onClose={() => setFeedOpen(false)}>
+      {moreOpen && (
+        <Sheet title="More" onClose={() => setMoreOpen(false)}>
           <div className="grid grid-cols-2 gap-2 mb-4">
-            <button onClick={() => { add("corner"); setFeedOpen(false); }} className="h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Our corner</button>
-            <button onClick={() => { add("opp_corner"); setFeedOpen(false); }} className="h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Their corner</button>
+            <button onClick={() => { setMoreOpen(false); setPickFor("stat"); }} className="col-span-2 h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Stat for any player (foul, card, save…)</button>
+            <button onClick={() => { add("corner"); setMoreOpen(false); }} className="h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Our corner</button>
+            <button onClick={() => { add("opp_corner"); setMoreOpen(false); }} className="h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Their corner</button>
+            <button onClick={() => { oppShot(); setMoreOpen(false); }} className="h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Opponent shot</button>
+            <button onClick={() => { setMoreOpen(false); oppGoal(); }} className="h-12 rounded-2xl bg-slate-800 text-sm font-bold text-white">Opponent goal</button>
           </div>
           <EventFeed events={events} playerById={playerById} canDelete />
         </Sheet>
@@ -335,7 +421,8 @@ function EventFeed({ events, playerById, canDelete }) {
       {list.map((e) => {
         const who = e.type === "sub"
           ? `${shortName(playerById[e.inUid]?.name) || "?"} on${e.outUid && e.outUid !== "__none__" ? ` for ${shortName(playerById[e.outUid]?.name) || "?"}` : ""}`
-          : (playerById[e.uid] ? shortName(playerById[e.uid].name) : "");
+          : e.type === "pass" ? `${shortName(playerById[e.uid]?.name) || "?"} → ${shortName(playerById[e.toUid]?.name) || "?"}`
+            : (playerById[e.uid] ? shortName(playerById[e.uid].name) : "");
         return (
           <li key={e.id} className="flex items-center gap-2 py-2">
             <span className="w-9 text-[11px] font-bold text-slate-400 tabular-nums">{minuteOf(e.ms || 0)}′</span>
@@ -351,7 +438,7 @@ function EventFeed({ events, playerById, canDelete }) {
 // ─── Stats table ───────────────────────────────────────────────────────────
 const COLS = [
   ["games", "GP"], ["minutes", "Min"], ["goal", "G"], ["assist", "A"], ["shots", "Sh"], ["shot_on", "SOT"],
-  ["key_pass", "KP"], ["won", "Won"], ["lost", "Lost"], ["save", "Sv"], ["yellow", "YC"],
+  ["pass", "Pas"], ["key_pass", "KP"], ["won", "Won"], ["lost", "Lost"], ["save", "Sv"], ["yellow", "YC"],
 ];
 function StatsTable({ lines, playerById, season = false, highlightUid = null, print = false }) {
   const [sort, setSort] = useState("goal");
@@ -757,7 +844,9 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
     const source = (allUsers || []).length ? allUsers : snapshotUsers;
     const team = source.filter((u) => (u.role || "player") === "player" && (u.teamIds || []).includes(activeTeamId));
     const { groups } = groupByPosition(team, activeTeamId, positionsByUid || {});
-    return [...groups.GK, ...groups.DEF, ...groups.MID, ...groups.FWD, ...groups.NONE];
+    const list = [...groups.GK, ...groups.DEF, ...groups.MID, ...groups.FWD, ...groups.NONE];
+    list.gkIds = groups.GK.map((p) => p.id);
+    return list;
   }, [allUsers, snapshotUsers, activeTeamId, positionsByUid]);
   // Names: live accounts first, then the roster snapshot saved on each game
   // (players' phones don't load the team list, and people can leave the team).
@@ -801,7 +890,7 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
 
   const trackingGame = tracking && games.find((g) => g.id === tracking);
   if (trackingGame) {
-    return <LiveTracker game={trackingGame} events={eventsByGame[trackingGame.id] || []} players={players} playerById={playerById} user={user} onClose={() => setTracking(null)} />;
+    return <LiveTracker game={trackingGame} events={eventsByGame[trackingGame.id] || []} players={players} playerById={playerById} gkIds={players.gkIds || []} user={user} onClose={() => setTracking(null)} />;
   }
   const openGame = openId && games.find((g) => g.id === openId);
   if (openGame) {
