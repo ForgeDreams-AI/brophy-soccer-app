@@ -59,6 +59,16 @@ export function switchPossession(pos, holder, now = Date.now()) {
   return { holder: holder || null, since: holder ? now : null, usMs: t.usMs, themMs: t.themMs };
 }
 
+// Clock paused → stop counting but remember who had the ball; clock resumed
+// → carry on with them.
+export function pausePossession(pos, now = Date.now()) {
+  return { ...switchPossession(pos, null, now), resume: pos?.holder || pos?.resume || null };
+}
+export function resumePossession(pos, now = Date.now()) {
+  const holder = pos?.holder || pos?.resume || null;
+  return { ...switchPossession({ ...pos, holder: null }, holder, now), resume: null };
+}
+
 export function score(events) {
   let us = 0;
   let them = 0;

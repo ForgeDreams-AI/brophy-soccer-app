@@ -102,7 +102,7 @@ import TacticsBoard, { BoardSvg, BoardPlayer } from "./components/TacticsBoard";
 import DrillPrintSheet from "./components/DrillPrintSheet";
 import PracticePrintSheet from "./components/PracticePrintSheet";
 import PracticesPrintSheet from "./components/PracticesPrintSheet";
-import GameStatsPage from "./components/GameStats";
+import GameStatsPage, { LatestGameCard } from "./components/GameStats";
 import { normalizeDrillDoc, stripUndefined } from "./lib/drillDoc";
 import { isLockedOutRole } from "./lib/teamRoles";
 import { ARROW_LEGEND, wavyPath } from "./components/boardData";
@@ -10306,6 +10306,14 @@ export default function TeamHubRolesApp() {
       channel: ch,
     });
   };
+  // Game Stats → "Send report to team": the report card image + summary text
+  // as a team-chat message (onMessageCreated pushes it to everyone).
+  const postGameReport = async (blob, text, filename) => {
+    const path = `chat/${activeTeamId}/team/${user.uid}/${uploadStamp()}.jpg`;
+    const snap = await uploadBytes(storageRef(storage, path), blob, { contentType: "image/jpeg" });
+    const url = await getDownloadURL(snap.ref);
+    await addMessage(text, { attachment: { type: "image", url, path, name: filename || "game-report.jpg" }, channel: "team" });
+  };
   const togglePinMessage = (id, pinned) =>
     updateDoc(doc(db, "messages", id), { pinned: !pinned });
   const deleteMessage = (id) => deleteDoc(doc(db, "messages", id));
@@ -10636,6 +10644,7 @@ export default function TeamHubRolesApp() {
               pages stay readable (and the pitch stays usable) at 72rem. */}
           <div className="w-full lg:max-w-6xl lg:mx-auto h-full flex flex-col">
           {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} isOrgAdmin={user.role === "orgAdmin"} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} wellness={wellness} wellnessLoading={isLoading(wellnessRaw)} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} inviteLinks={inviteLinks} addInviteLink={addInviteLink} removeInviteLink={removeInviteLink} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
+          {activeTab === "home" && effUser.role !== "admin" && <LatestGameCard user={effUser} activeTeamId={activeTeamId} allUsers={allUsers} positionsByUid={positionsByUid} />}
           {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} practices={practices} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} nutritionTarget={myNutritionGoal} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} onUploadPhoto={uploadOwnPhoto} />}
           {activeTab === "train" && (
             trainView ? (
@@ -10652,7 +10661,7 @@ export default function TeamHubRolesApp() {
             <CoachCenterPage
               practiceProps={{ user: { ...effUser, isOrgAdmin: user.role === "orgAdmin" }, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events }}
               gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId), activeTeamId, positionsByUid }}
-              gameStatsProps={{ user: effUser, activeTeamId, allUsers, lineups, positionsByUid, isCoach }}
+              gameStatsProps={{ user: effUser, activeTeamId, allUsers, lineups, positionsByUid, isCoach, onSendReport: postGameReport }}
               rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", removeUser, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId, positionsByUid, setPlayerPosition }}
               calendarProps={{ user: effUser, events, practices, teamWorkouts, personalEvents, addEvent, updateEvent, addPersonalEvent, updatePersonalEvent, deleteEvent, deletePersonalEvent, importEvents, groups: groupsList, addGroup, updateGroupMembers, deleteGroup, invites, allUsers, chatGroups }}
               documentsProps={{ user: effUser, documents, rosterCount: invites.filter((i) => !isStaffRole(i.role)).length, onUpload: addDocument, onDelete: deleteDocument, onSign: signDocument }}

@@ -8,16 +8,19 @@
 // with no signal and syncs them later.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { collection, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, where, orderBy } from "firebase/firestore";
-import { Play, Pause, Undo2, ArrowLeftRight, X, Plus, ChevronLeft, ChevronRight, Trash2, Flag, BarChart3, Users } from "lucide-react";
+import { Play, Pause, Undo2, ArrowLeftRight, X, Plus, ChevronLeft, ChevronRight, Trash2, Flag, BarChart3, Users, FileDown, Send, Sheet as SheetIcon, Printer } from "lucide-react";
 import { db } from "../firebase";
 import { useCollection, isLoading } from "../hooks/useCollection";
 import { toast } from "../lib/toast";
+import { shareSheetPdf } from "../lib/sharePdf";
+import { gameCsv, seasonCsv, scorers, reportText, shareOrDownload, fileSafe, gameTitle, resultLetter } from "../lib/gameExport";
 import { teamDateKey } from "../lib/dates";
 import { groupByPosition } from "../data/rosterPositions";
 import {
   PLAYER_ACTIONS, ACTION_LABEL, isShot, clockMs, fmtClock, minuteOf,
-  possessionTotals, switchPossession, score, onFieldNow, playerLines, teamTotals, seasonLines, record,
+  possessionTotals, switchPossession, pausePossession, resumePossession, score, onFieldNow, playerLines, teamTotals, seasonLines, record,
 } from "../lib/gameStats";
 
 const RED = "#980000";
@@ -144,24 +147,25 @@ function LiveTracker({ game, events, players, playerById, user, onClose }) {
   const toggleClock = () => {
     buzz();
     const t = nowMs();
-    if (running) save({ clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t) }, possession: switchPossession(game.possession, null, t) });
-    else save({ clock: { ...game.clock, running: true, startedAt: t } });
+    if (running) save({ clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t) }, possession: pausePossession(game.possession, t) });
+    else save({ clock: { ...game.clock, running: true, startedAt: t }, possession: resumePossession(game.possession, t) });
   };
   const setPoss = (holder) => {
     if (!running) { toast("Start the clock first.", "info"); return; }
+    if (game.possession?.holder === holder) return; // already theirs
     buzz();
-    save({ possession: switchPossession(game.possession, game.possession?.holder === holder ? null : holder) });
+    save({ possession: switchPossession(game.possession, holder) });
   };
   const endHalf = () => {
     const t = nowMs();
     const half = game.clock?.half || 1;
     if (half >= 2) {
       if (!confirm(`End the game? Final score ${sc.us}–${sc.them}.`)) return;
-      save({ status: "final", clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t) }, possession: switchPossession(game.possession, null, t) });
+      save({ status: "final", clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t) }, possession: { ...switchPossession(game.possession, null, t), resume: null } });
       onClose();
       return;
     }
-    save({ clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t), half: 2 }, possession: switchPossession(game.possession, null, t) });
+    save({ clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t), half: 2 }, possession: { ...switchPossession(game.possession, null, t), resume: null } });
     toast("Halftime. Tap play to start the 2nd half.", "success");
   };
   const undo = async () => {
@@ -349,7 +353,7 @@ const COLS = [
   ["games", "GP"], ["minutes", "Min"], ["goal", "G"], ["assist", "A"], ["shots", "Sh"], ["shot_on", "SOT"],
   ["key_pass", "KP"], ["won", "Won"], ["lost", "Lost"], ["save", "Sv"], ["yellow", "YC"],
 ];
-function StatsTable({ lines, playerById, season = false }) {
+function StatsTable({ lines, playerById, season = false, highlightUid = null, print = false }) {
   const [sort, setSort] = useState("goal");
   const cols = season ? COLS : COLS.filter(([k]) => k !== "games");
   const rows = Object.entries(lines)
@@ -362,18 +366,18 @@ function StatsTable({ lines, playerById, season = false }) {
       <table className="w-full text-[13px] tabular-nums">
         <thead>
           <tr className="text-[10px] uppercase tracking-wider text-slate-400">
-            <th className="text-left font-bold py-2 pl-1 sticky left-0 bg-white">Player</th>
+            <th className={`text-left font-bold py-2 pl-1 bg-white ${print ? "" : "sticky left-0"}`}>Player</th>
             {cols.map(([k, label]) => (
               <th key={k} className="font-bold px-1.5 py-2">
-                <button onClick={() => setSort(k)} className={sort === k ? "text-slate-900 underline" : ""}>{label}</button>
+                {print ? label : <button onClick={() => setSort(k)} className={sort === k ? "text-slate-900 underline" : ""}>{label}</button>}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map(({ uid, p, l }) => (
-            <tr key={uid} className="border-t border-slate-100">
-              <td className="py-2 pl-1 pr-2 font-semibold text-slate-800 whitespace-nowrap sticky left-0 bg-white">{shortName(p.name)}</td>
+            <tr key={uid} className={`border-t border-slate-100 ${uid === highlightUid ? "bg-yellow-50" : ""}`}>
+              <td className={`py-2 pl-1 pr-2 font-semibold text-slate-800 whitespace-nowrap ${print ? "" : "sticky left-0"} ${uid === highlightUid ? "bg-yellow-50" : "bg-white"}`}>{print ? p.name : shortName(p.name)}{uid === highlightUid ? <span className="ml-1 text-[10px] font-black text-yellow-700">YOU</span> : null}</td>
               {cols.map(([k]) => <td key={k} className={`text-center px-1.5 ${l[k] ? "text-slate-900" : "text-slate-300"}`}>{l[k]}</td>)}
             </tr>
           ))}
@@ -394,12 +398,190 @@ const Bar = ({ label, us, them, pct = false }) => {
   );
 };
 
-// ─── One game: summary ─────────────────────────────────────────────────────
-function GameSummary({ game, events, playerById, isCoach, onTrack, onBack }) {
+// ─── Report: printable sheet (→ PDF) ───────────────────────────────────────
+// Same pipeline as practice PDFs (lib/sharePdf renders #print-sheet page by
+// page). highlightUid = a player viewing their own report.
+function GameReportSheet({ game, events, playerById, highlightUid, onClose }) {
+  const [busy, setBusy] = useState("");
   const sc = score(events);
   const t = teamTotals(game, events);
   const lines = playerLines(game, events);
   const shots = events.filter((e) => isShot(e.type) && e.x != null);
+  const goals = scorers(events, playerById);
+  const mine = highlightUid ? lines[highlightUid] : null;
+  const cards = events.filter((e) => e.type === "yellow" || e.type === "red").sort((a, b) => (a.ms || 0) - (b.ms || 0));
+  const save = async () => {
+    setBusy("Making PDF…");
+    try {
+      const res = await shareSheetPdf(`${fileSafe(`${gameTitle(game)} ${game.date}`)}.pdf`, { onProgress: (i, n) => setBusy(n > 1 ? `Page ${i} of ${n}…` : "Making PDF…") });
+      if (res?.missingImages) toast(`${res.missingImages} picture(s) couldn't be added.`);
+    } catch (e) { toast("Couldn't make the PDF — " + (e?.message || "try again.")); }
+    setBusy("");
+  };
+  return createPortal(
+    <div className="fixed inset-0 z-[80] bg-black/60 overflow-y-auto" role="dialog" aria-label="Game report">
+      <div className="min-h-full flex flex-col items-center px-3 py-4">
+        <div className="w-full max-w-[820px] flex items-center justify-between gap-2 mb-3">
+          <p className="text-white text-sm font-bold">Game report</p>
+          <div className="flex gap-2">
+            <button onClick={save} disabled={!!busy} className="flex items-center gap-1.5 text-xs font-bold px-4 h-11 rounded-full bg-white text-slate-900 disabled:opacity-60"><Printer className="w-4 h-4" />{busy || "Save / Share PDF"}</button>
+            <button onClick={onClose} className="flex items-center gap-1 text-xs font-bold px-4 h-11 rounded-full bg-white/15 text-white"><X className="w-4 h-4" />Close</button>
+          </div>
+        </div>
+        <div id="print-sheet" className="w-full max-w-[820px] bg-white text-slate-900 px-6 py-6">
+          <div className="flex items-center justify-between border-b-4 pb-3" style={{ borderColor: RED }}>
+            <div className="flex items-center gap-3">
+              <img src="/brand/logo.png" alt="" className="h-12 w-auto" />
+              <div>
+                <div className="text-[11px] font-black tracking-[0.2em] text-slate-400">GAME REPORT</div>
+                <div className="text-xl font-black">{gameTitle(game)}</div>
+                <div className="text-xs text-slate-500">{game.date} · {game.homeAway === "away" ? "Away" : "Home"}</div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-4xl font-black tabular-nums">{sc.us}–{sc.them}</div>
+              <div className="text-xs font-black tracking-wider" style={{ color: RED }}>{game.status === "final" ? ({ W: "WIN", L: "LOSS", D: "DRAW" })[resultLetter(sc)] : "IN PROGRESS"}</div>
+            </div>
+          </div>
+
+          {mine && (
+            <div className="mt-4 rounded-xl bg-yellow-50 border border-yellow-200 p-3 sheet-keep">
+              <div className="text-[11px] font-black tracking-wider text-yellow-800">YOUR GAME — {playerById[highlightUid]?.name}</div>
+              <div className="flex flex-wrap gap-x-5 gap-y-1 mt-1 text-sm">
+                {[["Minutes", mine.minutes], ["Goals", mine.goal], ["Assists", mine.assist], ["Shots", mine.shots], ["On target", mine.shot_on], ["Key passes", mine.key_pass], ["Won ball", mine.won], ["Saves", mine.save]]
+                  .filter(([, v], i) => v || i < 4).map(([k, v]) => <span key={k}><b className="tabular-nums">{v}</b> <span className="text-slate-600">{k}</span></span>)}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4 mt-4 sheet-keep">
+            <div>
+              <h4 className="text-xs font-black tracking-wider text-slate-500 mb-1">TEAM</h4>
+              <table className="w-full text-sm tabular-nums">
+                <tbody>
+                  {[["Possession", t.possession == null ? "–" : `${t.possession}%`, t.possession == null ? "–" : `${100 - t.possession}%`], ["Shots", t.shots, t.oppShots], ["On target", t.shotsOn, t.oppGoals], ["Corners", t.corners, t.oppCorners], ["Fouls", t.fouls, ""], ["Cards", `${t.yellow}Y ${t.red}R`, ""]].map(([k, a, b]) => (
+                    <tr key={k} className="border-b border-slate-100"><td className="py-1 text-slate-600">{k}</td><td className="py-1 text-right font-bold">{a}</td><td className="py-1 text-right text-slate-500 w-14">{b}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-[10px] text-slate-400 mt-1">Brophy · {game.opponent}</p>
+              {goals.length > 0 && (
+                <>
+                  <h4 className="text-xs font-black tracking-wider text-slate-500 mt-3 mb-1">GOALS</h4>
+                  <ul className="text-sm space-y-0.5">{goals.map((g, i) => <li key={i}>⚽ <b>{g.name}</b> {g.minute}′{g.assist ? <span className="text-slate-500"> (assist {g.assist})</span> : null}</li>)}</ul>
+                </>
+              )}
+              {cards.length > 0 && (
+                <>
+                  <h4 className="text-xs font-black tracking-wider text-slate-500 mt-3 mb-1">CARDS</h4>
+                  <ul className="text-sm space-y-0.5">{cards.map((c) => <li key={c.id}>{c.type === "red" ? "🟥" : "🟨"} {playerById[c.uid]?.name || "Player"} {minuteOf(c.ms || 0)}′</li>)}</ul>
+                </>
+              )}
+            </div>
+            <div>
+              <h4 className="text-xs font-black tracking-wider text-slate-500 mb-1">SHOT MAP</h4>
+              <HalfPitch shots={shots} />
+              <ShotLegend />
+            </div>
+          </div>
+
+          <div className="mt-5">
+            <h4 className="text-xs font-black tracking-wider text-slate-500 mb-1">PLAYERS</h4>
+            <StatsTable lines={lines} playerById={playerById} highlightUid={highlightUid} print />
+          </div>
+          <div className="mt-4 pt-2 border-t border-slate-200 text-[10px] text-slate-400 sheet-footer">Brophy Soccer · recorded live in the team app</div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ─── Report card image (posted to team chat) ───────────────────────────────
+const loadImg = (src) => new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+async function renderReportCard(game, events, playerById) {
+  const W = 1080; const H = 1350;
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d");
+  const sc = score(events); const t = teamTotals(game, events); const lines = playerLines(game, events);
+  const font = (w, s) => `${w} ${s}px system-ui, -apple-system, Segoe UI, sans-serif`;
+  x.fillStyle = "#fff"; x.fillRect(0, 0, W, H);
+  x.fillStyle = RED; x.fillRect(0, 0, W, 470);
+  const logo = await loadImg("/brand/logo-white.png");
+  if (logo) { const lw = 260; x.globalAlpha = 0.95; x.drawImage(logo, 60, 50, lw, (logo.height / logo.width) * lw); x.globalAlpha = 1; }
+  x.textAlign = "right"; x.fillStyle = "rgba(255,255,255,.8)"; x.font = font(800, 30); x.fillText("GAME REPORT", W - 60, 85);
+  x.font = font(600, 30); x.fillText(`${game.date || ""} · ${game.homeAway === "away" ? "Away" : "Home"}`, W - 60, 128);
+  x.textAlign = "center"; x.fillStyle = "#fff";
+  x.font = font(800, 40); x.fillText("BROPHY", W / 2 - 240, 250); x.fillText(abbr(game.opponent) === "OPP" ? "OPPONENT" : String(game.opponent).toUpperCase().slice(0, 14), W / 2 + 240, 250);
+  x.font = font(900, 170); x.fillText(String(sc.us), W / 2 - 240, 410); x.fillText(String(sc.them), W / 2 + 240, 410);
+  x.font = font(800, 60); x.fillText("–", W / 2, 380);
+  const res = game.status === "final" ? ({ W: "WIN", L: "LOSS", D: "DRAW" })[resultLetter(sc)] : "IN PROGRESS";
+  x.font = font(900, 34); const rw = x.measureText(res).width + 60;
+  x.fillStyle = "#fff"; x.beginPath(); x.roundRect?.(W / 2 - rw / 2, 418, rw, 52, 26); x.fill();
+  x.fillStyle = RED; x.fillText(res, W / 2, 456);
+  let y = 560;
+  const goals = scorers(events, playerById);
+  x.textAlign = "left"; x.fillStyle = "#0f172a";
+  if (goals.length) {
+    x.font = font(800, 30); x.fillStyle = "#64748b"; x.fillText("GOALS", 70, y); y += 50;
+    x.fillStyle = "#0f172a";
+    for (const g of goals.slice(0, 5)) {
+      x.font = font(700, 38); x.fillText(`⚽ ${g.name}  ${g.minute}′`, 70, y);
+      if (g.assist) { x.font = font(500, 30); x.fillStyle = "#64748b"; x.fillText(`assist ${g.assist}`, 140, y + 38); x.fillStyle = "#0f172a"; y += 38; }
+      y += 58;
+    }
+    y += 10;
+  }
+  x.font = font(800, 30); x.fillStyle = "#64748b"; x.fillText("TEAM", 70, y); y += 30;
+  const rows = [["Possession", t.possession, t.possession == null ? null : 100 - t.possession, true], ["Shots", t.shots, t.oppShots], ["On target", t.shotsOn, t.oppGoals], ["Corners", t.corners, t.oppCorners]];
+  for (const [label, a, b, pct] of rows) {
+    if (a == null) continue;
+    y += 58;
+    x.font = font(800, 38); x.fillStyle = "#0f172a"; x.textAlign = "left"; x.fillText(pct ? `${a}%` : String(a), 70, y);
+    x.textAlign = "right"; x.fillText(pct ? `${b}%` : String(b), W - 70, y);
+    x.textAlign = "center"; x.font = font(700, 28); x.fillStyle = "#64748b"; x.fillText(label.toUpperCase(), W / 2, y - 4);
+    const tot = (a || 0) + (b || 0); const share = pct ? a / 100 : tot ? a / tot : 0.5;
+    x.fillStyle = "#e2e8f0"; x.fillRect(70, y + 14, W - 140, 12); x.fillStyle = RED; x.fillRect(70, y + 14, (W - 140) * share, 12);
+  }
+  // Top performers: goals + assists, then shots.
+  const top = Object.entries(lines).filter(([u]) => playerById[u])
+    .map(([u, l]) => ({ u, l, k: l.goal * 3 + l.assist * 2 + l.shot_on + l.key_pass + l.save }))
+    .filter((r) => r.k > 0).sort((a, b) => b.k - a.k).slice(0, 3);
+  if (top.length && y < H - 260) {
+    y += 90; x.textAlign = "left"; x.font = font(800, 30); x.fillStyle = "#64748b"; x.fillText("STANDOUTS", 70, y);
+    for (const r of top) {
+      y += 54; x.font = font(700, 34); x.fillStyle = "#0f172a"; x.fillText(playerById[r.u].name, 70, y);
+      const bits = [r.l.goal && `${r.l.goal}G`, r.l.assist && `${r.l.assist}A`, r.l.shot_on && `${r.l.shot_on} SOT`, r.l.key_pass && `${r.l.key_pass} KP`, r.l.save && `${r.l.save} save${r.l.save > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
+      x.textAlign = "right"; x.font = font(600, 30); x.fillStyle = "#475569"; x.fillText(bits, W - 70, y); x.textAlign = "left";
+    }
+  }
+  x.fillStyle = "#f1f5f9"; x.fillRect(0, H - 90, W, 90);
+  x.textAlign = "center"; x.font = font(600, 28); x.fillStyle = "#475569"; x.fillText("Your own stats: open the app → Home → Game report", W / 2, H - 36);
+  return new Promise((r) => c.toBlob((b) => r(b), "image/jpeg", 0.9));
+}
+
+// ─── One game: summary ─────────────────────────────────────────────────────
+function GameSummary({ game, events, playerById, isCoach, onTrack, onBack, highlightUid = null, onSendReport }) {
+  const sc = score(events);
+  const t = teamTotals(game, events);
+  const lines = playerLines(game, events);
+  const shots = events.filter((e) => isShot(e.type) && e.x != null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const exportCsv = () => shareOrDownload(`${fileSafe(`${gameTitle(game)} ${game.date}`)}.csv`, gameCsv(game, events, playerById), "text/csv")
+    .catch((e) => toast("Couldn't export — " + (e?.message || "")));
+  const send = async () => {
+    if (!onSendReport) return;
+    if (!confirm(`Post the game report to team chat? Everyone gets a notification${game.reportSentAt ? " (it was already sent once)" : ""}.`)) return;
+    setSending(true);
+    try {
+      const blob = await renderReportCard(game, events, playerById);
+      await onSendReport(blob, reportText(game, events, playerById), `${fileSafe(gameTitle(game))}.jpg`);
+      await updateDoc(doc(db, "games", game.id), { reportSentAt: new Date().toISOString() });
+      toast("Report sent to the team chat.", "success");
+    } catch (e) { toast("Couldn't send — " + (e?.message || "")); }
+    setSending(false);
+  };
   const del = async () => {
     if (!confirm(`Delete the game vs ${game.opponent} and all its stats?`)) return;
     try {
@@ -410,7 +592,7 @@ function GameSummary({ game, events, playerById, isCoach, onTrack, onBack }) {
   };
   return (
     <div className="px-5 pt-3 pb-8 space-y-4">
-      <button onClick={onBack} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> All games</button>
+      {onBack && <button onClick={onBack} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> All games</button>}
       <div className="rounded-2xl text-white p-4 text-center" style={{ backgroundColor: RED }}>
         <div className="text-[11px] font-bold uppercase tracking-wider text-white/80">{game.status === "final" ? "Final" : "Live"} · {game.date} · {game.homeAway === "away" ? "Away" : "Home"}</div>
         <div className="flex items-center justify-center gap-5 mt-1">
@@ -423,6 +605,16 @@ function GameSummary({ game, events, playerById, isCoach, onTrack, onBack }) {
             <Play className="w-4 h-4" /> {game.status === "final" ? "Edit stats" : "Open live tracker"}
           </button>
         )}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={() => setReportOpen(true)} className="h-12 rounded-2xl bg-white border border-slate-200 text-sm font-bold text-slate-800 flex items-center justify-center gap-1.5"><FileDown className="w-4 h-4" /> PDF report</button>
+        <button onClick={exportCsv} className="h-12 rounded-2xl bg-white border border-slate-200 text-sm font-bold text-slate-800 flex items-center justify-center gap-1.5"><SheetIcon className="w-4 h-4" /> Export CSV</button>
+        {isCoach && onSendReport && (
+          <button onClick={send} disabled={sending} className="col-span-2 h-14 rounded-2xl text-white text-sm font-black flex items-center justify-center gap-2 disabled:opacity-60" style={{ backgroundColor: RED }}>
+            <Send className="w-4 h-4" /> {sending ? "Sending…" : game.reportSentAt ? "Send report again" : "Send report to team"}
+          </button>
+        )}
+        {isCoach && game.reportSentAt && <p className="col-span-2 text-[11px] text-slate-400 text-center -mt-1">Sent to team chat {new Date(game.reportSentAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>}
       </div>
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         {t.possession != null && <Bar label="Possession" us={t.possession} pct />}
@@ -437,13 +629,14 @@ function GameSummary({ game, events, playerById, isCoach, onTrack, onBack }) {
       </div>
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         <h4 className="font-bold text-sm text-slate-900 mb-1">Players</h4>
-        <StatsTable lines={lines} playerById={playerById} />
+        <StatsTable lines={lines} playerById={playerById} highlightUid={highlightUid} />
       </div>
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         <h4 className="font-bold text-sm text-slate-900 mb-1">Timeline</h4>
         <EventFeed events={events} playerById={playerById} canDelete={isCoach} />
       </div>
       {isCoach && <button onClick={del} className="w-full text-xs font-bold text-red-500 py-2">Delete this game</button>}
+      {reportOpen && <GameReportSheet game={game} events={events} playerById={playerById} highlightUid={highlightUid} onClose={() => setReportOpen(false)} />}
     </div>
   );
 }
@@ -507,11 +700,11 @@ function NewGameSheet({ players, lineups, onCreate, onClose }) {
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────
-export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineups = [], positionsByUid, isCoach = false }) {
+export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineups = [], positionsByUid, isCoach = false, onSendReport, startGameId = null }) {
   const games = useCollection(activeTeamId ? "games" : null, where("teamId", "==", activeTeamId), orderBy("date", "desc"));
   const allEvents = useCollection(activeTeamId ? "gameEvents" : null, where("teamId", "==", activeTeamId));
   const [tab, setTab] = useState("games");
-  const [openId, setOpenId] = useState(null);
+  const [openId, setOpenId] = useState(startGameId);
   const [tracking, setTracking] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
 
@@ -522,7 +715,15 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
     const { groups } = groupByPosition(team, activeTeamId, positionsByUid || {});
     return [...groups.GK, ...groups.DEF, ...groups.MID, ...groups.FWD, ...groups.NONE];
   }, [allUsers, activeTeamId, positionsByUid]);
-  const playerById = useMemo(() => Object.fromEntries(players.map((p) => [p.id, p])), [players]);
+  // Names: live accounts first, then the roster snapshot saved on each game
+  // (players' phones don't load the team list, and people can leave the team).
+  const playerById = useMemo(() => {
+    const m = {};
+    for (const g of games) for (const [uid, r] of Object.entries(g.roster || {})) m[uid] = m[uid] || { id: uid, name: r.name, initials: r.initials || "" };
+    for (const p of players) m[p.id] = p;
+    if (user?.uid && !m[user.uid] && user.name) m[user.uid] = { id: user.uid, name: user.name, initials: user.initials || "", photoURL: user.photoURL };
+    return m;
+  }, [games, players, user]);
   const eventsByGame = useMemo(() => {
     const m = {};
     for (const e of allEvents) (m[e.gameId] = m[e.gameId] || []).push(e);
@@ -533,6 +734,8 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
     try {
       const ref = await addDoc(collection(db, "games"), {
         teamId: activeTeamId, opponent, date, homeAway, starters, status: "live",
+        // Name snapshot so reports read well on every phone, forever.
+        roster: Object.fromEntries(players.map((p) => [p.id, { name: p.name || "", initials: p.initials || "" }])),
         clock: { running: false, startedAt: null, elapsedMs: 0, half: 1 },
         possession: { holder: null, since: null, usMs: 0, themMs: 0 },
         createdBy: user.uid, createdByName: user.name || "", createdAt: serverTimestamp(),
@@ -549,7 +752,7 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
   }
   const openGame = openId && games.find((g) => g.id === openId);
   if (openGame) {
-    return <GameSummary game={openGame} events={eventsByGame[openGame.id] || []} playerById={playerById} isCoach={isCoach} onTrack={() => setTracking(openGame.id)} onBack={() => setOpenId(null)} />;
+    return <GameSummary game={openGame} events={eventsByGame[openGame.id] || []} playerById={playerById} isCoach={isCoach} onTrack={() => setTracking(openGame.id)} onBack={() => setOpenId(null)} highlightUid={isCoach ? null : user.uid} onSendReport={onSendReport} />;
   }
 
   const rec = record(games, eventsByGame);
@@ -609,10 +812,12 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
         </>
       ) : (
         <>
+          <button onClick={() => shareOrDownload(`Brophy-season-stats-${teamDateKey()}.csv`, seasonCsv(games, eventsByGame, playerById), "text/csv").catch((e) => toast("Couldn't export — " + (e?.message || "")))}
+            className="w-full h-12 rounded-2xl bg-white border border-slate-200 text-sm font-bold text-slate-800 flex items-center justify-center gap-1.5"><SheetIcon className="w-4 h-4" /> Export season (CSV)</button>
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
             <h4 className="font-bold text-sm text-slate-900 mb-1 flex items-center gap-1.5"><Users className="w-4 h-4" /> Season — players</h4>
             <p className="text-[11px] text-slate-400 mb-1">Tap a column to sort.</p>
-            <StatsTable lines={season} playerById={playerById} season />
+            <StatsTable lines={season} playerById={playerById} season highlightUid={isCoach ? null : user.uid} />
           </div>
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
             <h4 className="font-bold text-sm text-slate-900 mb-2">Season shot map</h4>
@@ -623,6 +828,47 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
       )}
 
       {newOpen && <NewGameSheet players={players} lineups={lineups} onCreate={createGame} onClose={() => setNewOpen(false)} />}
+    </div>
+  );
+}
+
+// ─── Player Home: latest game report ───────────────────────────────────────
+// Shows the most recent finished game with the player's own line; tap to
+// open the full report (their row highlighted) and their season stats.
+export function LatestGameCard({ user, activeTeamId, allUsers = [], positionsByUid }) {
+  const games = useCollection(activeTeamId ? "games" : null, where("teamId", "==", activeTeamId), orderBy("date", "desc"));
+  const allEvents = useCollection(activeTeamId ? "gameEvents" : null, where("teamId", "==", activeTeamId));
+  const [open, setOpen] = useState(false);
+  const game = games.find((g) => g.status === "final");
+  if (!game) return null;
+  const events = allEvents.filter((e) => e.gameId === game.id);
+  const sc = score(events);
+  const me = playerLines(game, events)[user.uid];
+  const mine = me ? [me.goal && `${me.goal} goal${me.goal > 1 ? "s" : ""}`, me.assist && `${me.assist} assist${me.assist > 1 ? "s" : ""}`, me.shots && `${me.shots} shot${me.shots > 1 ? "s" : ""}`, me.save && `${me.save} save${me.save > 1 ? "s" : ""}`, me.minutes && `${me.minutes} min`].filter(Boolean).join(" · ") : "";
+  const res = resultLetter(sc);
+  return (
+    <div className="px-5 pt-4 -mb-1">
+      <button onClick={() => setOpen(true)} className="w-full bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-3 text-left">
+        <span className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black ${res === "W" ? "bg-emerald-100 text-emerald-700" : res === "L" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"}`}>{res}</span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-[10px] font-black tracking-wider text-slate-400">GAME REPORT · {game.date}</span>
+          <span className="block font-bold text-slate-900 truncate">{gameTitle(game)} · {sc.us}–{sc.them}</span>
+          <span className="block text-xs text-slate-500 truncate">{mine ? `You: ${mine}` : "Tap to see the team's stats"}</span>
+        </span>
+        <ChevronRight className="w-4 h-4 text-slate-300" />
+      </button>
+      {open && createPortal(
+        <div className="fixed inset-0 z-[60] bg-slate-50 overflow-y-auto" role="dialog" aria-label="Game report" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+          <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-4 h-14 flex items-center justify-between">
+            <span className="font-bold text-slate-900">Game report</span>
+            <button onClick={() => setOpen(false)} aria-label="Close" className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="max-w-md mx-auto">
+            <GameStatsPage user={user} activeTeamId={activeTeamId} allUsers={allUsers} positionsByUid={positionsByUid} startGameId={game.id} />
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
