@@ -114,6 +114,7 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
   const [subStep, setSubStep] = useState(null); // null | { out } (picking who comes on)
   const [moreOpen, setMoreOpen] = useState(false);
   const [pickFor, setPickFor] = useState(false); // "More → stat for a player" picker
+  const [startersOpen, setStartersOpen] = useState(false);
   const running = Boolean(game.clock?.running);
 
   // Tick the clock display; keep the screen awake while tracking.
@@ -411,11 +412,13 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
         </Sheet>
       )}
 
+      {startersOpen && <EditStartersSheet game={game} players={players} onClose={() => setStartersOpen(false)} />}
       {moreOpen && (
         <Sheet title="More" onClose={() => setMoreOpen(false)}>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <button onClick={setClock} className="h-11 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Set the clock</button>
             {half === 2 ? <button onClick={backToFirstHalf} className="h-11 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Back to 1st half</button> : <span />}
+            <button onClick={() => { setMoreOpen(false); setStartersOpen(true); }} className="col-span-2 h-11 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Fix the starting 11</button>
           </div>
           <div className="grid grid-cols-2 gap-2 mb-4">
             <button onClick={() => { setMoreOpen(false); setPickFor("stat"); }} className="col-span-2 h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Stat for any player (foul, card, save…)</button>
@@ -438,12 +441,18 @@ function EventFeed({ events, playerById, canDelete, people = [] }) {
   const [fixing, setFixing] = useState(null);
   const list = [...events].sort((a, b) => (b.ts || 0) - (a.ts || 0));
   if (!list.length) return <p className="text-sm text-slate-400 text-center py-4">Nothing recorded yet.</p>;
-  const reassign = async (uid) => {
+  // fixing = the event; field = "uid" (who did it / passed it) or "toUid"
+  // (who received a pass).
+  const reassign = async (field, uid) => {
     const e = fixing;
     setFixing(null);
-    try { await updateDoc(doc(db, "gameEvents", e.id), { uid }); toast(`${ACTION_LABEL[e.type]} → ${shortName(playerById[uid]?.name)}`, "success"); } catch (err) { toast("Couldn't change — " + (err?.message || "")); }
+    if (e.type === "pass" && uid === (field === "uid" ? e.toUid : e.uid)) { toast("A pass needs two different players."); return; }
+    try {
+      await updateDoc(doc(db, "gameEvents", e.id), { [field]: uid });
+      toast(e.type === "pass" ? `Pass ${field === "uid" ? "by" : "to"} ${shortName(playerById[uid]?.name)}` : `${ACTION_LABEL[e.type]} → ${shortName(playerById[uid]?.name)}`, "success");
+    } catch (err) { toast("Couldn't change — " + (err?.message || "")); }
   };
-  const canFix = (e) => canDelete && people.length > 0 && EDITABLE_PLAYER_STAT.has(e.type);
+  const canFix = (e) => canDelete && people.length > 0 && (EDITABLE_PLAYER_STAT.has(e.type) || e.type === "pass");
   const del = async (e) => {
     if (!confirm(`Delete "${ACTION_LABEL[e.type] || e.type}"?`)) return;
     try { await deleteDoc(doc(db, "gameEvents", e.id)); } catch (err) { toast("Couldn't delete — " + (err?.message || "")); }
@@ -464,14 +473,22 @@ function EventFeed({ events, playerById, canDelete, people = [] }) {
         );
       })}
       {fixing && (
-        <Sheet title={`${ACTION_LABEL[fixing.type]} — who was it?`} onClose={() => setFixing(null)}>
-          <div className="grid grid-cols-3 gap-2">
-            {people.map((p) => (
-              <button key={p.id} onClick={() => reassign(p.id)} className={`rounded-2xl border py-2 flex flex-col items-center gap-1 ${p.id === fixing.uid ? "border-transparent text-white" : "border-slate-200 active:bg-slate-50"}`} style={p.id === fixing.uid ? { backgroundColor: RED } : undefined}>
-                <Face p={p} size={34} /><span className="text-xs font-bold text-center leading-tight">{shortName(p.name)}</span>
-              </button>
-            ))}
-          </div>
+        <Sheet title={fixing.type === "pass" ? "Fix this pass" : `${ACTION_LABEL[fixing.type]} — who was it?`} onClose={() => setFixing(null)}>
+          {(fixing.type === "pass" ? [["uid", "Passed by"], ["toUid", "Passed to"]] : [["uid", null]]).map(([field, label]) => (
+            <div key={field} className={label ? "mb-3" : ""}>
+              {label && <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">{label}</div>}
+              <div className="grid grid-cols-3 gap-2">
+                {people.map((p) => {
+                  const cur = p.id === fixing[field];
+                  return (
+                    <button key={p.id} onClick={() => reassign(field, p.id)} className={`rounded-2xl border py-2 flex flex-col items-center gap-1 ${cur ? "border-transparent text-white" : "border-slate-200 active:bg-slate-50"}`} style={cur ? { backgroundColor: RED } : undefined}>
+                      <Face p={p} size={30} /><span className="text-xs font-bold text-center leading-tight">{shortName(p.name)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </Sheet>
       )}
     </ul>
@@ -697,6 +714,7 @@ function GameSummary({ game, events, playerById, isCoach, canRecord = isCoach, o
   const lines = playerLines(game, events);
   const shots = events.filter((e) => isShot(e.type) && e.x != null);
   const [reportOpen, setReportOpen] = useState(false);
+  const [startersOpen, setStartersOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const exportCsv = () => shareOrDownload(`${fileSafe(`${gameTitle(game)} ${game.date}`)}.csv`, gameCsv(game, events, playerById), "text/csv")
     .catch((e) => toast("Couldn't export — " + (e?.message || "")));
@@ -772,9 +790,41 @@ function GameSummary({ game, events, playerById, isCoach, canRecord = isCoach, o
         <p className="text-[11px] text-slate-400 -mt-0.5 mb-1">{canRecord ? "Wrong player? Tap the name. Wrong stat? Tap the bin." : ""}</p>
         <EventFeed events={events} playerById={playerById} canDelete={canRecord} people={people} />
       </div>
+      {canRecord && people.length > 0 && <button onClick={() => setStartersOpen(true)} className="w-full h-11 rounded-2xl bg-white border border-slate-200 text-sm font-bold text-slate-700">Fix the starting 11</button>}
+      {startersOpen && <EditStartersSheet game={game} players={people} onClose={() => setStartersOpen(false)} />}
       {isCoach && <button onClick={del} className="w-full text-xs font-bold text-red-500 py-2">Delete this game</button>}
       {reportOpen && <GameReportSheet game={game} events={events} playerById={playerById} highlightUid={highlightUid} onClose={() => setReportOpen(false)} />}
     </div>
+  );
+}
+
+// ─── Fix the starting 11 (any time) ────────────────────────────────────────
+// Minutes, plus/minus and who's on the field are all worked out from the
+// starters + subs, so they all update.
+function EditStartersSheet({ game, players, onClose }) {
+  const [starters, setStarters] = useState(game.starters || []);
+  const [busy, setBusy] = useState(false);
+  const toggle = (id) => setStarters((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length >= 11 ? s : [...s, id]));
+  const saveIt = async () => {
+    setBusy(true);
+    try { await updateDoc(doc(db, "games", game.id), { starters }); toast("Starting 11 updated.", "success"); onClose(); } catch (e) { toast("Couldn't save — " + (e?.message || "")); }
+    setBusy(false);
+  };
+  return (
+    <Sheet title={`Starting 11 (${starters.length}/11)`} onClose={onClose}>
+      <p className="text-[12px] text-slate-500 mb-2">Fix who started. Minutes and plus/minus update automatically. (For changes during the game, use Sub.)</p>
+      <div className="grid grid-cols-3 gap-1.5 max-h-[50vh] overflow-y-auto">
+        {players.map((p) => {
+          const on = starters.includes(p.id);
+          return (
+            <button key={p.id} onClick={() => toggle(p.id)} className={`rounded-xl py-2 px-1 flex flex-col items-center gap-1 border ${on ? "border-transparent text-white" : "border-slate-200 bg-white text-slate-800"}`} style={on ? { backgroundColor: RED } : undefined}>
+              <span className={on ? "rounded-full ring-2 ring-white" : ""}><Face p={p} size={30} /></span><span className="text-[11px] font-bold leading-tight text-center">{shortName(p.name)}</span>
+            </button>
+          );
+        })}
+      </div>
+      <button onClick={saveIt} disabled={busy} className="w-full h-14 mt-3 rounded-2xl text-white text-base font-black disabled:opacity-50" style={{ backgroundColor: RED }}>{busy ? "…" : "Save starting 11"}</button>
+    </Sheet>
   );
 }
 
