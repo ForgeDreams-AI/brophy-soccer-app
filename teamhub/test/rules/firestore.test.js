@@ -410,3 +410,29 @@ describe('game stats (games + gameEvents)', () => {
     await assertFails(getDoc(doc(newbie().firestore(), 'games/g9')))
   })
 })
+
+describe('stat keepers', () => {
+  test('coach names stat keepers; players cannot', async () => {
+    await assertSucceeds(setDoc(doc(as(env, 'coachV').firestore(), 'appConfig/statKeepers_varsity'), { uids: ['p1'] }))
+    await assertFails(setDoc(doc(as(env, 'p2').firestore(), 'appConfig/statKeepers_varsity'), { uids: ['p2'] }))
+  })
+  test('a stat keeper records games and undoes taps, but cannot delete a game', async () => {
+    await seed(env, 'appConfig/statKeepers_varsity', { uids: ['p1'] })
+    const k = as(env, 'p1').firestore()
+    await assertSucceeds(setDoc(doc(k, 'games/k1'), { teamId: 'varsity', opponent: 'Jesuit' }))
+    await assertSucceeds(updateDoc(doc(k, 'games/k1'), { status: 'final' }))
+    await assertSucceeds(setDoc(doc(k, 'gameEvents/ke1'), { teamId: 'varsity', gameId: 'k1', type: 'goal' }))
+    await assertSucceeds(deleteDoc(doc(k, 'gameEvents/ke1')))
+    await assertFails(deleteDoc(doc(k, 'games/k1')))
+    await assertFails(updateDoc(doc(k, 'games/k1'), { teamId: 'jvb' }))
+    await assertFails(setDoc(doc(k, 'games/k2'), { teamId: 'jvb', opponent: 'X' }))
+  })
+  test('a regular player cannot record', async () => {
+    await seed(env, 'appConfig/statKeepers_varsity', { uids: ['p1'] })
+    await assertFails(setDoc(doc(as(env, 'p2').firestore(), 'gameEvents/x'), { teamId: 'varsity', gameId: 'k1', type: 'goal' }))
+  })
+  test('team members can read the stat keeper doc (roster snapshot lives there)', async () => {
+    await seed(env, 'appConfig/statKeepers_varsity', { uids: ['p1'], roster: { p2: { name: 'Player Two' } } })
+    await assertSucceeds(getDoc(doc(as(env, 'p1').firestore(), 'appConfig/statKeepers_varsity')))
+  })
+})

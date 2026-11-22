@@ -561,7 +561,7 @@ async function renderReportCard(game, events, playerById) {
 }
 
 // ─── One game: summary ─────────────────────────────────────────────────────
-function GameSummary({ game, events, playerById, isCoach, onTrack, onBack, highlightUid = null, onSendReport }) {
+function GameSummary({ game, events, playerById, isCoach, canRecord = isCoach, onTrack, onBack, highlightUid = null, onSendReport }) {
   const sc = score(events);
   const t = teamTotals(game, events);
   const lines = playerLines(game, events);
@@ -600,7 +600,7 @@ function GameSummary({ game, events, playerById, isCoach, onTrack, onBack, highl
           <div className="text-white/60 font-bold">–</div>
           <div><div className="text-[11px] font-bold text-white/80 max-w-[120px] truncate">{game.opponent}</div><div className="text-4xl font-black tabular-nums">{sc.them}</div></div>
         </div>
-        {isCoach && (
+        {canRecord && (
           <button onClick={onTrack} className="mt-3 h-11 px-5 rounded-full bg-white text-sm font-black inline-flex items-center gap-2" style={{ color: RED }}>
             <Play className="w-4 h-4" /> {game.status === "final" ? "Edit stats" : "Open live tracker"}
           </button>
@@ -633,7 +633,7 @@ function GameSummary({ game, events, playerById, isCoach, onTrack, onBack, highl
       </div>
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         <h4 className="font-bold text-sm text-slate-900 mb-1">Timeline</h4>
-        <EventFeed events={events} playerById={playerById} canDelete={isCoach} />
+        <EventFeed events={events} playerById={playerById} canDelete={canRecord} />
       </div>
       {isCoach && <button onClick={del} className="w-full text-xs font-bold text-red-500 py-2">Delete this game</button>}
       {reportOpen && <GameReportSheet game={game} events={events} playerById={playerById} highlightUid={highlightUid} onClose={() => setReportOpen(false)} />}
@@ -699,22 +699,66 @@ function NewGameSheet({ players, lineups, onCreate, onClose }) {
   );
 }
 
+const sameRoster = (a, b) => {
+  const ka = Object.keys(a).sort(); const kb = Object.keys(b).sort();
+  if (ka.join("|") !== kb.join("|")) return false;
+  return ka.every((k) => ["name", "initials", "photoURL"].every((f) => (a[k]?.[f] || "") === (b[k]?.[f] || "")));
+};
+
+// ─── Coach: choose stat keepers ────────────────────────────────────────────
+// Anyone on the team can be one: a player who is injured or sitting out, a
+// team manager, or a parent who has an account on the team.
+function StatKeepersSheet({ allUsers, activeTeamId, players, current, onSave, onClose }) {
+  const [sel, setSel] = useState(current);
+  const [busy, setBusy] = useState(false);
+  const people = useMemo(() => {
+    const staff = (allUsers || []).filter((u) => u.role !== "player" && (u.teamIds || []).includes(activeTeamId) && u.role !== "admin" && u.role !== "orgAdmin");
+    return [...players, ...staff].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }, [allUsers, activeTeamId, players]);
+  const toggle = (id) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  return (
+    <Sheet title="Stat keepers" onClose={onClose}>
+      <p className="text-[13px] text-slate-500 leading-snug mb-3">They can record games from their phone (start games, tap stats, undo, subs). Only coaches can delete games or send reports. Coaches can always record.</p>
+      <div className="grid grid-cols-2 gap-1.5 max-h-[50vh] overflow-y-auto">
+        {people.map((p) => {
+          const on = sel.includes(p.id);
+          return (
+            <button key={p.id} onClick={() => toggle(p.id)} className={`flex items-center gap-2 px-2 py-2 rounded-xl border text-left ${on ? "border-transparent text-white" : "border-slate-200 bg-white text-slate-800"}`} style={on ? { backgroundColor: RED } : undefined}>
+              <span className={on ? "rounded-full ring-2 ring-white" : ""}><Face p={p} size={28} /></span>
+              <span className="text-[13px] font-bold leading-tight min-w-0 break-words">{p.name}</span>
+            </button>
+          );
+        })}
+      </div>
+      <button disabled={busy} onClick={async () => { setBusy(true); await onSave(sel); setBusy(false); }} className="w-full h-14 mt-3 rounded-2xl text-white text-base font-black disabled:opacity-50" style={{ backgroundColor: RED }}>
+        {busy ? "…" : `Save${sel.length ? ` (${sel.length})` : ""}`}
+      </button>
+    </Sheet>
+  );
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────
-export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineups = [], positionsByUid, isCoach = false, onSendReport, startGameId = null }) {
+export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineups = [], positionsByUid, isCoach = false, canRecord = isCoach, statKeepers = null, setStatKeepers, onSendReport, startGameId = null }) {
   const games = useCollection(activeTeamId ? "games" : null, where("teamId", "==", activeTeamId), orderBy("date", "desc"));
   const allEvents = useCollection(activeTeamId ? "gameEvents" : null, where("teamId", "==", activeTeamId));
   const [tab, setTab] = useState("games");
   const [openId, setOpenId] = useState(startGameId);
   const [tracking, setTracking] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
+  const [keepersOpen, setKeepersOpen] = useState(false);
 
   // Players on this team, ordered GK → DEF → MID → FWD (roster positions),
   // with names resolved like the roster.
+  // A stat keeper's phone doesn't load the team list (the rules don't let a
+  // player list the roster), so it uses the roster snapshot the coach saves
+  // on appConfig/statKeepers_<team>.
+  const snapshotUsers = useMemo(() => Object.entries(statKeepers?.roster || {}).map(([id, r]) => ({ id, role: "player", teamIds: [activeTeamId], ...r })), [statKeepers, activeTeamId]);
   const players = useMemo(() => {
-    const team = (allUsers || []).filter((u) => (u.role || "player") === "player" && (u.teamIds || []).includes(activeTeamId));
+    const source = (allUsers || []).length ? allUsers : snapshotUsers;
+    const team = source.filter((u) => (u.role || "player") === "player" && (u.teamIds || []).includes(activeTeamId));
     const { groups } = groupByPosition(team, activeTeamId, positionsByUid || {});
     return [...groups.GK, ...groups.DEF, ...groups.MID, ...groups.FWD, ...groups.NONE];
-  }, [allUsers, activeTeamId, positionsByUid]);
+  }, [allUsers, snapshotUsers, activeTeamId, positionsByUid]);
   // Names: live accounts first, then the roster snapshot saved on each game
   // (players' phones don't load the team list, and people can leave the team).
   const playerById = useMemo(() => {
@@ -724,6 +768,15 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
     if (user?.uid && !m[user.uid] && user.name) m[user.uid] = { id: user.uid, name: user.name, initials: user.initials || "", photoURL: user.photoURL };
     return m;
   }, [games, players, user]);
+  // Coach: keep the stat keepers' roster snapshot current (only when there
+  // are stat keepers, and only when names/photos actually changed).
+  const keeperUids = useMemo(() => statKeepers?.uids || [], [statKeepers]);
+  useEffect(() => {
+    if (!isCoach || !setStatKeepers || !keeperUids.length || !(allUsers || []).length) return;
+    const roster = Object.fromEntries(players.map((p) => [p.id, { name: p.name || "", initials: p.initials || "", photoURL: p.photoURL || "" }]));
+    // Compare without caring about key order (Firestore may return maps in another order).
+    if (!sameRoster(roster, statKeepers?.roster || {})) setStatKeepers(keeperUids, roster).catch(() => {});
+  }, [isCoach, setStatKeepers, keeperUids, allUsers, players, statKeepers]);
   const eventsByGame = useMemo(() => {
     const m = {};
     for (const e of allEvents) (m[e.gameId] = m[e.gameId] || []).push(e);
@@ -752,7 +805,7 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
   }
   const openGame = openId && games.find((g) => g.id === openId);
   if (openGame) {
-    return <GameSummary game={openGame} events={eventsByGame[openGame.id] || []} playerById={playerById} isCoach={isCoach} onTrack={() => setTracking(openGame.id)} onBack={() => setOpenId(null)} highlightUid={isCoach ? null : user.uid} onSendReport={onSendReport} />;
+    return <GameSummary game={openGame} events={eventsByGame[openGame.id] || []} playerById={playerById} isCoach={isCoach} canRecord={canRecord} onTrack={() => setTracking(openGame.id)} onBack={() => setOpenId(null)} highlightUid={isCoach ? null : user.uid} onSendReport={onSendReport} />;
   }
 
   const rec = record(games, eventsByGame);
@@ -764,6 +817,12 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
         <div>
           <h3 className="text-base font-bold text-slate-900">Game Stats</h3>
           <p className="text-xs text-slate-500 mt-0.5">Record {rec.w}–{rec.d}–{rec.l} (W–D–L)</p>
+          {isCoach && setStatKeepers && (
+            <button onClick={() => setKeepersOpen(true)} className="mt-1.5 text-[11px] font-bold px-2.5 h-7 rounded-full border border-slate-200 bg-white text-slate-700 inline-flex items-center gap-1">
+              <Users className="w-3.5 h-3.5" /> Stat keepers{keeperUids.length ? ` (${keeperUids.length})` : ""}
+            </button>
+          )}
+          {!isCoach && canRecord && <p className="text-[11px] font-bold mt-1" style={{ color: RED }}>You're a stat keeper</p>}
         </div>
         <div className="flex rounded-xl bg-slate-100 p-1">
           {[["games", "Games"], ["season", "Season"]].map(([id, label]) => (
@@ -774,7 +833,7 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
 
       {tab === "games" ? (
         <>
-          {isCoach && (
+          {canRecord && (
             <button onClick={() => setNewOpen(true)} className="w-full rounded-2xl p-4 text-white flex items-center gap-3 shadow-sm" style={{ backgroundColor: RED }}>
               <span className="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center"><Plus className="w-6 h-6" /></span>
               <span className="text-left"><span className="block font-black text-base">New game</span><span className="block text-xs text-white/75">Track it live from your phone</span></span>
@@ -795,7 +854,7 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
                 const result = g.status !== "final" ? "LIVE" : s.us > s.them ? "W" : s.us < s.them ? "L" : "D";
                 return (
                   <li key={g.id}>
-                    <button onClick={() => (g.status === "live" && isCoach ? (setOpenId(g.id), setTracking(g.id)) : setOpenId(g.id))} className="w-full bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex items-center gap-3 text-left">
+                    <button onClick={() => (g.status === "live" && canRecord ? (setOpenId(g.id), setTracking(g.id)) : setOpenId(g.id))} className="w-full bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex items-center gap-3 text-left">
                       <span className={`w-11 h-11 rounded-xl flex items-center justify-center text-sm font-black ${result === "LIVE" ? "text-white animate-pulse" : result === "W" ? "bg-emerald-100 text-emerald-700" : result === "L" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"}`} style={result === "LIVE" ? { backgroundColor: RED, fontSize: 10 } : undefined}>{result}</span>
                       <span className="flex-1 min-w-0">
                         <span className="block font-bold text-slate-900 truncate">{g.homeAway === "away" ? "@ " : "vs "}{g.opponent}</span>
@@ -827,6 +886,10 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
         </>
       )}
 
+      {keepersOpen && <StatKeepersSheet allUsers={allUsers} activeTeamId={activeTeamId} players={players} current={keeperUids} onSave={async (uids) => {
+        const roster = Object.fromEntries(players.map((p) => [p.id, { name: p.name || "", initials: p.initials || "", photoURL: p.photoURL || "" }]));
+        try { await setStatKeepers(uids, roster); toast(uids.length ? "Stat keepers saved." : "No stat keepers now.", "success"); setKeepersOpen(false); } catch (e) { toast("Couldn't save — " + (e?.message || "")); }
+      }} onClose={() => setKeepersOpen(false)} />}
       {newOpen && <NewGameSheet players={players} lineups={lineups} onCreate={createGame} onClose={() => setNewOpen(false)} />}
     </div>
   );
@@ -835,12 +898,34 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
 // ─── Player Home: latest game report ───────────────────────────────────────
 // Shows the most recent finished game with the player's own line; tap to
 // open the full report (their row highlighted) and their season stats.
-export function LatestGameCard({ user, activeTeamId, allUsers = [], positionsByUid }) {
+export function LatestGameCard({ user, activeTeamId, allUsers = [], positionsByUid, isStatKeeper = false, statKeepers = null, lineups = [] }) {
   const games = useCollection(activeTeamId ? "games" : null, where("teamId", "==", activeTeamId), orderBy("date", "desc"));
   const allEvents = useCollection(activeTeamId ? "gameEvents" : null, where("teamId", "==", activeTeamId));
   const [open, setOpen] = useState(false);
+  const [recordOpen, setRecordOpen] = useState(false);
   const game = games.find((g) => g.status === "final");
-  if (!game) return null;
+  if (!game && !isStatKeeper) return null;
+  const live = games.find((g) => g.status === "live");
+  const keeperButton = isStatKeeper && (
+    <button onClick={() => setRecordOpen(true)} className="w-full rounded-2xl p-4 text-white flex items-center gap-3 shadow-sm mb-2" style={{ backgroundColor: RED }}>
+      <span className="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center"><BarChart3 className="w-6 h-6" /></span>
+      <span className="flex-1 text-left"><span className="block font-black text-base">Record game stats</span><span className="block text-xs text-white/75">{live ? `Live now: vs ${live.opponent} — tap to keep tracking` : "You're a stat keeper"}</span></span>
+      <ChevronRight className="w-5 h-5 text-white/70" />
+    </button>
+  );
+  const recordOverlay = recordOpen && createPortal(
+    <div className="fixed inset-0 z-[60] bg-slate-50 overflow-y-auto" role="dialog" aria-label="Game Stats" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+      <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-4 h-14 flex items-center justify-between">
+        <span className="font-bold text-slate-900">Game Stats</span>
+        <button onClick={() => setRecordOpen(false)} aria-label="Close" className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+      </div>
+      <div className="max-w-md mx-auto">
+        <GameStatsPage user={user} activeTeamId={activeTeamId} allUsers={allUsers} lineups={lineups} positionsByUid={positionsByUid} canRecord statKeepers={statKeepers} />
+      </div>
+    </div>,
+    document.body,
+  );
+  if (!game) return <div className="px-5 pt-4 -mb-1">{keeperButton}{recordOverlay}</div>;
   const events = allEvents.filter((e) => e.gameId === game.id);
   const sc = score(events);
   const me = playerLines(game, events)[user.uid];
@@ -848,6 +933,8 @@ export function LatestGameCard({ user, activeTeamId, allUsers = [], positionsByU
   const res = resultLetter(sc);
   return (
     <div className="px-5 pt-4 -mb-1">
+      {keeperButton}
+      {recordOverlay}
       <button onClick={() => setOpen(true)} className="w-full bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-3 text-left">
         <span className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black ${res === "W" ? "bg-emerald-100 text-emerald-700" : res === "L" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"}`}>{res}</span>
         <span className="flex-1 min-w-0">

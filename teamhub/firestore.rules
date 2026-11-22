@@ -63,6 +63,14 @@ service cloud.firestore {
     function coachCreate() { return isCoachOf(wTeam()) && isTeamId(wTeam()); }
     function coachUpdate() { return isCoachOf(rTeam()) && teamUnchanged(); }
     function coachDelete() { return isCoachOf(rTeam()); }
+    // Stat keeper: a team member a coach picked to record Game Stats
+    // (appConfig/statKeepers_<team>.uids). They can record games, never
+    // delete a game or touch anything else.
+    function isStatKeeperOf(teamId) {
+      return isTeamId(teamId) && isMemberOf(teamId)
+        && exists(/databases/$(database)/documents/appConfig/$('statKeepers_' + teamId))
+        && get(/databases/$(database)/documents/appConfig/$('statKeepers_' + teamId)).data.get('uids', []).hasAny([request.auth.uid]);
+    }
 
     // The audience keys the current user satisfies. A doc with an
     // `audienceKeys` array is readable if it contains any of these (or '*').
@@ -262,13 +270,16 @@ service cloud.firestore {
     // one gameEvents doc per tap. Coaches record; the whole team can read.
     match /games/{id} {
       allow read:   if isMemberOf(rTeam());
-      allow create: if coachCreate();
-      allow update, delete: if coachUpdate() || coachDelete();
+      allow create: if coachCreate() || isStatKeeperOf(wTeam());
+      allow update: if coachUpdate() || (isStatKeeperOf(rTeam()) && teamUnchanged());
+      allow delete: if coachDelete();
     }
     match /gameEvents/{id} {
       allow read:   if isMemberOf(rTeam());
-      allow create: if coachCreate() && request.resource.data.gameId is string;
-      allow update, delete: if coachUpdate() || coachDelete();
+      allow create: if (coachCreate() || isStatKeeperOf(wTeam())) && request.resource.data.gameId is string;
+      allow update: if coachUpdate() || (isStatKeeperOf(rTeam()) && teamUnchanged());
+      // Stat keepers delete taps too (Undo / fixing the timeline).
+      allow delete: if coachDelete() || isStatKeeperOf(rTeam());
     }
     // Shared documents library (Train → Documents, next to Videos): coach-
     // shared files (uploaded to Storage library/…) or links (Google Drive,
@@ -394,7 +405,7 @@ service cloud.firestore {
     match /appConfig/{id} {
       allow read:  if hasTeamRole();
       allow write: if isOrgAdmin()
-        || (id.matches('^(lineupLogo|profilePrompt|rosterPositions)_(jvb|jva|varsity)$') && isCoachOf(id.split('_')[1]));
+        || (id.matches('^(lineupLogo|profilePrompt|rosterPositions|statKeepers)_(jvb|jva|varsity)$') && isCoachOf(id.split('_')[1]));
     }
 
     // Scheduled reminders + polls: coach-only, team-scoped. A Cloud Function
