@@ -181,7 +181,7 @@ service cloud.firestore {
       allow update: if isOrgAdmin()
         || (isOwner(uid)
             && request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(['fcmTokens', 'notificationsEnabledAt', 'name', 'initials', 'photoURL', 'photoPath']));
+                 .hasOnly(['fcmTokens', 'notificationsEnabledAt', 'name', 'initials', 'photoURL', 'photoPath', 'notifPrefs']));
       allow delete: if isOrgAdmin() && uid != request.auth.uid;
     }
 

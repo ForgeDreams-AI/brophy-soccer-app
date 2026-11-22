@@ -5,6 +5,7 @@ const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const { searchUsda } = require("./lib/usda");
+const { chatKeyForMessage, chatKeyForDM, shouldNotify, previewOn, mentionedUids, chatLine } = require("./lib/notify");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
@@ -48,21 +49,43 @@ async function collectTokens({ teamId, excludeUid } = {}) {
   return { tokens: all, tokenToUid };
 }
 
-async function sendToTokens({ tokens, tokenToUid }, { title, body, link, tag }) {
+// Send a push to a token bundle, WhatsApp-style:
+// - each recipient's notifPrefs decide (category off / chat muted → skip;
+//   an @mention gets through a muted chat), see lib/notify.js
+// - chat/DM previews can be hidden per user ("New message")
+// - data-only payload: the service worker builds the notification, so chat
+//   messages stack per chat ("Team (3 messages)") using `tag`, `group`, `line`.
+async function sendToTokens({ tokens, tokenToUid }, { title, body, link, tag, category = "", chatKey = "", mentioned = [], group = "", line = "" }) {
   if (!tokens.length) {
     console.log("No tokens to send to.");
     return;
   }
+  const uids = [...new Set(tokens.map((t) => tokenToUid.get(t)).filter(Boolean))];
+  const prefs = new Map();
+  if (uids.length) {
+    const snaps = await db.getAll(...uids.map((u) => db.doc(`users/${u}`)));
+    snaps.forEach((d) => prefs.set(d.id, d.exists ? (d.data().notifPrefs || {}) : {}));
+  }
+  const isChat = category === "chat" || category === "dms";
+  const shown = []; const hidden = [];
+  for (const t of tokens) {
+    const uid = tokenToUid.get(t);
+    const p = prefs.get(uid) || {};
+    if (!shouldNotify(p, { category, chatKey, mentioned: mentioned.includes(uid) })) continue;
+    (isChat && !previewOn(p) ? hidden : shown).push(t);
+  }
+  const base = { link: link || "/", tag: tag || "", kind: category || "", group: group || title || "" };
+  if (shown.length) await sendBatch(shown, tokenToUid, { ...base, title: title || "Brophy Soccer", body: body || "", line: line || body || "" }, isChat);
+  if (hidden.length) await sendBatch(hidden, tokenToUid, { ...base, title: group || title || "Brophy Soccer", body: "New message", line: "New message" }, isChat);
+  if (!shown.length && !hidden.length) console.log("Everyone muted or turned this off.");
+}
+
+async function sendBatch(tokens, tokenToUid, data, urgent) {
   const message = {
-    notification: { title, body },
-    data: { link: link || "/" },
+    data, // all strings — the service worker shows it (public/firebase-messaging-sw.js)
     webpush: {
-      fcmOptions: { link: link || "/" },
-      notification: {
-        icon: "/brand/logo.png",
-        badge: "/brand/logo.png",
-        tag: tag || undefined,
-      },
+      headers: { Urgency: urgent ? "high" : "normal", TTL: "86400" },
+      fcmOptions: { link: data.link || "/" },
     },
     tokens,
   };
@@ -95,6 +118,8 @@ async function sendToTokens({ tokens, tokenToUid }, { title, body, link, tag }) 
     console.log(`Pruned ${[...stalePerUid.values()].reduce((s, a) => s + a.length, 0)} stale tokens.`);
   }
 }
+
+const TEAM_NAMES = { varsity: "Varsity", jva: "JVA", jvb: "JVB" };
 
 const trunc = (s, n = 140) => {
   if (!s) return "";
@@ -196,6 +221,7 @@ exports.onAnnouncementCreated = onDocumentCreated("announcements/{id}", async (e
     body: trunc(data.body || "Tap to read."),
     link: "/?tab=home",
     tag: `announcement-${event.params.id}`,
+    category: "announcements",
   });
 });
 
@@ -219,6 +245,7 @@ exports.onLibraryItemCreated = onDocumentCreated("libraryItems/{id}", async (eve
     body: data.folder ? `In ${data.folder} · tap to open` : "Tap to open",
     link: "/?tab=library",
     tag: `library-${event.params.id}`,
+    category: "library",
   });
 });
 
@@ -234,6 +261,7 @@ exports.onQuoteCreated = onDocumentCreated("quotes/{id}", async (event) => {
     body,
     link: "/?tab=home",
     tag: "quote-of-the-day", // reuse the tag so a new quote replaces the old banner
+    category: "quotes",
   });
 });
 
@@ -251,6 +279,7 @@ exports.onEventCreated = onDocumentCreated("events/{id}", async (event) => {
     body: trunc(when),
     link: "/?tab=calendar",
     tag: `event-${event.params.id}`,
+    category: "schedule",
   });
 });
 
@@ -269,11 +298,30 @@ exports.onMessageCreated = onDocumentCreated("messages/{id}", async (event) => {
   // Only the message's own audience — a hidden channel's text must not go out
   // as a push to phones that can't open the channel. Team-scoped first.
   const bundle = await tokensForAudienceKeys(data.audienceKeys, { teamId: data.teamId, excludeUid: data.senderUid });
+  // WhatsApp-style: the chat's name on top, "Sender: message" lines that
+  // stack per chat (tag), @mentions get through a muted chat.
+  const chatKey = chatKeyForMessage(data);
+  let chatName = `${TEAM_NAMES[data.teamId] || "Team"} chat`;
+  if (data.channel && data.channel !== "team") {
+    const g = await db.doc(`chatGroups/${data.channel}`).get().catch(() => null);
+    if (g && g.exists && g.data().name) chatName = g.data().name;
+  }
+  let mentioned = [];
+  if (String(data.text || "").includes("@") && data.teamId) {
+    const team = await db.collection("users").where("teamIds", "array-contains", data.teamId).get();
+    mentioned = mentionedUids(data.text, team.docs.map((d) => ({ uid: d.id, name: d.data().name })));
+  }
+  const sender = data.sender || "Someone";
   await sendToTokens(bundle, {
-    title: data.sender || "New message",
-    body,
+    title: chatName,
+    body: chatLine({ sender, body, isGroup: true }),
+    line: chatLine({ sender, body, isGroup: true }),
+    group: chatName,
     link: "/?tab=messages",
-    tag: "chat",
+    tag: `chat-${chatKey}`,
+    category: "chat",
+    chatKey,
+    mentioned,
   });
 });
 
@@ -347,11 +395,16 @@ exports.onDMCreated = onDocumentCreated("dms/{id}", async (event) => {
   const admins = await teamCoachUidsForTeam(data.teamId);
   const recipients = [...new Set([data.threadId, ...admins])].filter((uid) => uid && uid !== data.senderUid);
   const bundle = await tokensForUids(recipients);
+  // WhatsApp-style DM: the sender's name on top, messages stack per thread.
   await sendToTokens(bundle, {
-    title: `💬 ${data.senderName || "Direct message"}`,
+    title: data.senderName || "Direct message",
     body,
+    line: body,
+    group: data.senderName || "Direct message",
     link: "/?tab=messages",
     tag: `dm-${data.threadId}`,
+    category: "dms",
+    chatKey: chatKeyForDM(data),
   });
 });
 
@@ -371,6 +424,7 @@ exports.onEventDelegated = onDocumentWritten("events/{id}", async (event) => {
     body: trunc(`${after.type || "Session"}: ${after.title || "Untitled"} ${when}`.trim()),
     link: "/?tab=home",
     tag: `delegation-${event.params.id}`,
+    category: "schedule",
   });
 });
 
@@ -562,6 +616,7 @@ async function processScheduledItems(now) {
           body: trunc(d.body || "Tap to open the app."),
           link: "/?tab=home",
           tag: `scheduled-${doc.id}`,
+          category: "reminders",
         });
       }
       // Recurring items advance to their next occurrence instead of finishing.
@@ -714,6 +769,7 @@ async function processWellnessNudges() {
           body: "Quick check-in — energy, soreness, tiredness. Takes 30 seconds.",
           link: "/?tab=home",
           tag: `wellness-nudge-${markerId}`,
+          category: "wellness",
         });
         await db.doc(`wellnessNudges/${markerId}`).set({
           teamId, uid: p.uid, date: today,

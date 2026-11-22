@@ -6,7 +6,7 @@ import {
   Link as LinkIcon, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Wind, Activity, Dumbbell, Snowflake, StretchHorizontal, FileText,
   Image as ImageIcon, Mail, ArrowRight, Layers, Reply, BarChart3, ScanLine, Camera,
-  Bell, Pencil, Copy, Download, Printer, Megaphone, Maximize2,
+  Bell, BellOff, Pencil, Copy, Download, Printer, Megaphone, Maximize2,
   Users, Tag, Target, Footprints, Repeat, Flag, Zap, ImagePlus, Goal, Hash, Eye,
   ClipboardList, ExternalLink, Star, Shuffle, CornerDownRight, Crosshair, Swords, LayoutGrid, SquareDashed,
   RefreshCw, ArrowUp,
@@ -54,7 +54,7 @@ import { searchExercises } from "./lib/exerciseSearch";
 import { lookupBarcode, searchProducts } from "./lib/openfoodfacts";
 import {
   notificationsSupported, currentPermission,
-  enablePushNotifications, disablePushOnThisDevice, pushEnabledOnThisDevice, onForegroundMessage, refreshPushToken, isIOS, isStandalone,
+  enablePushNotifications, disablePushOnThisDevice, pushEnabledOnThisDevice, onForegroundMessage, refreshPushToken, isIOS, isStandalone, isChatMuted, mutedLabel, clearChatNotifications, syncAppBadge, NOTIF_CATEGORIES,
 } from "./lib/notifications";
 import { toast } from "./lib/toast";
 import { teamDateKey, teamDateKeyOf, zonedDate } from "./lib/dates";
@@ -1090,6 +1090,51 @@ const ChecklistRow = ({ done, icon: Icon, label, sub, onClick, accent }) => (
 // main daily action here (attendance / practice check-in were removed):
 // three quick 1–5 taps (Energy / Soreness / Tiredness, high = ready) and the
 // player gets a decisive readiness verdict back.
+const PrefToggle = ({ on, onChange, label, sub }) => (
+  <button type="button" onClick={() => onChange(!on)} className="w-full flex items-center gap-3 py-2.5 text-left">
+    <span className="flex-1 min-w-0"><span className="block text-sm font-semibold text-slate-900">{label}</span>{sub ? <span className="block text-[11px] text-slate-500 leading-snug">{sub}</span> : null}</span>
+    <span className={`w-11 h-6 rounded-full p-0.5 transition flex-shrink-0 ${on ? "" : "bg-slate-300"}`} style={on ? { backgroundColor: COLORS.primary } : undefined}>
+      <span className={`block w-5 h-5 rounded-full bg-white shadow transition-transform ${on ? "translate-x-5" : ""}`} />
+    </span>
+  </button>
+);
+
+// WhatsApp-style notification settings (Settings → Notifications): which
+// kinds of pushes this person wants, message previews, and muted chats.
+// Saved on users/{uid}.notifPrefs; the server reads the same fields.
+const NotificationPrefs = ({ user }) => {
+  const prefs = user.notifPrefs || {};
+  const set = async (field, value) => {
+    try { await updateDoc(doc(db, "users", user.uid), { [`notifPrefs.${field}`]: value }); } catch (e) { toast("Couldn't save — " + (e?.message || "")); }
+  };
+  const mutedChats = Object.entries(prefs.muted || {}).filter(([k]) => isChatMuted(prefs, k));
+  const chatName = (k) => (k.startsWith("team_") ? `${getTeamShortName(k.slice(5))} chat` : k.startsWith("dm_") ? "Direct messages" : "Group chat");
+  return (
+    <div className="bg-slate-50 rounded-2xl px-4 py-2 mt-2">
+      <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 pt-2">Notify me about</div>
+      <div className="divide-y divide-slate-200">
+        {NOTIF_CATEGORIES.map(([key, label, sub]) => (
+          <PrefToggle key={key} on={prefs[key] !== false} onChange={(v) => set(key, v)} label={label} sub={sub} />
+        ))}
+        <PrefToggle on={prefs.preview !== false} onChange={(v) => set("preview", v)} label="Show message preview" sub="Off: chat notifications just say “New message”." />
+      </div>
+      {mutedChats.length > 0 && (
+        <>
+          <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 pt-3">Muted chats</div>
+          {mutedChats.map(([k, until]) => (
+            <div key={k} className="flex items-center gap-2 py-2">
+              <BellOff className="w-4 h-4 text-slate-400" />
+              <span className="flex-1 text-sm text-slate-800">{chatName(k)} <span className="text-[11px] text-slate-500">· {mutedLabel(until)}</span></span>
+              <button onClick={() => set(`muted.${k}`, deleteField())} className="text-[11px] font-bold px-3 py-1.5 rounded-full text-white" style={{ backgroundColor: COLORS.primary }}>Unmute</button>
+            </div>
+          ))}
+        </>
+      )}
+      <p className="text-[10px] text-slate-400 py-2">Coach notifications sent to you directly always come through. Mute a chat with the bell at the top of it.</p>
+    </div>
+  );
+};
+
 // "Turn on notifications" card (Home, players and coaches). Hidden once push
 // is on for this device. On an iPhone that isn't running the Home Screen
 // app, explains that step first — iOS only allows web push from there.
@@ -7343,6 +7388,24 @@ export const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderM
     return dms.filter((d) => d.threadId === dmThreadId).sort((a, b) => ms(a.createdAt) - ms(b.createdAt));
   }, [dms, isDM, dmThreadId]);
   const channelMessages = useMemo(() => messages.filter((m) => (m.channel || "team") === effectiveChannel), [messages, effectiveChannel]);
+  // WhatsApp-style notifications for this conversation: the same keys/tags
+  // the server uses (functions/lib/notify.js). Opening a chat clears its
+  // notifications on the phone; the bell mutes it (8 h / 1 week / always).
+  const chatKey = isDM ? `dm_${dmThreadId}` : effectiveChannel === "team" ? `team_${activeTeamId}` : `group_${effectiveChannel}`;
+  const notifTag = isDM ? `dm-${dmThreadId}` : `chat-${chatKey}`;
+  const muted = isChatMuted(user.notifPrefs, chatKey);
+  const [muteOpen, setMuteOpen] = useState(false);
+  const convCount = isDM ? dmMessages.length : channelMessages.length;
+  useEffect(() => {
+    if (activeConv) clearChatNotifications(notifTag);
+  }, [activeConv, notifTag, convCount]);
+  const setMute = async (until) => {
+    setMuteOpen(false);
+    try {
+      await updateDoc(doc(db, "users", user.uid), { [`notifPrefs.muted.${chatKey}`]: until == null ? deleteField() : until });
+      toast(until == null ? "Notifications on for this chat." : until === -1 ? "Muted — you'll still get @mentions." : "Muted. @mentions still come through.", "success");
+    } catch (e) { toast("Couldn't change — " + (e?.message || "")); }
+  };
 
   // Downscale + upload an image to Firebase Storage, post as a new message.
   const downscaleImage = (file, maxDim = 1600, quality = 0.86) =>
@@ -7732,11 +7795,26 @@ export const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderM
           <ChevronLeft className="w-5 h-5 text-slate-400 flex-shrink-0" />
           <div className="min-w-0 text-left"><h3 className="font-bold text-slate-900 text-sm truncate">{activeName}</h3><p className="text-[10px] text-slate-500">{rosterCount} on roster</p></div>
         </button>
+        <button onClick={() => setMuteOpen(true)} aria-label={muted ? "Chat muted — change" : "Mute notifications"} className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ml-auto" style={{ backgroundColor: muted ? COLORS.accentSoft : "transparent" }}>
+          {muted ? <BellOff className="w-4 h-4" style={{ color: COLORS.primary }} /> : <Bell className="w-4 h-4 text-slate-400" />}
+        </button>
         <button onClick={() => setShared(!shared)} className="text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full flex items-center gap-1.5 flex-shrink-0" style={shared ? { backgroundColor: COLORS.primary, color: "white" } : { backgroundColor: COLORS.bg, color: COLORS.textSecondary }}>
           <Layers className="w-3 h-3" /> {shared ? "Chat" : "Shared"}
         </button>
       </div>
 
+      {muteOpen && (
+        <div className="fixed inset-0 z-[70] bg-black/50 flex items-end justify-center" onClick={() => setMuteOpen(false)} role="dialog" aria-label="Mute notifications">
+          <div className="w-full max-w-md bg-white rounded-t-3xl p-4 pb-[calc(16px+env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-base text-slate-900">{muted ? `Muted · ${mutedLabel(user.notifPrefs?.muted?.[chatKey])}` : `Mute ${activeName}`}</h3>
+            <p className="text-[12px] text-slate-500 mb-3">You won't get notifications from this chat. Messages still arrive, and @mentions still notify you.</p>
+            {[["8 hours", 8], ["1 week", 168], ["Always", -1]].map(([label, hours]) => (
+              <button key={label} onClick={() => setMute(hours === -1 ? -1 : Date.now() + hours * 3600e3)} className="w-full h-12 mb-2 rounded-2xl bg-slate-100 text-sm font-bold text-slate-800">{label}</button>
+            ))}
+            {muted && <button onClick={() => setMute(null)} className="w-full h-12 rounded-2xl text-sm font-bold text-white" style={{ backgroundColor: COLORS.primary }}>Unmute</button>}
+          </div>
+        </div>
+      )}
       {channelModal && (
         <ChannelModal chatGroups={chatGroups} groups={groups} roster={invites} nameByEmail={nameByEmail} onCreate={addChatGroup} onDelete={deleteChatGroup} onUpdate={updateChatGroup} onClose={() => setChannelModal(false)} />
       )}
@@ -9317,6 +9395,7 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdmin = fa
                 </button>
               </div>
             )}
+            <NotificationPrefs user={user} />
           </section>
 
           {/* ABOUT */}
@@ -10530,6 +10609,8 @@ export default function TeamHubRolesApp() {
     [messages, dms, user],
   );
 
+  // App icon badge = unread chat messages, like WhatsApp.
+  useEffect(() => { if (user) syncAppBadge(chatUnread); }, [user, chatUnread]);
   const [checkin, setCheckin] = useState({ energy: 0, soreness: 0, tiredness: 0 });
 
   // The branded loading screen lives in index.html (it shows before any app

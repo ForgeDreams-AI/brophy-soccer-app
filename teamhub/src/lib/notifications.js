@@ -120,3 +120,40 @@ export function onForegroundMessage(handler) {
   if (!messaging) return () => {};
   return onMessage(messaging, handler);
 }
+
+// ─── WhatsApp-style preferences (users/{uid}.notifPrefs) ─────────────────
+// Same shape the server reads (functions/lib/notify.js).
+export const NOTIF_CATEGORIES = [
+  ["chat", "Team & group chats", "Messages in Team chat and your groups"],
+  ["dms", "Direct messages", "Messages with your coach"],
+  ["announcements", "Announcements", "News from coaches"],
+  ["schedule", "Schedule", "New events and sessions you're running"],
+  ["reminders", "Reminders", "Before games, practices and coach reminders"],
+  ["library", "Documents", "New files and links"],
+  ["quotes", "Quote of the Day", ""],
+  ["wellness", "Wellness check-in", "Morning reminder to log how you feel"],
+];
+export const isChatMuted = (prefs, chatKey, now = Date.now()) => {
+  const until = prefs?.muted?.[chatKey];
+  if (until == null) return false;
+  return Number(until) === -1 || Number(until) > now;
+};
+export const mutedLabel = (until) => (Number(until) === -1 ? "Always" : `Until ${new Date(Number(until)).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`);
+
+// Close this chat's notifications on the phone (when you open the chat).
+export async function clearChatNotifications(tag) {
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration?.("/firebase-messaging-sw.js");
+    const list = reg ? await reg.getNotifications({ tag }) : [];
+    list.forEach((n) => n.close());
+  } catch { /* not supported */ }
+}
+
+// App icon badge = unread chat messages (also tells the worker the real count).
+export function syncAppBadge(count) {
+  try {
+    if (count > 0) navigator.setAppBadge?.(count); else navigator.clearAppBadge?.();
+    navigator.serviceWorker?.controller?.postMessage({ type: "badge", count });
+    navigator.serviceWorker?.getRegistration?.("/firebase-messaging-sw.js").then((r) => r?.active?.postMessage({ type: "badge", count })).catch(() => {});
+  } catch { /* not supported */ }
+}

@@ -436,3 +436,16 @@ describe('stat keepers', () => {
     await assertSucceeds(getDoc(doc(as(env, 'p1').firestore(), 'appConfig/statKeepers_varsity')))
   })
 })
+
+describe('notification preferences', () => {
+  test('a user saves their own notifPrefs (mutes, categories)', async () => {
+    await assertSucceeds(updateDoc(doc(as(env, 'p1').firestore(), 'users/p1'), { 'notifPrefs.muted.team_varsity': -1, 'notifPrefs.quotes': false }))
+  })
+  test("nobody else can change someone's notifPrefs", async () => {
+    await assertFails(updateDoc(doc(as(env, 'p2').firestore(), 'users/p1'), { 'notifPrefs.chat': false }))
+    await assertFails(updateDoc(doc(as(env, 'coachV').firestore(), 'users/p1'), { 'notifPrefs.chat': false }))
+  })
+  test('notifPrefs is not a way to sneak in a role change', async () => {
+    await assertFails(updateDoc(doc(as(env, 'p1').firestore(), 'users/p1'), { notifPrefs: {}, role: 'admin' }))
+  })
+})

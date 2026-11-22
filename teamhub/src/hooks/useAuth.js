@@ -57,6 +57,7 @@ const toUser = (uid, data) => {
     initials: data.initials || initialsFrom(data.name || ""),
     photoURL: data.photoURL || "",
     photoPath: data.photoPath || "",
+    notifPrefs: data.notifPrefs || {},
     sub: data.role === "admin" || data.role === "orgAdmin"
       ? (data.role === "orgAdmin" ? "Program Admin" : "Head Coach")
       : `Player · ${getTeamShortName(primaryTeamId)}`,
