@@ -185,8 +185,27 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
       onClose();
       return;
     }
+    if (!confirm(`Halftime? The clock stops at ${fmtClock(clockMs(game.clock, t))} and the 2nd half starts when you restart it.`)) return;
     save({ clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t), half: 2 }, possession: stopPossession(t) });
     toast("Halftime. Tap the player who kicks off, or the clock, to start the 2nd half.", "success");
+  };
+  // Mistake fixes (More sheet): back to the 1st half, set the clock.
+  const backToFirstHalf = () => {
+    if (!confirm("Go back to the 1st half? (Use this if Halftime was tapped by mistake.)")) return;
+    save({ clock: { ...game.clock, half: 1 } });
+    setMoreOpen(false);
+    toast("Back in the 1st half. Tap the clock to keep going.", "success");
+  };
+  const setClock = () => {
+    const cur = Math.floor(clockMs(game.clock) / 60000);
+    const v = prompt("Set the clock to how many minutes played?", String(cur));
+    if (v == null) return;
+    const m = Number(String(v).replace(",", "."));
+    if (!Number.isFinite(m) || m < 0 || m > 200) { toast("Enter minutes, e.g. 23"); return; }
+    const t = nowMs();
+    save({ clock: { ...game.clock, elapsedMs: Math.round(m * 60000), startedAt: running ? t : null } });
+    setMoreOpen(false);
+    toast(`Clock set to ${fmtClock(Math.round(m * 60000))}.`, "success");
   };
   const undo = async () => {
     const last = [...events].sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
@@ -394,6 +413,10 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
 
       {moreOpen && (
         <Sheet title="More" onClose={() => setMoreOpen(false)}>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <button onClick={setClock} className="h-11 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Set the clock</button>
+            {half === 2 ? <button onClick={backToFirstHalf} className="h-11 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Back to 1st half</button> : <span />}
+          </div>
           <div className="grid grid-cols-2 gap-2 mb-4">
             <button onClick={() => { setMoreOpen(false); setPickFor("stat"); }} className="col-span-2 h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Stat for any player (foul, card, save…)</button>
             <button onClick={() => { add("corner"); setMoreOpen(false); }} className="h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Our corner</button>
@@ -401,7 +424,7 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
             <button onClick={() => { oppShot(); setMoreOpen(false); }} className="h-12 rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">Opponent shot</button>
             <button onClick={() => { setMoreOpen(false); oppGoal(); }} className="h-12 rounded-2xl bg-slate-800 text-sm font-bold text-white">Opponent goal</button>
           </div>
-          <EventFeed events={events} playerById={playerById} canDelete />
+          <EventFeed events={events} playerById={playerById} canDelete people={players} />
         </Sheet>
       )}
     </div>
@@ -409,9 +432,18 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
 }
 
 // ─── Event list (newest first) ─────────────────────────────────────────────
-function EventFeed({ events, playerById, canDelete }) {
+// Tap a row (when you can edit) to put the stat on a different player.
+const EDITABLE_PLAYER_STAT = new Set(["goal", "shot_on", "shot_off", "assist", "key_pass", "won", "lost", "save", "foul", "yellow", "red"]);
+function EventFeed({ events, playerById, canDelete, people = [] }) {
+  const [fixing, setFixing] = useState(null);
   const list = [...events].sort((a, b) => (b.ts || 0) - (a.ts || 0));
   if (!list.length) return <p className="text-sm text-slate-400 text-center py-4">Nothing recorded yet.</p>;
+  const reassign = async (uid) => {
+    const e = fixing;
+    setFixing(null);
+    try { await updateDoc(doc(db, "gameEvents", e.id), { uid }); toast(`${ACTION_LABEL[e.type]} → ${shortName(playerById[uid]?.name)}`, "success"); } catch (err) { toast("Couldn't change — " + (err?.message || "")); }
+  };
+  const canFix = (e) => canDelete && people.length > 0 && EDITABLE_PLAYER_STAT.has(e.type);
   const del = async (e) => {
     if (!confirm(`Delete "${ACTION_LABEL[e.type] || e.type}"?`)) return;
     try { await deleteDoc(doc(db, "gameEvents", e.id)); } catch (err) { toast("Couldn't delete — " + (err?.message || "")); }
@@ -426,11 +458,22 @@ function EventFeed({ events, playerById, canDelete }) {
         return (
           <li key={e.id} className="flex items-center gap-2 py-2">
             <span className="w-9 text-[11px] font-bold text-slate-400 tabular-nums">{minuteOf(e.ms || 0)}′</span>
-            <span className="flex-1 min-w-0 text-sm text-slate-800"><span className="font-semibold">{ACTION_LABEL[e.type] || e.type}</span>{who ? <span className="text-slate-500"> · {who}</span> : null}</span>
+            <button type="button" disabled={!canFix(e)} onClick={() => setFixing(e)} className="flex-1 min-w-0 text-left text-sm text-slate-800 disabled:cursor-default"><span className="font-semibold">{ACTION_LABEL[e.type] || e.type}</span>{who ? <span className={canFix(e) ? "text-slate-500 underline decoration-dotted" : "text-slate-500"}> · {who}</span> : null}</button>
             {canDelete && <button onClick={() => del(e)} aria-label="Delete" className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 active:bg-slate-100"><Trash2 className="w-4 h-4" /></button>}
           </li>
         );
       })}
+      {fixing && (
+        <Sheet title={`${ACTION_LABEL[fixing.type]} — who was it?`} onClose={() => setFixing(null)}>
+          <div className="grid grid-cols-3 gap-2">
+            {people.map((p) => (
+              <button key={p.id} onClick={() => reassign(p.id)} className={`rounded-2xl border py-2 flex flex-col items-center gap-1 ${p.id === fixing.uid ? "border-transparent text-white" : "border-slate-200 active:bg-slate-50"}`} style={p.id === fixing.uid ? { backgroundColor: RED } : undefined}>
+                <Face p={p} size={34} /><span className="text-xs font-bold text-center leading-tight">{shortName(p.name)}</span>
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
     </ul>
   );
 }
@@ -648,7 +691,7 @@ async function renderReportCard(game, events, playerById) {
 }
 
 // ─── One game: summary ─────────────────────────────────────────────────────
-function GameSummary({ game, events, playerById, isCoach, canRecord = isCoach, onTrack, onBack, highlightUid = null, onSendReport }) {
+function GameSummary({ game, events, playerById, isCoach, canRecord = isCoach, onTrack, onBack, highlightUid = null, onSendReport, people = [] }) {
   const sc = score(events);
   const t = teamTotals(game, events);
   const lines = playerLines(game, events);
@@ -692,6 +735,12 @@ function GameSummary({ game, events, playerById, isCoach, canRecord = isCoach, o
             <Play className="w-4 h-4" /> {game.status === "final" ? "Edit stats" : "Open live tracker"}
           </button>
         )}
+        {canRecord && game.status === "final" && (
+          <button onClick={async () => {
+            if (!confirm("Reopen this game as LIVE? (Use this if End game was tapped by mistake.)")) return;
+            try { await updateDoc(doc(db, "games", game.id), { status: "live" }); toast("Game reopened — tap the clock to keep going.", "success"); onTrack(); } catch (e) { toast("Couldn't reopen — " + (e?.message || "")); }
+          }} className="block mx-auto mt-2 text-[12px] font-bold text-white/85 underline">Ended by mistake? Reopen game</button>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-2">
         <button onClick={() => setReportOpen(true)} className="h-12 rounded-2xl bg-white border border-slate-200 text-sm font-bold text-slate-800 flex items-center justify-center gap-1.5"><FileDown className="w-4 h-4" /> PDF report</button>
@@ -720,7 +769,8 @@ function GameSummary({ game, events, playerById, isCoach, canRecord = isCoach, o
       </div>
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         <h4 className="font-bold text-sm text-slate-900 mb-1">Timeline</h4>
-        <EventFeed events={events} playerById={playerById} canDelete={canRecord} />
+        <p className="text-[11px] text-slate-400 -mt-0.5 mb-1">{canRecord ? "Wrong player? Tap the name. Wrong stat? Tap the bin." : ""}</p>
+        <EventFeed events={events} playerById={playerById} canDelete={canRecord} people={people} />
       </div>
       {isCoach && <button onClick={del} className="w-full text-xs font-bold text-red-500 py-2">Delete this game</button>}
       {reportOpen && <GameReportSheet game={game} events={events} playerById={playerById} highlightUid={highlightUid} onClose={() => setReportOpen(false)} />}
@@ -1012,7 +1062,7 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
     );
   }
   if (openGame) {
-    return <GameSummary game={openGame} events={eventsByGame[openGame.id] || []} playerById={playerById} isCoach={isCoach} canRecord={canRecord} onTrack={() => setTracking(openGame.id)} onBack={() => setOpenId(null)} highlightUid={isCoach ? null : user.uid} onSendReport={onSendReport} />;
+    return <GameSummary game={openGame} events={eventsByGame[openGame.id] || []} playerById={playerById} isCoach={isCoach} canRecord={canRecord} people={players} onTrack={() => setTracking(openGame.id)} onBack={() => setOpenId(null)} highlightUid={isCoach ? null : user.uid} onSendReport={onSendReport} />;
   }
 
   const rec = record(games, eventsByGame);
