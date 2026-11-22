@@ -207,3 +207,85 @@ export function record(games, eventsByGame) {
   }
   return r;
 }
+
+// ─── Player season profile (My Stats) ──────────────────────────────────────
+// Everything here is derived from the same game + event docs; nothing new is
+// recorded.
+
+// On-field spells [from, to] in clock ms (starters from 0, subs applied).
+export function onFieldSpells(starters = [], events = [], endMs = 0, uid) {
+  const spells = [];
+  let since = starters.includes(uid) ? 0 : null;
+  const subs = events.filter((e) => e.type === "sub").sort((a, b) => (a.ms || 0) - (b.ms || 0));
+  for (const s of subs) {
+    if (s.outUid === uid && since != null) { spells.push([since, s.ms || 0]); since = null; }
+    if (s.inUid === uid && since == null) since = s.ms || 0;
+  }
+  if (since != null) spells.push([since, endMs]);
+  return spells;
+}
+
+// Goals for / against while `uid` was on the field.
+export function plusMinus(game, events, uid, now = Date.now()) {
+  const spells = onFieldSpells(game?.starters || [], events, clockMs(game?.clock, now), uid);
+  const on = (ms) => spells.some(([a, b]) => ms >= a && ms <= b);
+  let gf = 0; let ga = 0;
+  for (const e of events) {
+    if (e.type === "goal" && on(e.ms || 0)) gf += 1;
+    else if (e.type === "opp_goal" && on(e.ms || 0)) ga += 1;
+  }
+  return { gf, ga, diff: gf - ga };
+}
+
+const pct = (a, b) => (b ? Math.round((a / b) * 100) : null);
+
+// Season profile for one player across games (newest first in `log`).
+export function playerProfile(uid, games, eventsByGame, now = Date.now()) {
+  const totals = { games: 0, starts: 0, minutes: 0, goal: 0, assist: 0, shots: 0, shot_on: 0, shot_off: 0, pass: 0, key_pass: 0, won: 0, lost: 0, save: 0, foul: 0, yellow: 0, red: 0, gf: 0, ga: 0, received: 0, oppGoalsWhileKeeping: 0 };
+  const log = [];
+  const shots = [];
+  const passTo = {}; const passFrom = {};
+  const sorted = [...games].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  for (const g of sorted) {
+    const ev = eventsByGame[g.id] || [];
+    const line = playerLines(g, ev, now)[uid];
+    const played = line && (line.minutes > 0 || line.games > 0);
+    const touched = ev.some((e) => e.uid === uid || e.toUid === uid);
+    if (!played && !touched) continue;
+    const pm = plusMinus(g, ev, uid, now);
+    const sc = score(ev);
+    const l = line || {};
+    totals.games += 1;
+    if ((g.starters || []).includes(uid)) totals.starts += 1;
+    for (const k of ["minutes", "goal", "assist", "shots", "shot_on", "shot_off", "pass", "key_pass", "won", "lost", "save", "foul", "yellow", "red"]) totals[k] += l[k] || 0;
+    totals.gf += pm.gf; totals.ga += pm.ga;
+    if ((l.save || 0) > 0) totals.oppGoalsWhileKeeping += pm.ga; // keeper: goals conceded in games they made saves
+    for (const e of ev) {
+      if (e.type === "pass" && e.uid === uid && e.toUid) passTo[e.toUid] = (passTo[e.toUid] || 0) + 1;
+      if (e.type === "pass" && e.toUid === uid) { totals.received += 1; passFrom[e.uid] = (passFrom[e.uid] || 0) + 1; }
+      if (e.uid === uid && (e.type === "goal" || e.type === "shot_on" || e.type === "shot_off") && e.x != null) shots.push(e);
+    }
+    log.push({ game: g, line: { ...emptyLine(), ...l }, pm, score: sc, started: (g.starters || []).includes(uid) });
+  }
+  const per80 = (n) => (totals.minutes ? Math.round((n / totals.minutes) * 80 * 10) / 10 : null);
+  const top = (m) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([u, n]) => ({ uid: u, n }));
+  return {
+    totals,
+    log,
+    shots,
+    rates: {
+      shotAccuracy: pct(totals.shot_on, totals.shots),       // on target / all shots
+      conversion: pct(totals.goal, totals.shots),             // goals / shots
+      passCompletion: pct(totals.pass, totals.pass + totals.lost), // passes / (passes + balls lost)
+      savePct: pct(totals.save, totals.save + totals.oppGoalsWhileKeeping),
+      goalsPer80: per80(totals.goal),
+      involvementPer80: per80(totals.goal + totals.assist),
+      shotsPer80: per80(totals.shots),
+      passesPer80: per80(totals.pass),
+      minutesPerGame: totals.games ? Math.round(totals.minutes / totals.games) : null,
+      plusMinus: totals.gf - totals.ga,
+    },
+    passTo: top(passTo),
+    passFrom: top(passFrom),
+  };
+}

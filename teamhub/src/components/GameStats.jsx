@@ -20,7 +20,7 @@ import { teamDateKey } from "../lib/dates";
 import { groupByPosition } from "../data/rosterPositions";
 import {
   PLAYER_ACTIONS, ACTION_LABEL, isShot, clockMs, fmtClock, minuteOf,
-  possessionTotals, switchPossession, pausePossession, resumePossession, ballOwner, takeBall, possessionEvents, lastPasserTo, score, onFieldNow, playerLines, teamTotals, seasonLines, record,
+  playerProfile, possessionTotals, switchPossession, pausePossession, resumePossession, ballOwner, takeBall, possessionEvents, lastPasserTo, score, onFieldNow, playerLines, teamTotals, seasonLines, record,
 } from "../lib/gameStats";
 
 const RED = "#980000";
@@ -440,7 +440,7 @@ const COLS = [
   ["games", "GP"], ["minutes", "Min"], ["goal", "G"], ["assist", "A"], ["shots", "Sh"], ["shot_on", "SOT"],
   ["pass", "Pas"], ["key_pass", "KP"], ["won", "Won"], ["lost", "Lost"], ["save", "Sv"], ["yellow", "YC"],
 ];
-function StatsTable({ lines, playerById, season = false, highlightUid = null, print = false }) {
+function StatsTable({ lines, playerById, season = false, highlightUid = null, print = false, onPick }) {
   const [sort, setSort] = useState("goal");
   const cols = season ? COLS : COLS.filter(([k]) => k !== "games");
   const rows = Object.entries(lines)
@@ -464,7 +464,7 @@ function StatsTable({ lines, playerById, season = false, highlightUid = null, pr
         <tbody>
           {rows.map(({ uid, p, l }) => (
             <tr key={uid} className={`border-t border-slate-100 ${uid === highlightUid ? "bg-yellow-50" : ""}`}>
-              <td className={`py-2 pl-1 pr-2 font-semibold text-slate-800 whitespace-nowrap ${print ? "" : "sticky left-0"} ${uid === highlightUid ? "bg-yellow-50" : "bg-white"}`}>{print ? p.name : shortName(p.name)}{uid === highlightUid ? <span className="ml-1 text-[10px] font-black text-yellow-700">YOU</span> : null}</td>
+              <td onClick={onPick ? () => onPick(uid) : undefined} className={`py-2 pl-1 pr-2 font-semibold whitespace-nowrap ${onPick ? "text-slate-900 underline decoration-slate-300 cursor-pointer" : "text-slate-800"} ${print ? "" : "sticky left-0"} ${uid === highlightUid ? "bg-yellow-50" : "bg-white"}`}>{print ? p.name : shortName(p.name)}{uid === highlightUid ? <span className="ml-1 text-[10px] font-black text-yellow-700">YOU</span> : null}</td>
               {cols.map(([k]) => <td key={k} className={`text-center px-1.5 ${l[k] ? "text-slate-900" : "text-slate-300"}`}>{l[k]}</td>)}
             </tr>
           ))}
@@ -792,6 +792,115 @@ const sameRoster = (a, b) => {
   return ka.every((k) => ["name", "initials", "photoURL"].every((f) => (a[k]?.[f] || "") === (b[k]?.[f] || "")));
 };
 
+// ─── Player profile (My Stats) ─────────────────────────────────────────────
+const Big = ({ label, value, sub }) => (
+  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm py-3 text-center">
+    <div className="text-2xl font-black tabular-nums text-slate-900">{value}</div>
+    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
+    {sub ? <div className="text-[10px] text-slate-400">{sub}</div> : null}
+  </div>
+);
+const Meter = ({ label, value, hint }) => value == null ? null : (
+  <div className="py-1.5">
+    <div className="flex justify-between text-sm"><span className="font-semibold text-slate-700">{label}</span><span className="font-black tabular-nums">{value}%</span></div>
+    <div className="h-2 rounded-full bg-slate-200 mt-1 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${value}%`, backgroundColor: RED }} /></div>
+    {hint ? <div className="text-[10px] text-slate-400 mt-0.5">{hint}</div> : null}
+  </div>
+);
+
+// A player's season from the data already recorded: totals, per-80 rates,
+// percentages, plus/minus, passing partners, their shot map and a game log.
+function PlayerProfile({ uid, games, eventsByGame, playerById, onOpenGame, isMe = false }) {
+  const pr = useMemo(() => playerProfile(uid, games, eventsByGame), [uid, games, eventsByGame]);
+  const p = playerById[uid] || { name: "Player", initials: "?" };
+  const t = pr.totals; const r = pr.rates;
+  if (!t.games) {
+    return (
+      <div className="px-5 pt-6 pb-10 text-center">
+        <Face p={p} size={64} />
+        <p className="font-bold text-slate-900 mt-3">{p.name}</p>
+        <p className="text-sm text-slate-500 mt-1">{isMe ? "Your stats show up here after your first tracked game." : "No tracked games yet."}</p>
+      </div>
+    );
+  }
+  const nm = (u) => shortName(playerById[u]?.name) || "Teammate";
+  return (
+    <div className="px-5 pt-4 pb-10 space-y-4">
+      <div className="rounded-2xl text-white p-4 flex items-center gap-3" style={{ backgroundColor: RED }}>
+        <span className="rounded-full ring-2 ring-white"><Face p={p} size={52} /></span>
+        <div className="min-w-0">
+          <div className="text-[10px] font-black tracking-[0.2em] text-white/75">{isMe ? "MY STATS" : "PLAYER STATS"} · SEASON</div>
+          <div className="text-xl font-black truncate">{p.name}</div>
+          <div className="text-xs text-white/80">{t.games} game{t.games === 1 ? "" : "s"} · {t.starts} start{t.starts === 1 ? "" : "s"} · {t.minutes} min</div>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <Big label="Goals" value={t.goal} sub={r.goalsPer80 != null ? `${r.goalsPer80} per 80` : ""} />
+        <Big label="Assists" value={t.assist} />
+        <Big label="Shots" value={t.shots} sub={`${t.shot_on} on target`} />
+        <Big label="Passes" value={t.pass} sub={r.passesPer80 != null ? `${r.passesPer80} per 80` : ""} />
+        <Big label="Won ball" value={t.won} sub={`${t.lost} lost`} />
+        <Big label="+ / −" value={r.plusMinus > 0 ? `+${r.plusMinus}` : r.plusMinus} sub={`${t.gf} for · ${t.ga} against`} />
+        {t.save > 0 && <Big label="Saves" value={t.save} />}
+        {t.key_pass > 0 && <Big label="Key passes" value={t.key_pass} />}
+        {(t.yellow + t.red) > 0 && <Big label="Cards" value={`${t.yellow}Y ${t.red}R`} />}
+      </div>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <h4 className="font-bold text-sm text-slate-900 mb-1">Percentages</h4>
+        <Meter label="Shot accuracy" value={r.shotAccuracy} hint="Shots on target out of all shots" />
+        <Meter label="Goals per shot" value={r.conversion} hint="How many shots went in" />
+        <Meter label="Pass completion" value={r.passCompletion} hint="Passes completed vs. balls lost" />
+        {t.save > 0 && <Meter label="Save %" value={r.savePct} hint="Saves vs. goals conceded (games in goal)" />}
+        <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+          <div><div className="text-lg font-black tabular-nums">{r.involvementPer80 ?? "–"}</div><div className="text-[10px] font-bold text-slate-500 uppercase">G+A per 80</div></div>
+          <div><div className="text-lg font-black tabular-nums">{r.shotsPer80 ?? "–"}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Shots per 80</div></div>
+          <div><div className="text-lg font-black tabular-nums">{r.minutesPerGame ?? "–"}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Min per game</div></div>
+        </div>
+      </div>
+      {(pr.passTo.length > 0 || pr.passFrom.length > 0) && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 grid grid-cols-2 gap-3">
+          <div>
+            <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1">{isMe ? "You pass most to" : "Passes most to"}</h4>
+            {pr.passTo.length ? pr.passTo.map((x) => <div key={x.uid} className="text-sm"><b>{nm(x.uid)}</b> <span className="text-slate-400">· {x.n}</span></div>) : <div className="text-sm text-slate-400">–</div>}
+          </div>
+          <div>
+            <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1">{isMe ? "Gets you the ball" : "Gets the ball from"}</h4>
+            {pr.passFrom.length ? pr.passFrom.map((x) => <div key={x.uid} className="text-sm"><b>{nm(x.uid)}</b> <span className="text-slate-400">· {x.n}</span></div>) : <div className="text-sm text-slate-400">–</div>}
+          </div>
+        </div>
+      )}
+      {pr.shots.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <h4 className="font-bold text-sm text-slate-900 mb-2">{isMe ? "My shots" : "Shot map"}</h4>
+          <HalfPitch shots={pr.shots} />
+          <ShotLegend />
+        </div>
+      )}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <h4 className="font-bold text-sm text-slate-900 mb-1">Game by game</h4>
+        <ul className="divide-y divide-slate-100">
+          {pr.log.map(({ game: g, line: l, pm, score: sc, started }) => {
+            const res = g.status !== "final" ? "LIVE" : resultLetter(sc);
+            return (
+              <li key={g.id}>
+                <button onClick={onOpenGame ? () => onOpenGame(g.id) : undefined} className="w-full flex items-center gap-2 py-2 text-left">
+                  <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-[11px] font-black ${res === "W" ? "bg-emerald-100 text-emerald-700" : res === "L" ? "bg-red-100 text-red-700" : res === "LIVE" ? "text-white" : "bg-slate-100 text-slate-600"}`} style={res === "LIVE" ? { backgroundColor: RED } : undefined}>{res}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-bold text-slate-900 truncate">{g.homeAway === "away" ? "@ " : "vs "}{g.opponent} <span className="text-slate-400 font-semibold">{sc.us}–{sc.them}</span></span>
+                    <span className="block text-[11px] text-slate-500">{g.date} · {started ? "Started" : "Sub"} · {l.minutes} min · {pm.diff > 0 ? `+${pm.diff}` : pm.diff}</span>
+                  </span>
+                  <span className="text-[12px] font-bold tabular-nums text-slate-700 text-right whitespace-nowrap">{[l.goal && `${l.goal}G`, l.assist && `${l.assist}A`, l.shots && `${l.shots}Sh`, l.pass && `${l.pass}P`, l.save && `${l.save}Sv`].filter(Boolean).join(" ") || "–"}</span>
+                  {onOpenGame && <ChevronRight className="w-4 h-4 text-slate-300" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 // ─── Coach: choose stat keepers ────────────────────────────────────────────
 // Anyone on the team can be one: a player who is injured or sitting out, a
 // team manager, or a parent who has an account on the team.
@@ -825,7 +934,7 @@ function StatKeepersSheet({ allUsers, activeTeamId, players, current, onSave, on
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────
-export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineups = [], positionsByUid, isCoach = false, canRecord = isCoach, statKeepers = null, setStatKeepers, onSendReport, startGameId = null }) {
+export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineups = [], positionsByUid, isCoach = false, canRecord = isCoach, statKeepers = null, setStatKeepers, onSendReport, startGameId = null, startProfileUid = null }) {
   const games = useCollection(activeTeamId ? "games" : null, where("teamId", "==", activeTeamId), orderBy("date", "desc"));
   const allEvents = useCollection(activeTeamId ? "gameEvents" : null, where("teamId", "==", activeTeamId));
   const [tab, setTab] = useState("games");
@@ -833,6 +942,7 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
   const [tracking, setTracking] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
   const [keepersOpen, setKeepersOpen] = useState(false);
+  const [profileUid, setProfileUid] = useState(startProfileUid);
 
   // Players on this team, ordered GK → DEF → MID → FWD (roster positions),
   // with names resolved like the roster.
@@ -893,6 +1003,14 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
     return <LiveTracker game={trackingGame} events={eventsByGame[trackingGame.id] || []} players={players} playerById={playerById} gkIds={players.gkIds || []} user={user} onClose={() => setTracking(null)} />;
   }
   const openGame = openId && games.find((g) => g.id === openId);
+  if (profileUid && !openGame) {
+    return (
+      <div>
+        {!startProfileUid && <div className="px-5 pt-3"><button onClick={() => setProfileUid(null)} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> Season</button></div>}
+        <PlayerProfile uid={profileUid} games={games} eventsByGame={eventsByGame} playerById={playerById} onOpenGame={setOpenId} isMe={profileUid === user?.uid} />
+      </div>
+    );
+  }
   if (openGame) {
     return <GameSummary game={openGame} events={eventsByGame[openGame.id] || []} playerById={playerById} isCoach={isCoach} canRecord={canRecord} onTrack={() => setTracking(openGame.id)} onBack={() => setOpenId(null)} highlightUid={isCoach ? null : user.uid} onSendReport={onSendReport} />;
   }
@@ -964,8 +1082,8 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
             className="w-full h-12 rounded-2xl bg-white border border-slate-200 text-sm font-bold text-slate-800 flex items-center justify-center gap-1.5"><SheetIcon className="w-4 h-4" /> Export season (CSV)</button>
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
             <h4 className="font-bold text-sm text-slate-900 mb-1 flex items-center gap-1.5"><Users className="w-4 h-4" /> Season — players</h4>
-            <p className="text-[11px] text-slate-400 mb-1">Tap a column to sort.</p>
-            <StatsTable lines={season} playerById={playerById} season highlightUid={isCoach ? null : user.uid} />
+            <p className="text-[11px] text-slate-400 mb-1">Tap a column to sort · tap a name for their profile.</p>
+            <StatsTable lines={season} playerById={playerById} season highlightUid={isCoach ? null : user.uid} onPick={setProfileUid} />
           </div>
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
             <h4 className="font-bold text-sm text-slate-900 mb-2">Season shot map</h4>
@@ -992,8 +1110,28 @@ export function LatestGameCard({ user, activeTeamId, allUsers = [], positionsByU
   const allEvents = useCollection(activeTeamId ? "gameEvents" : null, where("teamId", "==", activeTeamId));
   const [open, setOpen] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
   const game = games.find((g) => g.status === "final");
   if (!game && !isStatKeeper) return null;
+  const myStatsButton = game && (
+    <button onClick={() => setStatsOpen(true)} className="w-full mt-2 bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex items-center gap-3 text-left">
+      <span className="w-10 h-10 rounded-xl flex items-center justify-center bg-slate-100"><BarChart3 className="w-5 h-5" style={{ color: RED }} /></span>
+      <span className="flex-1"><span className="block font-bold text-slate-900">My stats</span><span className="block text-xs text-slate-500">Season totals, percentages, shot map, every game</span></span>
+      <ChevronRight className="w-4 h-4 text-slate-300" />
+    </button>
+  );
+  const statsOverlay = statsOpen && createPortal(
+    <div className="fixed inset-0 z-[60] bg-slate-50 overflow-y-auto" role="dialog" aria-label="My stats" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+      <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-4 h-14 flex items-center justify-between">
+        <span className="font-bold text-slate-900">My stats</span>
+        <button onClick={() => setStatsOpen(false)} aria-label="Close" className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+      </div>
+      <div className="max-w-md mx-auto">
+        <GameStatsPage user={user} activeTeamId={activeTeamId} allUsers={allUsers} positionsByUid={positionsByUid} statKeepers={statKeepers} startProfileUid={user.uid} />
+      </div>
+    </div>,
+    document.body,
+  );
   const live = games.find((g) => g.status === "live");
   const keeperButton = isStatKeeper && (
     <button onClick={() => setRecordOpen(true)} className="w-full rounded-2xl p-4 text-white flex items-center gap-3 shadow-sm mb-2" style={{ backgroundColor: RED }}>
@@ -1033,6 +1171,8 @@ export function LatestGameCard({ user, activeTeamId, allUsers = [], positionsByU
         </span>
         <ChevronRight className="w-4 h-4 text-slate-300" />
       </button>
+      {myStatsButton}
+      {statsOverlay}
       {open && createPortal(
         <div className="fixed inset-0 z-[60] bg-slate-50 overflow-y-auto" role="dialog" aria-label="Game report" style={{ paddingTop: "env(safe-area-inset-top)" }}>
           <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-4 h-14 flex items-center justify-between">

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clockMs, possessionTotals, switchPossession, pausePossession, resumePossession, ballOwner, takeBall, possessionEvents, lastPasserTo, score, minutesPlayed, onFieldNow, playerLines, teamTotals, seasonLines, record } from "./gameStats";
+import { onFieldSpells, plusMinus, playerProfile, clockMs, possessionTotals, switchPossession, pausePossession, resumePossession, ballOwner, takeBall, possessionEvents, lastPasserTo, score, minutesPlayed, onFieldNow, playerLines, teamTotals, seasonLines, record } from "./gameStats";
 
 describe("clock and possession", () => {
   it("adds running time", () => {
@@ -132,5 +132,48 @@ describe("tap-to-possess", () => {
     const t = teamTotals({}, [{ type: "pass", uid: "j", toUid: "k" }, { type: "lost", uid: "k" }]);
     expect([t.passes, t.turnovers]).toEqual([1, 1]);
     expect(playerLines({}, [{ type: "pass", uid: "j", toUid: "k" }]).j.pass).toBe(1);
+  });
+});
+
+describe("player profile (My Stats)", () => {
+  const g1 = { id: "g1", date: "2026-11-01", starters: ["a", "b"], clock: { elapsedMs: 80 * 60000 }, status: "final" };
+  const g2 = { id: "g2", date: "2026-11-08", starters: ["b"], clock: { elapsedMs: 80 * 60000 }, status: "final" };
+  const ev = {
+    g1: [
+      { type: "goal", uid: "a", ms: 10 * 60000, x: 0.5, y: 0.2, ts: 1 },
+      { type: "pass", uid: "b", toUid: "a", ms: 20 * 60000, ts: 2 },
+      { type: "shot_off", uid: "a", ms: 21 * 60000, ts: 3 },
+      { type: "opp_goal", ms: 50 * 60000, ts: 4 },
+      { type: "sub", outUid: "a", inUid: "c", ms: 40 * 60000, ts: 5 },
+      { type: "lost", uid: "a", ms: 30 * 60000, ts: 6 },
+      { type: "pass", uid: "a", toUid: "b", ms: 31 * 60000, ts: 7 },
+    ],
+    g2: [{ type: "sub", outUid: "b", inUid: "a", ms: 60 * 60000 }, { type: "goal", uid: "a", ms: 70 * 60000 }],
+  };
+  it("totals, starts, minutes, plus/minus", () => {
+    const pr = playerProfile("a", [g1, g2], ev);
+    expect(pr.totals).toMatchObject({ games: 2, starts: 1, minutes: 60, goal: 2, shots: 3, pass: 1, lost: 1, received: 1 });
+    expect(pr.totals.gf).toBe(2); // goal at 10' (on) + goal at 70' in g2 (on from 60')
+    expect(pr.totals.ga).toBe(0); // opp goal at 50' — already subbed off at 40'
+    expect(pr.log[0].game.id).toBe("g2"); // newest first
+    expect(pr.shots).toHaveLength(1); // only shots with a spot
+  });
+  it("rates", () => {
+    const pr = playerProfile("a", [g1, g2], ev);
+    expect(pr.rates.conversion).toBe(67);
+    expect(pr.rates.passCompletion).toBe(50);
+    expect(pr.rates.goalsPer80).toBe(2.7);
+    expect(pr.passFrom[0]).toEqual({ uid: "b", n: 1 });
+    expect(pr.passTo[0]).toEqual({ uid: "b", n: 1 });
+  });
+  it("player with no games", () => {
+    const pr = playerProfile("zz", [g1], ev);
+    expect(pr.totals.games).toBe(0);
+    expect(pr.rates.conversion).toBeNull();
+  });
+  it("on-field spells", () => {
+    expect(onFieldSpells(["a"], ev.g1, 80 * 60000, "a")).toEqual([[0, 40 * 60000]]);
+    expect(onFieldSpells(["b"], ev.g2, 80 * 60000, "a")).toEqual([[60 * 60000, 80 * 60000]]);
+    expect(plusMinus(g1, ev.g1, "c")).toEqual({ gf: 0, ga: 1, diff: -1 });
   });
 });
