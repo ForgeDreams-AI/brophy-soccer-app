@@ -17,7 +17,7 @@ export const SHEET_ROSTER = {
   varsity: {
     GK: ["Brannen Marks", "Franco Coury", "Carlos Ramos"],
     DEF: ["Austin Schenk", "Gavin Hamilton", "Alex Swiergol", "Cruz Wie", "Cade Cicalese", "Eli Halpert", "Max Garske", "Miguel Suady"],
-    MID: ["Shubhan Kulkarni", "Will Osborne", "Kellen Choi", "Hugh Healy", "Bangally Jaiteh-Kabba", "Brody Haegen", "Nucci Quoshili", "Lucas DiPasquale", "Stadon Pricher"],
+    MID: ["Shubhan Kulkarni", "Will Osborne", "Kellen Choi", "Hugh Healy", "Bangally Jaiteh-Kabba", "Brody Haegen", "Nucci Qoshlli", "Lucas DiPasquale", "Stadon Pricher"],
     FWD: ["Joey Fritz", "Conor Byers", "Jackson Ducusin", "Will Chucri", "Emilio Coker", "Neal Mahoney", "Jonah Geist"],
   },
 };

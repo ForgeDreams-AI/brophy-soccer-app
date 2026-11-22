@@ -9729,11 +9729,29 @@ export default function TeamHubRolesApp() {
   // listener until the user is known + actually an admin (rules deny otherwise).
   // Roster for the active team only (a coach picks players from their own
   // team; the org admin switches teams to see the others).
-  const allUsers = useCollection(
+  const allUsersRaw = useCollection(
     noData ? null : (isCoach ? "users" : null),
     where("teamIds", "array-contains", activeTeamId),
     orderBy("name"),
   );
+  const invitesRaw = useCollection(noData || !isCoach ? null : ("invitedEmails"), where("teamId", "==", activeTeamId), orderBy("email"));
+  // An invite marked Coach wins over an account still saying "player" (the
+  // account was made before the invite was changed). People lists treat them
+  // as a coach right away; the program admin's app also fixes the account
+  // (below), which is what actually unlocks coach tools for them.
+  const allUsers = useMemo(() => {
+    const coachEmails = new Set((invitesRaw || []).filter((i) => i.role === "admin").map((i) => (i.email || i.id || "").toLowerCase()));
+    if (!coachEmails.size) return allUsersRaw;
+    const out = allUsersRaw.map((u) => (u.role === "player" && coachEmails.has((u.email || "").toLowerCase()) ? { ...u, role: "admin", roleFromInvite: true } : u));
+    return Object.assign(out, allUsersRaw.loading ? { loading: true } : {});
+  }, [allUsersRaw, invitesRaw]);
+  useEffect(() => {
+    if (user?.role !== "orgAdmin") return;
+    const fix = allUsers.filter((u) => u.roleFromInvite);
+    fix.forEach((u) => updateDoc(doc(db, "users", u.id), { role: "admin" })
+      .then(() => console.info(`Role synced to coach for ${u.email}`))
+      .catch((e) => console.warn("role sync failed", u.email, e?.code)));
+  }, [allUsers, user?.role]);
   // Org-admin-only view of EVERY signed-in user across all three teams, for
   // the Settings admin model (§10): the program admin manages roles and team
   // assignments here. A team coach never subscribes (rules deny otherwise).
@@ -10183,7 +10201,6 @@ export default function TeamHubRolesApp() {
   //    the code (a random token = the capability); shape documented in
   //    src/data/teams.js, rules in firestore.rules.
   // Coach-only: the roster's emails are not visible to players (rules).
-  const invitesRaw = useCollection(noData || !isCoach ? null : ("invitedEmails"), where("teamId", "==", activeTeamId), orderBy("email"));
   // An invite keeps the role it was sent with, but the account's role is the
   // truth (e.g. someone invited as a player and later made program admin).
   // Use the account's role when it is staff, so staff never show as players.
