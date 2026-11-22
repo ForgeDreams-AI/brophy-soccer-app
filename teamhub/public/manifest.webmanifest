@@ -1,0 +1,11 @@
+{
+  "name": "Brophy Soccer",
+  "short_name": "Brophy Soccer",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#980000",
+  "theme_color": "#980000",
+  "icons": [
+    { "src": "/brand/favicon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

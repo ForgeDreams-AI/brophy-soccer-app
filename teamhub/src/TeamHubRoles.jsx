@@ -10496,12 +10496,11 @@ export default function TeamHubRolesApp() {
 
   const [checkin, setCheckin] = useState({ energy: 0, soreness: 0, tiredness: 0 });
 
+  // The branded loading screen lives in index.html (it shows before any app
+  // code loads). Keep it up while auth/profile loads, then fade it out.
+  useEffect(() => { if (!loading) window.__hideSplash?.(); }, [loading]);
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: COLORS.primary }}>
-        <div className="text-white/70 text-sm font-medium">Loading…</div>
-      </div>
-    );
+    return <div className="min-h-screen" style={{ backgroundColor: COLORS.primary }} />;
   }
   if (!user) return <LoginScreen externalError={authError} clearExternalError={clearError} emailLinkPending={emailLinkPending} onCompleteEmailLink={completeEmailLink} />;
   // Locked door: drill-library-only accounts (role drillBuilder, or any role

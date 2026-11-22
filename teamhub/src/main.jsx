@@ -19,6 +19,8 @@ class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error) {
+    // Never leave the loading screen covering the error message.
+    window.__hideSplash?.();
     console.error("Brophy Soccer crashed:", error);
   }
 
