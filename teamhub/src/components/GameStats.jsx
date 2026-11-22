@@ -15,6 +15,7 @@ import { db } from "../firebase";
 import { useCollection, isLoading } from "../hooks/useCollection";
 import { toast } from "../lib/toast";
 import { shareSheetPdf } from "../lib/sharePdf";
+import { GameInsights, SeasonAnalytics, PlayerInsights } from "./GameAnalytics";
 import { gameCsv, seasonCsv, scorers, reportText, shareOrDownload, fileSafe, gameTitle, resultLetter } from "../lib/gameExport";
 import { teamDateKey } from "../lib/dates";
 import { groupByPosition } from "../data/rosterPositions";
@@ -187,13 +188,13 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
       return;
     }
     if (!confirm(`Halftime? The clock stops at ${fmtClock(clockMs(game.clock, t))} and the 2nd half starts when you restart it.`)) return;
-    save({ clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t), half: 2 }, possession: stopPossession(t) });
+    save({ clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t), half: 2 }, possession: { ...stopPossession(t), half: 2 } });
     toast("Halftime. Tap the player who kicks off, or the clock, to start the 2nd half.", "success");
   };
   // Mistake fixes (More sheet): back to the 1st half, set the clock.
   const backToFirstHalf = () => {
     if (!confirm("Go back to the 1st half? (Use this if Halftime was tapped by mistake.)")) return;
-    save({ clock: { ...game.clock, half: 1 } });
+    save({ clock: { ...game.clock, half: 1 }, possession: { ...(game.possession || {}), half: 1 } });
     setMoreOpen(false);
     toast("Back in the 1st half. Tap the clock to keep going.", "success");
   };
@@ -781,6 +782,7 @@ function GameSummary({ game, events, playerById, isCoach, canRecord = isCoach, o
         <HalfPitch shots={shots} />
         <ShotLegend />
       </div>
+      <GameInsights game={game} events={events} playerById={playerById} />
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         <h4 className="font-bold text-sm text-slate-900 mb-1">Players</h4>
         <StatsTable lines={lines} playerById={playerById} highlightUid={highlightUid} />
@@ -976,6 +978,7 @@ function PlayerProfile({ uid, games, eventsByGame, playerById, onOpenGame, isMe 
           <ShotLegend />
         </div>
       )}
+      <PlayerInsights uid={uid} games={games} eventsByGame={eventsByGame} />
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         <h4 className="font-bold text-sm text-slate-900 mb-1">Game by game</h4>
         <ul className="divide-y divide-slate-100">
@@ -1038,6 +1041,7 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
   const games = useCollection(activeTeamId ? "games" : null, where("teamId", "==", activeTeamId), orderBy("date", "desc"));
   const allEvents = useCollection(activeTeamId ? "gameEvents" : null, where("teamId", "==", activeTeamId));
   const [tab, setTab] = useState("games");
+  const [seasonView, setSeasonView] = useState("players");
   const [openId, setOpenId] = useState(startGameId);
   const [tracking, setTracking] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
@@ -1056,6 +1060,7 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
     const { groups } = groupByPosition(team, activeTeamId, positionsByUid || {});
     const list = [...groups.GK, ...groups.DEF, ...groups.MID, ...groups.FWD, ...groups.NONE];
     list.gkIds = groups.GK.map((p) => p.id);
+    list.groups = groups;
     return list;
   }, [allUsers, snapshotUsers, activeTeamId, positionsByUid]);
   // Names: live accounts first, then the roster snapshot saved on each game
@@ -1089,7 +1094,7 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
         // Name snapshot so reports read well on every phone, forever.
         roster: Object.fromEntries(players.map((p) => [p.id, { name: p.name || "", initials: p.initials || "" }])),
         clock: { running: false, startedAt: null, elapsedMs: 0, half: 1 },
-        possession: { holder: null, since: null, usMs: 0, themMs: 0 },
+        possession: { holder: null, since: null, usMs: 0, themMs: 0, byHalf: {}, half: 1 },
         createdBy: user.uid, createdByName: user.name || "", createdAt: serverTimestamp(),
       });
       setNewOpen(false);
@@ -1178,6 +1183,13 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
         </>
       ) : (
         <>
+          <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-1">
+            {[["players", "Players"], ["team", "Team"], ["attack", "Attack"], ["passing", "Passing"], ["lineups", "Line-ups"]].map(([id, label]) => (
+              <button key={id} onClick={() => setSeasonView(id)} className={`flex-shrink-0 h-9 px-3.5 rounded-full text-xs font-bold ${seasonView === id ? "text-white" : "bg-white border border-slate-200 text-slate-600"}`} style={seasonView === id ? { backgroundColor: RED } : undefined}>{label}</button>
+            ))}
+          </div>
+          {seasonView === "players" ? (
+            <>
           <button onClick={() => shareOrDownload(`Brophy-season-stats-${teamDateKey()}.csv`, seasonCsv(games, eventsByGame, playerById), "text/csv").catch((e) => toast("Couldn't export — " + (e?.message || "")))}
             className="w-full h-12 rounded-2xl bg-white border border-slate-200 text-sm font-bold text-slate-800 flex items-center justify-center gap-1.5"><SheetIcon className="w-4 h-4" /> Export season (CSV)</button>
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
@@ -1190,6 +1202,10 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
             <HalfPitch shots={seasonShots} />
             <ShotLegend />
           </div>
+            </>
+          ) : (
+            <SeasonAnalytics view={seasonView} games={games} eventsByGame={eventsByGame} playerById={playerById} groups={players.groups} />
+          )}
         </>
       )}
 

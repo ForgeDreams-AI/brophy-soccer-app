@@ -53,10 +53,19 @@ export function possessionTotals(pos, now = Date.now()) {
   const total = us + them;
   return { usMs: us, themMs: them, usPct: total ? Math.round((us / total) * 100) : null };
 }
-// Possession after switching to `holder` (null = stop counting).
+// Possession after switching to `holder` (null = stop counting). Also keeps
+// a per-half split in byHalf (pos.half = the half being played), saved
+// automatically for the analytics.
 export function switchPossession(pos, holder, now = Date.now()) {
   const t = possessionTotals(pos, now);
-  return { holder: holder || null, since: holder ? now : null, usMs: t.usMs, themMs: t.themMs };
+  const half = pos?.half || 1;
+  const byHalf = { ...(pos?.byHalf || {}) };
+  if (pos?.holder && pos.since != null) {
+    const k = String(half);
+    const cur = byHalf[k] || { us: 0, them: 0 };
+    byHalf[k] = { ...cur, [pos.holder]: (cur[pos.holder] || 0) + Math.max(0, now - pos.since) };
+  }
+  return { holder: holder || null, since: holder ? now : null, usMs: t.usMs, themMs: t.themMs, byHalf, half };
 }
 
 // Clock paused → stop counting but remember who had the ball; clock resumed
@@ -80,7 +89,7 @@ export function ballOwner(pos) {
 export function takeBall(pos, side, carrier = null, running = true, now = Date.now()) {
   const c = side === "us" ? carrier || null : null;
   if (running) return { ...switchPossession(pos, side, now), resume: null, carrier: c };
-  return { ...possessionTotalsOnly(pos), holder: null, since: null, resume: side || null, carrier: c };
+  return { ...possessionTotalsOnly(pos), byHalf: pos?.byHalf || {}, half: pos?.half || 1, holder: null, since: null, resume: side || null, carrier: c };
 }
 const possessionTotalsOnly = (pos) => ({ usMs: Number(pos?.usMs) || 0, themMs: Number(pos?.themMs) || 0 });
 

@@ -177,3 +177,14 @@ describe("player profile (My Stats)", () => {
     expect(plusMinus(g1, ev.g1, "c")).toEqual({ gf: 0, ga: 1, diff: -1 });
   });
 });
+
+describe("possession by half is recorded automatically", () => {
+  it("splits time into the half being played", () => {
+    let p = takeBall({ half: 1 }, "us", "j", true, 0);
+    p = takeBall(p, "them", null, true, 30_000);           // 30s us in half 1
+    p = { ...switchPossession(p, null, 40_000), half: 2 }; // 10s them, then halftime
+    p = takeBall(p, "us", "k", true, 100_000);
+    p = switchPossession(p, null, 120_000);                // 20s us in half 2
+    expect(p.byHalf).toEqual({ 1: { us: 30_000, them: 10_000 }, 2: { us: 20_000, them: 0 } });
+  });
+});
