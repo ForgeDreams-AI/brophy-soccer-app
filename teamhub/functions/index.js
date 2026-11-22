@@ -259,6 +259,8 @@ exports.onMessageCreated = onDocumentCreated("messages/{id}", async (event) => {
   if (!data) return;
   let body;
   if (data.kind === "poll") body = `📊 ${data.question || "New poll"}`;
+  // A photo with a caption (game report, line-up…) shows the caption.
+  else if (data.attachment?.type === "image" && data.text) body = `📷 ${trunc(data.text)}`;
   else if (data.attachment?.type === "image") body = "📷 Sent a photo";
   else if (data.attachment?.type === "video") body = "🎬 Sent a video";
   else if (data.attachment?.type === "file") body = "📎 Sent a file";

@@ -74,3 +74,9 @@ body {
     page-break-inside: avoid;
   }
 }
+
+/* In-app notification banner (foreground pushes) slides down from the top. */
+@keyframes banner-in {
+  from { transform: translateY(-120%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}

@@ -54,7 +54,7 @@ import { searchExercises } from "./lib/exerciseSearch";
 import { lookupBarcode, searchProducts } from "./lib/openfoodfacts";
 import {
   notificationsSupported, currentPermission,
-  enablePushNotifications, disablePushOnThisDevice, pushEnabledOnThisDevice, onForegroundMessage,
+  enablePushNotifications, disablePushOnThisDevice, pushEnabledOnThisDevice, onForegroundMessage, refreshPushToken, isIOS, isStandalone,
 } from "./lib/notifications";
 import { toast } from "./lib/toast";
 import { teamDateKey, teamDateKeyOf, zonedDate } from "./lib/dates";
@@ -1090,6 +1090,57 @@ const ChecklistRow = ({ done, icon: Icon, label, sub, onClick, accent }) => (
 // main daily action here (attendance / practice check-in were removed):
 // three quick 1–5 taps (Energy / Soreness / Tiredness, high = ready) and the
 // player gets a decisive readiness verdict back.
+// "Turn on notifications" card (Home, players and coaches). Hidden once push
+// is on for this device. On an iPhone that isn't running the Home Screen
+// app, explains that step first — iOS only allows web push from there.
+const PushPrompt = ({ user }) => {
+  const [perm, setPerm] = useState(() => (pushEnabledOnThisDevice() ? "granted" : currentPermission() === "denied" ? "denied" : "default"));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [hidden, setHidden] = useState(() => { try { return sessionStorage.getItem("pushPromptHidden") === "1"; } catch { return false; } });
+  if (perm === "granted" || hidden) return null;
+  const iosNeedsInstall = isIOS() && !isStandalone();
+  if (!iosNeedsInstall && !notificationsSupported()) return null;
+  const enable = async () => {
+    setErr(""); setBusy(true);
+    try { await enablePushNotifications(user.uid); setPerm("granted"); toast("Notifications on for this phone.", "success"); } catch (e) { setErr(e.message || "Couldn't enable notifications."); } finally { setBusy(false); }
+  };
+  const hide = () => { setHidden(true); try { sessionStorage.setItem("pushPromptHidden", "1"); } catch { /* private mode */ } };
+  return (
+    <section className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft }}>
+          <Bell className="w-4 h-4" style={{ color: COLORS.accent }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-xs font-bold text-slate-900">Turn on notifications</div>
+          <div className="text-[11px] text-slate-500 leading-snug">
+            {iosNeedsInstall
+              ? "On iPhone, add the app to your Home Screen first, then open it from that icon."
+              : perm === "denied"
+                ? "Blocked on this phone. Allow notifications for this site in your settings, then reopen the app."
+                : "Chat, game reports, schedule changes and reminders — right away."}
+          </div>
+          {err && <div className="text-[11px] text-red-500 font-medium mt-0.5">{err}</div>}
+        </div>
+        {!iosNeedsInstall && perm !== "denied" && (
+          <button onClick={enable} disabled={busy} className="text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-full text-white flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>
+            {busy ? "…" : "Turn on"}
+          </button>
+        )}
+        <button onClick={hide} aria-label="Not now" className="w-7 h-7 rounded-full flex items-center justify-center text-slate-400 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
+      </div>
+      {iosNeedsInstall && (
+        <ol className="mt-2 ml-12 text-[11px] text-slate-600 leading-relaxed list-decimal pl-4">
+          <li>Tap the <b>Share</b> button in Safari (square with an arrow).</li>
+          <li>Choose <b>Add to Home Screen</b>.</li>
+          <li>Open Brophy Soccer from the new icon, come back here and tap <b>Turn on</b>.</li>
+        </ol>
+      )}
+    </section>
+  );
+};
+
 const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCheckin, submitWellness, wellnessLoggedToday, myWellness = null, loggedToday, waterCups = 0, setWaterCups, documents = [], signDocument, onOpenTrain, onOpenSchedule, practices = [], activeTeamId, todayQuote, addQuote, nutritionTarget, nutritionTotals = { cal: 0, protein: 0 }, profilePrompt, onOpenProfile, onUploadPhoto }) => {
   const promptTs = profilePrompt?.requestedAt;
   const [profileDismissed, setProfileDismissed] = useState(() => { try { return localStorage.getItem("profilePromptSeen") === promptTs; } catch { return false; } });
@@ -1315,21 +1366,6 @@ const HomePage = ({ user, practices = [], announcements = [], events = [], welln
   const [showPlayers, setShowPlayers] = useState(false);
   const [annOpen, setAnnOpen] = useState(false);
   const [pushModalOpen, setPushModalOpen] = useState(false);
-  const [pushPerm, setPushPerm] = useState(() => (pushEnabledOnThisDevice() ? "granted" : currentPermission() === "denied" ? "denied" : "default"));
-  const [pushBusy, setPushBusy] = useState(false);
-  const [pushErr, setPushErr] = useState("");
-  const enablePush = async () => {
-    setPushErr("");
-    setPushBusy(true);
-    try {
-      await enablePushNotifications(user.uid);
-      setPushPerm("granted");
-    } catch (e) {
-      setPushErr(e.message || "Couldn't enable notifications.");
-    } finally {
-      setPushBusy(false);
-    }
-  };
   const [showGroups, setShowGroups] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [openGroupId, setOpenGroupId] = useState(null);
@@ -1495,31 +1531,7 @@ const HomePage = ({ user, practices = [], announcements = [], events = [], welln
     </section>
   );
 
-  const notificationsSection = (() => {
-    if (!notificationsSupported()) return null;
-    if (pushPerm === "granted") return null;
-    return (
-      <section className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft }}>
-          <Bell className="w-4 h-4" style={{ color: COLORS.accent }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-xs font-bold text-slate-900">Turn on notifications</div>
-          <div className="text-[10px] text-slate-500 leading-snug">
-            {pushPerm === "denied"
-              ? "Blocked. Allow notifications in your browser settings, then refresh."
-              : "Get pinged for announcements, chat, and games."}
-          </div>
-          {pushErr && <div className="text-[10px] text-red-500 font-medium mt-0.5">{pushErr}</div>}
-        </div>
-        {pushPerm !== "denied" && (
-          <button onClick={enablePush} disabled={pushBusy} className="text-[10px] font-bold uppercase tracking-wider px-3 py-2 rounded-full text-white flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>
-            {pushBusy ? "…" : "Enable"}
-          </button>
-        )}
-      </section>
-    );
-  })();
+  const notificationsSection = <PushPrompt user={user} />;
 
   const groupsSection = (() => {
     if (!isAdmin) return null;
@@ -9558,17 +9570,35 @@ export default function TeamHubRolesApp() {
     }
   }, []);
 
-  // Foreground messages — show a quick toast as a notification.
-  // Skipped for locked-out accounts (no team content for them at all).
+  // Foreground messages (app open): show an in-app banner that slides down
+  // from the top, like a phone notification. (Phones don't allow
+  // new Notification() from a page, so the old code showed nothing.) Tapping
+  // it goes where the notification points. A chat message isn't bannered
+  // while you're already in Chat.
+  const [inAppBanner, setInAppBanner] = useState(null);
+  const activeTabRef = useRef(null);
+  useEffect(() => { activeTabRef.current = tab; }, [tab]);
   useEffect(() => {
     if (!user || lockedOut) return;
     return onForegroundMessage((payload) => {
       const n = payload.notification || {};
-      try {
-        new Notification(n.title || "Brophy Soccer", { body: n.body, icon: "/brand/logo.png" });
-      } catch { /* permission revoked since enable; ignore */ }
+      const d = payload.data || {};
+      const link = d.link || payload.fcmOptions?.link || "/";
+      const tab = new URLSearchParams(new URL(link, window.location.origin).search).get("tab");
+      if (tab === "messages" && activeTabRef.current === "messages") return;
+      try { navigator.vibrate?.(30); } catch { /* not supported */ }
+      setInAppBanner({ id: Date.now(), title: n.title || d.title || "Brophy Soccer", body: n.body || d.body || "", tab });
     });
   }, [user, lockedOut]);
+  useEffect(() => {
+    if (!inAppBanner) return undefined;
+    const t = setTimeout(() => setInAppBanner(null), 5000);
+    return () => clearTimeout(t);
+  }, [inAppBanner]);
+  // Keep this device's push token current (silently, once per open).
+  useEffect(() => {
+    if (user?.uid && !lockedOut) refreshPushToken(user.uid);
+  }, [user?.uid, lockedOut]);
 
   // Live from Firestore — see Build Guide §4 + §8
   const announcements = useCollection(noData ? null : ("announcements"), where("teamId", "==", activeTeamId), orderBy("createdAt", "desc"));
@@ -10567,6 +10597,25 @@ export default function TeamHubRolesApp() {
       }}
     >
       <Toaster />
+      {inAppBanner && (
+        <button
+          key={inAppBanner.id}
+          onClick={() => { if (inAppBanner.tab) routeToTab(inAppBanner.tab); setInAppBanner(null); }}
+          className="fixed left-3 right-3 z-[9000] flex items-start gap-3 text-left rounded-2xl bg-white/95 backdrop-blur shadow-2xl border border-slate-200 px-3.5 py-3 sm:max-w-sm sm:left-auto"
+          style={{ top: "calc(10px + env(safe-area-inset-top))", animation: "banner-in .35s cubic-bezier(.2,.9,.3,1.2)" }}
+          role="status"
+          aria-live="polite"
+        >
+          <img src="/brand/favicon.png" alt="" className="w-9 h-9 rounded-xl flex-shrink-0" />
+          <span className="flex-1 min-w-0">
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-[13px] font-bold text-slate-900 truncate">{inAppBanner.title}</span>
+              <span className="text-[10px] text-slate-400 flex-shrink-0">now</span>
+            </span>
+            {inAppBanner.body && <span className="block text-[13px] text-slate-600 leading-snug line-clamp-2">{inAppBanner.body}</span>}
+          </span>
+        </button>
+      )}
       {/* Navy tint so the photo reads as ambient brand wallpaper, not busy. */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -10649,6 +10698,7 @@ export default function TeamHubRolesApp() {
               pages stay readable (and the pitch stays usable) at 72rem. */}
           <div className="w-full lg:max-w-6xl lg:mx-auto h-full flex flex-col">
           {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} isOrgAdmin={user.role === "orgAdmin"} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} wellness={wellness} wellnessLoading={isLoading(wellnessRaw)} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} inviteLinks={inviteLinks} addInviteLink={addInviteLink} removeInviteLink={removeInviteLink} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
+          {activeTab === "home" && effUser.role !== "admin" && <div className="px-5 pt-4 -mb-1"><PushPrompt user={effUser} /></div>}
           {activeTab === "home" && effUser.role !== "admin" && <LatestGameCard user={effUser} activeTeamId={activeTeamId} allUsers={allUsers} positionsByUid={positionsByUid} isStatKeeper={isStatKeeper} statKeepers={statKeepers} lineups={lineups} />}
           {activeTab === "home" && effUser.role !== "admin" && <PlayerTodayPage user={effUser} events={events} announcements={announcements} checkin={checkin} setCheckin={setCheckin} submitWellness={submitWellness} wellnessLoggedToday={wellnessLoggedToday} myWellness={myWellnessToday} loggedToday={loggedToday} waterCups={waterCups} setWaterCups={setWaterCups} documents={documents} signDocument={signDocument} onOpenTrain={(v) => { setTrainView(v); setTab("train"); }} onOpenSchedule={() => setTab("calendar")} practices={practices} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} nutritionTarget={myNutritionGoal} nutritionTotals={myNutritionTotals} profilePrompt={profilePrompt} onOpenProfile={() => setSettingsOpen(true)} onUploadPhoto={uploadOwnPhoto} />}
           {activeTab === "train" && (

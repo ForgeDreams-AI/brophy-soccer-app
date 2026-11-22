@@ -19,10 +19,12 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const notif = payload.notification || {};
+  // Messages with a `notification` block are already shown by FCM itself
+  // (with the click link from fcmOptions). Showing it here too made doubles.
+  if (payload.notification) return;
   const data = payload.data || {};
-  self.registration.showNotification(notif.title || "Brophy Soccer", {
-    body: notif.body || "",
+  self.registration.showNotification(data.title || "Brophy Soccer", {
+    body: data.body || "",
     icon: "/brand/logo.png",
     badge: "/brand/logo.png",
     tag: data.tag || undefined,
