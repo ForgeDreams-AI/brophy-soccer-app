@@ -258,6 +258,18 @@ service cloud.firestore {
       allow create: if coachCreate();
       allow update, delete: if coachUpdate() || coachDelete();
     }
+    // Live game stats (Coach Center → Game Stats): a game doc per match and
+    // one gameEvents doc per tap. Coaches record; the whole team can read.
+    match /games/{id} {
+      allow read:   if isMemberOf(rTeam());
+      allow create: if coachCreate();
+      allow update, delete: if coachUpdate() || coachDelete();
+    }
+    match /gameEvents/{id} {
+      allow read:   if isMemberOf(rTeam());
+      allow create: if coachCreate() && request.resource.data.gameId is string;
+      allow update, delete: if coachUpdate() || coachDelete();
+    }
     // Shared documents library (Train → Documents, next to Videos): coach-
     // shared files (uploaded to Storage library/…) or links (Google Drive,
     // etc.). `teamId` is 'all' (every Brophy team) or one team id.

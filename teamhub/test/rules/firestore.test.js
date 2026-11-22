@@ -394,3 +394,19 @@ describe('USDA food search requests', () => {
     await assertFails(getDoc(doc(db, 'usdaCache/rice')))
   })
 })
+
+describe('game stats (games + gameEvents)', () => {
+  test('team coach records; other team coach and players cannot write', async () => {
+    const c = as(env, 'coachV').firestore()
+    await assertSucceeds(setDoc(doc(c, 'games/g1'), { teamId: 'varsity', opponent: 'Jesuit' }))
+    await assertSucceeds(setDoc(doc(c, 'gameEvents/e1'), { teamId: 'varsity', gameId: 'g1', type: 'goal' }))
+    await assertFails(setDoc(doc(c, 'gameEvents/e2'), { teamId: 'varsity', type: 'goal' }))
+    await assertFails(setDoc(doc(c, 'games/g2'), { teamId: 'jvb', opponent: 'X' }))
+    await assertFails(setDoc(doc(as(env, 'p1').firestore(), 'gameEvents/e3'), { teamId: 'varsity', gameId: 'g1', type: 'goal' }))
+  })
+  test('team members read their team only', async () => {
+    await seed(env, 'games/g9', { teamId: 'varsity', opponent: 'Jesuit' })
+    await assertSucceeds(getDoc(doc(as(env, 'p1').firestore(), 'games/g9')))
+    await assertFails(getDoc(doc(newbie().firestore(), 'games/g9')))
+  })
+})

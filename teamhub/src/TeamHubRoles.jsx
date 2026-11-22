@@ -102,6 +102,7 @@ import TacticsBoard, { BoardSvg, BoardPlayer } from "./components/TacticsBoard";
 import DrillPrintSheet from "./components/DrillPrintSheet";
 import PracticePrintSheet from "./components/PracticePrintSheet";
 import PracticesPrintSheet from "./components/PracticesPrintSheet";
+import GameStatsPage from "./components/GameStats";
 import { normalizeDrillDoc, stripUndefined } from "./lib/drillDoc";
 import { isLockedOutRole } from "./lib/teamRoles";
 import { ARROW_LEGEND, wavyPath } from "./components/boardData";
@@ -5548,7 +5549,7 @@ const DocumentsPage = ({ user, documents, rosterCount = 0, onUpload, onDelete, o
 // tiles, one per area — tap a tile, you're in that area. Everything here is
 // per-team (Fix 1 model); the org admin switches teams with the one team
 // switcher in the header, a single-team coach sees only theirs.
-const CoachCenterPage = ({ practiceProps, gameDayProps, rosterProps, calendarProps, documentsProps, announcementsProps }) => {
+const CoachCenterPage = ({ practiceProps, gameDayProps, gameStatsProps, rosterProps, calendarProps, documentsProps, announcementsProps }) => {
   const [view, setView] = useState(null); // null | practice | gameday | roster | calendar | documents | announcements
   const practices = practiceProps?.practices || [];
   const programs = practiceProps?.programs || [];
@@ -5568,6 +5569,7 @@ const CoachCenterPage = ({ practiceProps, gameDayProps, rosterProps, calendarPro
   const tiles = [
     { id: "practice", label: "Practice", sub: "Drill library, sessions & programs", icon: ClipboardList, badge: `${practices.length} session${practices.length === 1 ? "" : "s"} · ${programs.length} program${programs.length === 1 ? "" : "s"}` },
     { id: "gameday", label: "Game Day", sub: "Build & share your starting line-up", icon: Goal, badge: `${lineups.length} saved line-up${lineups.length === 1 ? "" : "s"}`, highlight: true },
+    { id: "stats", label: "Game Stats", sub: "Track games live, season stats", icon: BarChart3, badge: "Live tracker" },
     { id: "roster", label: "Roster & Invites", sub: "Players, coaches & invite links", icon: Users, badge: `${invites.length} on roster`, alert: pendingCount > 0 ? `${pendingCount} pending` : null },
     { id: "calendar", label: "Calendar", sub: "Practices, games & events", icon: CalendarIcon, badge: `${upcomingCount} upcoming` },
     { id: "documents", label: "Documents", sub: "Handbooks, itineraries & forms", icon: FileText, badge: `${documents.length} file${documents.length === 1 ? "" : "s"}` },
@@ -5582,6 +5584,7 @@ const CoachCenterPage = ({ practiceProps, gameDayProps, rosterProps, calendarPro
         </div>
         {view === "practice" && <PracticePage {...practiceProps} />}
         {view === "gameday" && <GameDayPage {...gameDayProps} />}
+        {view === "stats" && <GameStatsPage {...gameStatsProps} />}
         {view === "roster" && <RosterInvitesPage {...rosterProps} />}
         {view === "calendar" && <CalendarPage {...calendarProps} />}
         {view === "documents" && <DocumentsPage {...documentsProps} />}
@@ -10649,9 +10652,10 @@ export default function TeamHubRolesApp() {
             <CoachCenterPage
               practiceProps={{ user: { ...effUser, isOrgAdmin: user.role === "orgAdmin" }, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events }}
               gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId), activeTeamId, positionsByUid }}
+              gameStatsProps={{ user: effUser, activeTeamId, allUsers, lineups, positionsByUid, isCoach }}
               rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", removeUser, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId, positionsByUid, setPlayerPosition }}
               calendarProps={{ user: effUser, events, practices, teamWorkouts, personalEvents, addEvent, updateEvent, addPersonalEvent, updatePersonalEvent, deleteEvent, deletePersonalEvent, importEvents, groups: groupsList, addGroup, updateGroupMembers, deleteGroup, invites, allUsers, chatGroups }}
-              documentsProps={{ user: effUser, documents, rosterCount: invites.filter((i) => i.role !== "admin").length, onUpload: addDocument, onDelete: deleteDocument, onSign: signDocument }}
+              documentsProps={{ user: effUser, documents, rosterCount: invites.filter((i) => !isStaffRole(i.role)).length, onUpload: addDocument, onDelete: deleteDocument, onSign: signDocument }}
               announcementsProps={{ announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement }}
             />
           )}
