@@ -125,9 +125,17 @@ export default function TeamHubRolesApp() {
   // Opened from a chat link to a document / folder: { folder, docId, at }.
   // `at` re-keys the Documents page so each tap lands fresh on that spot.
   const [libraryFocus, setLibraryFocus] = useState(null);
-  const openLibrary = ({ folder = "", docId = "" } = {}) => {
-    setLibraryFocus({ folder, docId, at: Date.now() });
-    setTrainView("library");
+  const [videoFocus, setVideoFocus] = useState(null);
+  // A Train link tapped in chat: documents / document folders open Train →
+  // Documents, videos / video folders open Train → Videos.
+  const openFromChat = (a = {}) => {
+    if (a.type === "videoLink" || a.type === "videoFolder") {
+      setVideoFocus({ cat: a.cat || "", subfolder: a.subfolder || "", videoId: a.type === "videoLink" ? (a.videoId || "") : "", at: Date.now() });
+      setTrainView("videos");
+    } else {
+      setLibraryFocus({ folder: a.folder || "", docId: a.type === "doc" ? (a.docId || "") : "", at: Date.now() });
+      setTrainView("library");
+    }
     setTab("train");
   };
   const [showTour, setShowTour] = useState(false);
@@ -1391,7 +1399,7 @@ export default function TeamHubRolesApp() {
               const active = activeTab === t.id;
               const badge = t.id === "messages" ? chatUnread : 0;
               return (
-                <button key={t.id} onClick={() => { setTrainView(null); setLibraryFocus(null); setTab(t.id); }} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold text-left" style={{ backgroundColor: active ? COLORS.accentSoft : "transparent", color: active ? COLORS.accent : COLORS.textSecondary }}>
+                <button key={t.id} onClick={() => { setTrainView(null); setLibraryFocus(null); setVideoFocus(null); setTab(t.id); }} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold text-left" style={{ backgroundColor: active ? COLORS.accentSoft : "transparent", color: active ? COLORS.accent : COLORS.textSecondary }}>
                   <span className="relative">
                     <Icon className="w-5 h-5" style={{ color: active ? COLORS.accent : COLORS.textSecondary }} fill={active ? COLORS.accent : "none"} strokeWidth={active ? 2.5 : 2} />
                     {badge > 0 && (
@@ -1437,11 +1445,11 @@ export default function TeamHubRolesApp() {
           {activeTab === "train" && (
             trainView ? (
               <div>
-                <div className="px-5 pt-4 pb-1"><button onClick={() => { setTrainView(null); setLibraryFocus(null); }} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> Train</button></div>
+                <div className="px-5 pt-4 pb-1"><button onClick={() => { setTrainView(null); setLibraryFocus(null); setVideoFocus(null); }} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> Train</button></div>
                 {trainView === "gym" && <GymPage user={effUser} myWorkouts={myWorkouts} addMyWorkout={addMyWorkout} updateMyWorkout={updateMyWorkout} deleteMyWorkout={deleteMyWorkout} teamWorkouts={teamWorkouts} addTeamWorkout={addTeamWorkout} updateTeamWorkout={updateTeamWorkout} deleteTeamWorkout={deleteTeamWorkout} customExercises={customExercises} addCustomExercise={addCustomExercise} updateCustomExercise={updateCustomExercise} deleteCustomExercise={deleteCustomExercise} seedLifts={seedLifts} seedTeamWorkouts={seedTeamWorkouts} />}
                 {trainView === "nutrition" && <NutritionPage user={effUser} recipes={recipes} addRecipe={addRecipe} updateRecipe={updateRecipe} deleteRecipe={deleteRecipe} importRecipes={importRecipes} seedRecipes={seedRecipes} categories={categories} addCategory={addCategory} logged={logged} addLog={addLog} updateLog={updateLog} deleteLog={deleteLog} waterCups={waterCups} setWaterCups={setWaterCups} myNutritionGoal={myNutritionGoal} myNutritionTotals={myNutritionTotals} saveMyNutritionGoal={saveMyNutritionGoal} clearMyNutritionGoal={clearMyNutritionGoal} savedFoods={savedFoods} addSavedFood={addSavedFood} deleteSavedFood={deleteSavedFood} />}
                 {trainView === "library" && <LibraryPage key={libraryFocus?.at || 0} focus={libraryFocus} chatGroups={chatGroups} onSendToChat={sendLibraryToChat} user={effUser} items={libraryItems} activeTeamId={activeTeamId} addItem={addLibraryItem} updateItem={updateLibraryItem} deleteItem={deleteLibraryItem} />}
-                {trainView === "videos" && <VideosPage user={effUser} videos={videos} addVideo={addVideo} updateVideo={updateVideo} deleteVideo={deleteVideo} importVideos={importVideos} videoFolders={videoFolderDocs} addVideoFolder={addVideoFolder} renameVideoFolder={renameVideoFolder} deleteVideoFolder={deleteVideoFolder} />}
+                {trainView === "videos" && <VideosPage key={videoFocus?.at || 0} focus={videoFocus} chatGroups={chatGroups} onSendToChat={sendLibraryToChat} user={effUser} videos={videos} addVideo={addVideo} updateVideo={updateVideo} deleteVideo={deleteVideo} importVideos={importVideos} videoFolders={videoFolderDocs} addVideoFolder={addVideoFolder} renameVideoFolder={renameVideoFolder} deleteVideoFolder={deleteVideoFolder} />}
               </div>
             ) : <TrainHub onPick={setTrainView} />
           )}
@@ -1457,7 +1465,7 @@ export default function TeamHubRolesApp() {
             />
           )}
           {activeTab === "calendar" && <CalendarPage user={effUser} events={events} practices={practices} teamWorkouts={teamWorkouts} personalEvents={personalEvents} addEvent={addEvent} updateEvent={updateEvent} addPersonalEvent={addPersonalEvent} updatePersonalEvent={updatePersonalEvent} deleteEvent={deleteEvent} deletePersonalEvent={deletePersonalEvent} importEvents={importEvents} groups={groupsList} addGroup={addGroup} updateGroupMembers={updateGroupMembers} deleteGroup={deleteGroup} invites={invites} allUsers={allUsers} chatGroups={chatGroups} />}
-          {activeTab === "messages" && <MessagesPage onOpenDocument={openLibrary} user={effUser} activeTeamId={activeTeamId} hasOlderMessages={hasOlderMessages} onLoadOlder={loadOlderMessages} isOrgAdmin={user.role === "orgAdmin"} allUsers={allUsers} messages={messages} addMessage={addMessage} togglePinMessage={togglePinMessage} deleteMessage={deleteMessage} markMessagesRead={markMessagesRead} voteOnPoll={voteOnPoll} reactToMessage={reactToMessage} rosterCount={invites.length} chatGroups={chatGroups} addChatGroup={addChatGroup} deleteChatGroup={deleteChatGroup} updateChatGroup={updateChatGroup} onPinChannel={pinChatGroup} groups={groupsList} invites={invites} announcements={announcements} addAnnouncement={addAnnouncement} deleteAnnouncement={deleteAnnouncement} dms={dms} addDM={addDM} markDMsRead={markDMsRead} scheduled={scheduled} addScheduled={addScheduled} deleteScheduled={deleteScheduled} />}
+          {activeTab === "messages" && <MessagesPage onOpenDocument={openFromChat} user={effUser} activeTeamId={activeTeamId} hasOlderMessages={hasOlderMessages} onLoadOlder={loadOlderMessages} isOrgAdmin={user.role === "orgAdmin"} allUsers={allUsers} messages={messages} addMessage={addMessage} togglePinMessage={togglePinMessage} deleteMessage={deleteMessage} markMessagesRead={markMessagesRead} voteOnPoll={voteOnPoll} reactToMessage={reactToMessage} rosterCount={invites.length} chatGroups={chatGroups} addChatGroup={addChatGroup} deleteChatGroup={deleteChatGroup} updateChatGroup={updateChatGroup} onPinChannel={pinChatGroup} groups={groupsList} invites={invites} announcements={announcements} addAnnouncement={addAnnouncement} deleteAnnouncement={deleteAnnouncement} dms={dms} addDM={addDM} markDMsRead={markDMsRead} scheduled={scheduled} addScheduled={addScheduled} deleteScheduled={deleteScheduled} />}
           </div>
           </Suspense>
         </main>
@@ -1467,7 +1475,7 @@ export default function TeamHubRolesApp() {
               const Icon = t.icon; const active = activeTab === t.id;
               const badge = t.id === "messages" ? chatUnread : 0;
               return (
-                <button key={t.id} onClick={() => { setTrainView(null); setLibraryFocus(null); setTab(t.id); }} className="flex flex-col items-center justify-center py-1.5 gap-0.5">
+                <button key={t.id} onClick={() => { setTrainView(null); setLibraryFocus(null); setVideoFocus(null); setTab(t.id); }} className="flex flex-col items-center justify-center py-1.5 gap-0.5">
                   <span className="relative">
                     <Icon className="w-5 h-5" style={{ color: active ? COLORS.accent : COLORS.textSecondary }} fill={active ? COLORS.accent : "none"} strokeWidth={active ? 2.5 : 2} />
                     {badge > 0 && (

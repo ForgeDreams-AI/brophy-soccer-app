@@ -833,18 +833,28 @@ export const VideoViewer = ({ url, onClose }) => {
 
 // A chat link to Train → Documents (sent from the Documents page): a single
 // document or a whole folder. Tapping opens Documents on it.
+export const TRAIN_LINK_TYPES = ["doc", "folder", "videoLink", "videoFolder"];
+export const isTrainLink = (a) => TRAIN_LINK_TYPES.includes(a?.type);
+// The text a Train link message carries (for previews / notifications); the
+// bubble hides it since the card says the same.
+const trainLinkText = (a) => `${a.type === "doc" ? "📄" : a.type === "folder" ? "📁" : "🎬"} ${a.name}`;
 export const LibraryLinkCard = ({ a, own, onOpen }) => {
-  const isFolder = a.type === "folder";
+  const isFolder = a.type === "folder" || a.type === "videoFolder";
+  const isVideo = a.type === "videoLink" || a.type === "videoFolder";
+  const where = isVideo ? "Videos" : "Documents";
+  const Icon = isFolder ? Folder : isVideo ? Video : FileText;
   return (
-    <button onClick={() => onOpen?.({ folder: a.folder || "", docId: isFolder ? "" : (a.docId || "") })}
+    <button onClick={() => onOpen?.(a)}
       className={`mx-2 my-2 rounded-xl p-2.5 flex items-center gap-2.5 text-left w-[calc(100%-1rem)] ${own ? "bg-white/15" : "bg-white/80"}`}>
       <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: own ? "rgba(255,255,255,0.2)" : COLORS.accentSoft, color: own ? "#fff" : COLORS.accent }}>
-        {isFolder ? <Folder className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+        <Icon className="w-4 h-4" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] font-bold truncate">{a.name || (isFolder ? "Folder" : "Document")}</span>
         <span className={`block text-[11px] truncate ${own ? "text-white/75" : "text-slate-500"}`}>
-          {isFolder ? `Folder${a.count ? ` · ${a.count} item${a.count === 1 ? "" : "s"}` : ""}` : (a.folder ? `In ${a.folder}` : "Document")} · Open in Documents ›
+          {isFolder
+            ? `${isVideo ? "Video folder" : "Folder"}${a.count ? ` · ${a.count} ${isVideo ? "video" : "item"}${a.count === 1 ? "" : "s"}` : ""}`
+            : isVideo ? (a.cat ? `In ${a.subfolder ? `${a.cat} · ${a.subfolder}` : a.cat}` : "Video") : (a.folder ? `In ${a.folder}` : "Document")} · Open in {where} ›
         </span>
       </span>
     </button>
@@ -1429,9 +1439,9 @@ export const MessagesPage = ({ onOpenDocument, user, activeTeamId, isOrgAdmin = 
                       <div className="text-[10px] font-semibold text-slate-700 truncate w-full">{m.attachment.name}</div>
                       <div className="text-[9px] text-slate-400">{m.sender.split(" ")[0]}</div>
                     </a>
-                  ) : (m.attachment?.type === "doc" || m.attachment?.type === "folder") ? (
-                    <button key={m.id} onClick={() => onOpenDocument?.({ folder: m.attachment.folder || "", docId: m.attachment.docId || "" })} className="bg-white rounded-xl border border-slate-100 p-3 flex flex-col items-center text-center">
-                      <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-1.5" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>{m.attachment.type === "folder" ? <Folder className="w-4 h-4" /> : <FileText className="w-4 h-4" />}</div>
+                  ) : isTrainLink(m.attachment) ? (
+                    <button key={m.id} onClick={() => onOpenDocument?.(m.attachment)} className="bg-white rounded-xl border border-slate-100 p-3 flex flex-col items-center text-center">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-1.5" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>{m.attachment.type === "folder" || m.attachment.type === "videoFolder" ? <Folder className="w-4 h-4" /> : m.attachment.type === "videoLink" ? <Video className="w-4 h-4" /> : <FileText className="w-4 h-4" />}</div>
                       <div className="text-[10px] font-semibold text-slate-700 truncate w-full">{m.attachment.name}</div>
                       <div className="text-[9px] text-slate-400">{m.sender.split(" ")[0]}</div>
                     </button>
@@ -1602,8 +1612,8 @@ export const MessagesPage = ({ onOpenDocument, user, activeTeamId, isOrgAdmin = 
                               <button onClick={() => setVideoViewer(m.attachment.url)} aria-label="Watch fullscreen" title="Watch fullscreen" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center"><Maximize2 className="w-4 h-4" /></button>
                             </div>
                           )}
-                          {m.text && !((m.attachment?.type === "doc" || m.attachment?.type === "folder") && (m.text === `📄 ${m.attachment.name}` || m.text === `📁 ${m.attachment.name}`)) && <p className="text-[15px] leading-snug break-words px-3.5 py-2"><Linkify>{m.text}</Linkify></p>}
-                          {(m.attachment?.type === "doc" || m.attachment?.type === "folder") ? (
+                          {m.text && !(isTrainLink(m.attachment) && m.text === trainLinkText(m.attachment)) && <p className="text-[15px] leading-snug break-words px-3.5 py-2"><Linkify>{m.text}</Linkify></p>}
+                          {isTrainLink(m.attachment) ? (
                             <LibraryLinkCard a={m.attachment} own={own} onOpen={onOpenDocument} />
                           ) : m.attachment && m.attachment.type !== "image" && m.attachment.type !== "video" && (
                             m.attachment.type === "file" && m.attachment.url ? (

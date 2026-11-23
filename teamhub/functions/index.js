@@ -296,6 +296,8 @@ exports.onMessageCreated = onDocumentCreated("messages/{id}", async (event) => {
   // A link to Train → Documents (a document or a whole folder).
   else if (data.attachment?.type === "doc") body = `📄 Shared a document: ${trunc(data.attachment.name || "")}`;
   else if (data.attachment?.type === "folder") body = `📁 Shared the ${trunc(data.attachment.name || "")} folder`;
+  else if (data.attachment?.type === "videoLink") body = `🎬 Shared a video: ${trunc(data.attachment.name || "")}`;
+  else if (data.attachment?.type === "videoFolder") body = `🎬 Shared the ${trunc(data.attachment.name || "")} video folder`;
   else body = trunc(data.text);
   if (!body) return;
   // Only the message's own audience — a hidden channel's text must not go out

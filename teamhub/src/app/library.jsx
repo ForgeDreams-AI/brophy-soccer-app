@@ -140,7 +140,7 @@ export const LibraryItemForm = ({ initial, activeTeamId, folders, onSave, onClos
 // Channel picker for sending a document or a whole folder into a chat. The
 // message carries a link back here (attachment type "doc" / "folder"); tapping
 // it in the chat opens Train → Documents on that folder / document.
-export const SendToChatSheet = ({ label, chatGroups = [], onSend, onClose }) => {
+export const SendToChatSheet = ({ label, chatGroups = [], onSend, onClose, note = "Posts a link in the chat. Tapping it opens it here in Train → Documents." }) => {
   const [busy, setBusy] = useState("");
   const channels = [{ id: "team", name: "Team" }, ...chatGroups.map((c) => ({ id: c.id, name: c.name }))];
   const send = async (ch) => {
@@ -162,7 +162,7 @@ export const SendToChatSheet = ({ label, chatGroups = [], onSend, onClose }) => 
               {busy === ch.id ? <span className="inline-block w-4 h-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" /> : <Send className="w-4 h-4" style={{ color: COLORS.primary }} />}
             </button>
           ))}
-          <p className="text-[10px] text-slate-400 leading-relaxed px-1 pt-1">Posts a link in the chat. Tapping it opens it here in Train → Documents.</p>
+          <p className="text-[10px] text-slate-400 leading-relaxed px-1 pt-1">{note}</p>
         </div>
       </div>
     </div>
@@ -286,8 +286,32 @@ export const LibraryPage = ({ user, items = [], activeTeamId, addItem, updateIte
   );
 };
 
-export const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVideos, videoFolders = [], addVideoFolder, renameVideoFolder, deleteVideoFolder }) => {
-  const [catPref, setCat] = useState("Film");
+export const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVideos, videoFolders = [], addVideoFolder, renameVideoFolder, deleteVideoFolder, chatGroups = [], onSendToChat, focus = null }) => {
+  // `focus` = { cat, subfolder, videoId } when opened from a chat link (the
+  // page is re-mounted per link): starts on that folder, highlights the video
+  // and opens it.
+  const [catPref, setCat] = useState(focus?.cat || "Film");
+  const [sendTarget, setSendTarget] = useState(null);
+  const [focusDismissed, setFocusDismissed] = useState(false);
+  const focusRef = useRef(null);
+  const focusVideo = focus?.videoId ? videos.find((v) => v.id === focus.videoId) : null;
+  const focusMissing = Boolean(focus?.videoId) && !isLoading(videos) && !focusVideo;
+  useEffect(() => {
+    if (focusVideo) focusRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusVideo]);
+  const sendVideo = (v) => setSendTarget({
+    label: `"${v.title}"`,
+    text: `🎬 ${v.title}`,
+    attachment: { type: "videoLink", videoId: v.id, name: v.title, cat: v.cat || "", subfolder: v.subfolder || "" },
+  });
+  const sendVideoFolder = (c, sub) => {
+    const name = sub && sub !== "All" ? `${c} · ${sub}` : c;
+    setSendTarget({
+      label: `the ${name} folder`,
+      text: `🎬 ${name}`,
+      attachment: { type: "videoFolder", name, cat: c, subfolder: sub && sub !== "All" ? sub : "", count: videos.filter((v) => v.cat === c && (!sub || sub === "All" || v.subfolder === sub)).length },
+    });
+  };
   const [adding, setAdding] = useState(false);
   const [editingVideoId, setEditingVideoId] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -296,7 +320,7 @@ export const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, i
   const [modal, setModal] = useState(null);
   const blank = { title: "", url: "", cat: "Film", subfolder: "", dur: "", diff: "Easy", desc: "", type: "video" };
   const [form, setForm] = useState(blank);
-  const [subfolder, setSubfolder] = useState("All");
+  const [subfolder, setSubfolder] = useState(focus?.subfolder || "All");
   const isAdmin = user.role === "admin";
 
   // Folder list: the six built-in folders plus any coach-created top-level
@@ -549,12 +573,18 @@ export const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, i
           </div>
         )}
         {folderMsg && <p className="text-[11px] font-semibold text-slate-600 mb-3">{folderMsg}</p>}
+        {focusMissing && <p className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">That video was removed from the library.</p>}
+        {onSendToChat && filtered.length > 0 && (
+          <button onClick={() => sendVideoFolder(cat, subfolder)} className="w-full flex items-center justify-center gap-2 py-2 mb-3 rounded-xl text-xs font-bold bg-white border border-slate-200" style={{ color: COLORS.primary }}>
+            <Folder className="w-3.5 h-3.5" /> Send the {cat}{subfolder !== "All" ? ` · ${subfolder}` : ""} folder to a chat
+          </button>
+        )}
         {isLoading(videos) ? <LoadingNote /> : filtered.length === 0 ? <p className="text-sm text-slate-400 italic">Nothing here yet.</p> : (
           <div className="grid grid-cols-2 gap-3">
             {filtered.map((v) => {
               const Icon = CAT_ICON[v.cat] || Video;
               return (
-                <div key={v.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 relative">
+                <div key={v.id} ref={v.id === focus?.videoId ? focusRef : undefined} className={`bg-white rounded-2xl p-4 shadow-sm border relative ${v.id === focus?.videoId ? "border-transparent ring-2" : "border-slate-100"} ${onSendToChat ? "pb-11" : ""}`} style={v.id === focus?.videoId ? { "--tw-ring-color": COLORS.accent } : undefined}>
                   <button onClick={() => setModal(v)} className="text-left w-full">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: COLORS.accentSoft }}><Icon className="w-5 h-5" style={{ color: COLORS.accent }} /></div>
                     <h4 className="font-bold text-sm text-slate-900 leading-tight pr-4">{v.title}</h4>
@@ -564,6 +594,11 @@ export const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, i
                     </div>
                     {v.desc && <p className="text-[11px] text-slate-500 mt-1.5 leading-snug line-clamp-2">{v.desc}</p>}
                   </button>
+                  {onSendToChat && (
+                    <button onClick={(e) => { e.stopPropagation(); sendVideo(v); }} aria-label={`Send ${v.title} to a chat`} title="Send to a chat" className="absolute bottom-3 right-3 w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: COLORS.bg, color: COLORS.primary }}>
+                      <Send className="w-4 h-4" />
+                    </button>
+                  )}
                   {isAdmin && (
                     <div className="absolute top-3 right-3 flex gap-1.5">
                       <button onClick={(e) => { e.stopPropagation(); startEditVideo(v); }} title="Edit" className="text-slate-300 hover:text-slate-600"><Pencil className="w-3.5 h-3.5" /></button>
@@ -577,7 +612,13 @@ export const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, i
         )}
       </div>
 
-      {modal && <VideoModal item={modal} onClose={() => setModal(null)} />}
+      {modal ? <VideoModal item={modal} onClose={() => setModal(null)} />
+        : focusVideo && !focusDismissed ? <VideoModal item={focusVideo} onClose={() => setFocusDismissed(true)} /> : null}
+      {sendTarget && (
+        <SendToChatSheet label={sendTarget.label} chatGroups={chatGroups} note="Posts a link in the chat. Tapping it opens it here in Train → Videos."
+          onSend={(channel) => onSendToChat(channel, sendTarget.text, sendTarget.attachment)}
+          onClose={() => setSendTarget(null)} />
+      )}
     </div>
   );
 };
