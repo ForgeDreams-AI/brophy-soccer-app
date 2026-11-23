@@ -136,10 +136,10 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
 | Status | Findings |
 |---|---|
 | ✅ Fixed | F01, F02, F03, F04, F05, F06, F07, F09, F10, F12, F13, F14, F16, F17, F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, F29, F30, F31, F35, F36, F37, F39, F40, F41, F42, F43, F45, F46, F48, F49, F51, F52, F53, F55, F56, F57, F58, F59, F60, F61, F63, F64, F65, F66, F67, F68, F69, F70, F71, F72, F73, F74, F75, F76, F77, F78, F79, F80, F83, F84 (root demo), F85, F86, F87 |
-| 🟡 Partial | F11: loading states on the coach readiness list and chat feed only. F38: signatures are append-own only and coaches can't edit them; no audit trail or document hash. F15: undo exists in the Nutrition hero; the Today checklist row is still +1 only. F54: duplicate folder names are blocked; folders are still linked by name. |
+| ✅ Done 2026-11-23 | F11: loading state (not "empty") on documents, announcements, videos, drills, practices, programs, line-ups, workouts and DMs. F15: Today water row has a − button. F54: folder rename re-files every video via a query, in chunks, folder doc last; the Videos page shows any folder a video is filed under. F33: replaced profile photos and line-up logos are deleted; drill pictures uploaded then replaced/abandoned during an edit are deleted (saved drill pictures are kept — duplicates can share them); Storage rules let owners delete their own files. |
 | ✅ Decided 2026-11-21 + done | F28 drill library is signed-in only · F62 players see poll totals only (private vote docs + `voteCounts`; run `functions/scripts/migrate-poll-votes.js` once) · F34 players set their own photo only (coach photo upload removed, rules deny) |
 | ⏸ Needs decision (unchanged) | F44, F47, F81, F84 (`drill-bank.json`), F08, F32 |
-| ⏸ Not done | F33 (Storage orphan cleanup): the Storage rules don't allow deletes on these paths, so cleanup needs a rules change or a scheduled function. |
+| ⏸ Open | F47 (%-of-max: finish or remove — decision pending), F81 (split the main file — later). No parent account type (decided 2026-11-23). |
 
 **Behaviour changes to tell coaches about:**
 - Sign-up is now enforced server-side. An account must match a roster email (role and team) or a live invite link.

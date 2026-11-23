@@ -115,6 +115,8 @@ service firebase.storage {
     // is stored on the target user doc.
     match /avatars/{uid}/{filename} {
       allow read: if request.auth != null && sharesTeamWith(uid);
+      // F33: the old photo is deleted when it's replaced (owner only).
+      allow delete: if request.auth != null && request.auth.uid == uid;
       allow write: if request.auth != null
         && request.auth.uid == uid
         && request.resource.size < 10 * 1024 * 1024
@@ -126,6 +128,7 @@ service firebase.storage {
     // only a coach writes, to their own folder (image, max 10MB).
     match /branding/{uid}/{filename} {
       allow read: if hasProfile();
+      allow delete: if request.auth != null && request.auth.uid == uid;
       allow write: if request.auth != null
         && request.auth.uid == uid
         && isAdminUser()
@@ -139,6 +142,7 @@ service firebase.storage {
     // their own folder, must be an image, max 10MB.
     match /drills/{uid}/{filename} {
       allow read: if hasProfile();
+      allow delete: if request.auth != null && request.auth.uid == uid;
       allow write: if request.auth != null
         && request.auth.uid == uid
         && canBuildDrills()

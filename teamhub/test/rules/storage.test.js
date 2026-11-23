@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, test } from 'vitest'
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing'
-import { getMetadata, ref, uploadBytes } from 'firebase/storage'
+import { getMetadata, ref, uploadBytes, deleteObject } from 'firebase/storage'
 import { setDoc, doc } from 'firebase/firestore'
 import { as, makeEnv, seedUsers } from './helpers.js'
 
@@ -116,5 +116,18 @@ describe('shared documents library (Train → Documents)', () => {
     await assertFails(head(as(env, 'coachJ'), 'library/varsity/coachV/scouting.pdf'))
     await assertSucceeds(head(as(env, 'coachJ'), 'library/all/coachV/playbook.pdf'))
     await assertFails(head(newbie(), 'library/all/coachV/playbook.pdf'))
+  })
+})
+
+describe('cleanup of replaced files (F33)', () => {
+  test('owners delete their own avatar / branding / drill files; nobody else can', async () => {
+    await seedFile('avatars/p1/old.jpg')
+    await seedFile('branding/coachV/old.png', 'image/png')
+    await seedFile('drills/coachV/old.jpg')
+    await assertFails(deleteObject(ref(as(env, 'p2').storage(), 'avatars/p1/old.jpg')))
+    await assertSucceeds(deleteObject(ref(as(env, 'p1').storage(), 'avatars/p1/old.jpg')))
+    await assertFails(deleteObject(ref(as(env, 'p1').storage(), 'branding/coachV/old.png')))
+    await assertSucceeds(deleteObject(ref(as(env, 'coachV').storage(), 'branding/coachV/old.png')))
+    await assertSucceeds(deleteObject(ref(as(env, 'coachV').storage(), 'drills/coachV/old.jpg')))
   })
 })

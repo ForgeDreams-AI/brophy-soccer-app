@@ -25,7 +25,14 @@ import {
   serverTimestamp, writeBatch, deleteField,
 } from "firebase/firestore";
 import { auth, db, storage } from "./firebase";
-import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+
+// F33: delete a replaced file from Storage (a path or a download URL). Best
+// effort: if it's someone else's file or already gone, nothing happens.
+const deleteStorageFile = (pathOrUrl) => {
+  if (!pathOrUrl) return;
+  try { deleteObject(storageRef(storage, pathOrUrl)).catch(() => {}); } catch { /* bad path */ }
+};
 import { useAuth } from "./hooks/useAuth";
 import { useCollection, useAudienceCollection, useDoc, isLoading } from "./hooks/useCollection";
 
@@ -1040,7 +1047,7 @@ const DocumentsSection = ({ user, documents, isAdmin, rosterCount = 0, onUpload,
       )}
       {!open ? null : (<>
       {isAdmin && <DocumentUploadCard onUpload={onUpload} />}
-      {documents.length === 0 ? (
+      {isLoading(documents) ? <LoadingNote /> : documents.length === 0 ? (
         <p className="text-sm text-slate-400 italic">{isAdmin ? "No documents yet — upload one for the team to sign." : "No documents to sign right now."}</p>
       ) : groupByType ? (
         <div className="space-y-3">
@@ -1071,17 +1078,32 @@ const DocumentsSection = ({ user, documents, isAdmin, rosterCount = 0, onUpload,
 
 
 /* ─── PLAYER "TODAY" HOME + TRAIN HUB ─── */
-const ChecklistRow = ({ done, icon: Icon, label, sub, onClick, accent }) => (
-  <button onClick={onClick} className="w-full bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 flex items-center gap-3 text-left">
-    <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: done ? COLORS.success : COLORS.bg, color: done ? "white" : (accent || COLORS.primary) }}>
-      {done ? <Check className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
-    </div>
-    <div className="flex-1 min-w-0">
-      <div className={`text-sm font-semibold ${done ? "text-slate-400 line-through" : "text-slate-900"}`}>{label}</div>
-      {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
-    </div>
-    <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
-  </button>
+// onMinus (optional) adds a "−" button, e.g. to take back a water cup tapped
+// by mistake (F15: the row used to be +1 only).
+// Shown instead of an "empty" message while a list is still loading (F11):
+// the first second after opening a screen used to say "No … yet".
+const LoadingNote = () => (
+  <div className="flex items-center justify-center gap-2 py-6 text-sm text-slate-400">
+    <span className="inline-block w-4 h-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" /> Loading…
+  </div>
+);
+
+const ChecklistRow = ({ done, icon: Icon, label, sub, onClick, accent, onMinus }) => (
+  <div className="w-full bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center">
+    <button onClick={onClick} className="flex-1 min-w-0 p-3.5 flex items-center gap-3 text-left">
+      <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: done ? COLORS.success : COLORS.bg, color: done ? "white" : (accent || COLORS.primary) }}>
+        {done ? <Check className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className={`text-sm font-semibold ${done ? "text-slate-400 line-through" : "text-slate-900"}`}>{label}</div>
+        {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
+      </div>
+      {!onMinus && <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />}
+    </button>
+    {onMinus && (
+      <button onClick={onMinus} aria-label="Take one back" className="w-11 h-11 mr-2 rounded-full bg-slate-100 text-slate-600 text-lg font-bold flex items-center justify-center flex-shrink-0">−</button>
+    )}
+  </div>
 );
 
 // The player's home — one hero (today's session) + a short daily checklist with
@@ -1325,7 +1347,7 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
       {/* NEWS — coach announcements, pinned first */}
       <div>
         <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">News</h3>
-        {sortedAnnouncements.length === 0 ? (
+        {isLoading(announcements) ? <LoadingNote /> : sortedAnnouncements.length === 0 ? (
           <p className="text-sm text-slate-400 italic">No news from your coach yet.</p>
         ) : (
           <div className="space-y-2">
@@ -1364,7 +1386,7 @@ const PlayerTodayPage = ({ user, events = [], announcements = [], checkin, setCh
           ) : (
             <ChecklistRow done={loggedToday} icon={Apple} label={loggedToday ? "Meals logged" : "Log your meals"} sub={loggedToday ? "Nice work" : "Open nutrition"} onClick={() => onOpenTrain("nutrition")} />
           )}
-          <ChecklistRow done={waterCups >= WATER_GOAL} icon={Droplet} accent="#0ea5e9" label={`Water · ${waterCups}/${WATER_GOAL} cups`} sub={waterCups >= WATER_GOAL ? "Hydrated!" : "Tap to add a cup"} onClick={() => setWaterCups(Math.min(WATER_GOAL, waterCups + 1))} />
+          <ChecklistRow done={waterCups >= WATER_GOAL} icon={Droplet} accent="#0ea5e9" label={`Water · ${waterCups}/${WATER_GOAL} cups`} sub={waterCups >= WATER_GOAL ? "Hydrated!" : "Tap to add a cup"} onClick={() => setWaterCups(Math.min(WATER_GOAL, waterCups + 1))} onMinus={waterCups > 0 ? () => setWaterCups(waterCups - 1) : undefined} />
         </div>
       </div>
     </div>
@@ -2813,12 +2835,14 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
   // Folder list: the six built-in folders plus any coach-created top-level
   // folders from Firestore (same union pattern as recipe categories).
   const customCats = useMemo(() => videoFolders.filter((f) => !f.parent).map((f) => f.name).filter(Boolean), [videoFolders]);
+  // Any folder name a video is filed under also shows (F54: folders are
+  // linked by name, so a video must never be hidden by a missing folder doc).
   const effectiveCats = useMemo(() => {
     const seen = new Set();
     const out = [];
-    [...VIDEO_CATS, ...customCats].forEach((c) => { if (c && !seen.has(c)) { seen.add(c); out.push(c); } });
+    [...VIDEO_CATS, ...customCats, ...videos.map((v) => v.cat)].forEach((c) => { if (c && !seen.has(c)) { seen.add(c); out.push(c); } });
     return out;
-  }, [customCats]);
+  }, [customCats, videos]);
   // If the open folder was deleted elsewhere, fall back to the first folder.
   // If the open folder was deleted elsewhere, fall back to the first folder
   // (derived during render — no state-syncing effect).
@@ -3058,7 +3082,7 @@ const VideosPage = ({ user, videos, addVideo, updateVideo, deleteVideo, importVi
           </div>
         )}
         {folderMsg && <p className="text-[11px] font-semibold text-slate-600 mb-3">{folderMsg}</p>}
-        {filtered.length === 0 ? <p className="text-sm text-slate-400 italic">Nothing here yet.</p> : (
+        {isLoading(videos) ? <LoadingNote /> : filtered.length === 0 ? <p className="text-sm text-slate-400 italic">Nothing here yet.</p> : (
           <div className="grid grid-cols-2 gap-3">
             {filtered.map((v) => {
               const Icon = CAT_ICON[v.cat] || Video;
@@ -3477,6 +3501,15 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
   const [uploading, setUploading] = useState(false);
   const [newCat, setNewCat] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
+  // F33: pictures uploaded while editing this drill. On save, any that ended
+  // up unused (replaced before saving) are deleted; on cancel, all of them.
+  // Pictures already saved on a drill are never deleted here (a duplicated
+  // drill can share them).
+  const sessionUploads = useRef(new Set());
+  const cleanupUploads = (keep = new Set()) => {
+    for (const u of sessionUploads.current) if (!keep.has(u)) deleteStorageFile(u);
+    sessionUploads.current = new Set();
+  };
 
   // Save the tactics board: rasterize to a PNG diagram (so it renders anywhere a
   // drill diagram shows) and keep the editable JSON so it can be reopened.
@@ -3492,6 +3525,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
       const r = storageRef(storage, path);
       const snap = await uploadBytes(r, pngBlob, { contentType: "image/png" });
       const url = await getDownloadURL(snap.ref);
+      sessionUploads.current.add(url);
       setForm((p) => ({ ...p, diagram: url }));
     } catch (e) {
       toast("Couldn't save board image — " + (e.message || "check Storage rules."));
@@ -3519,7 +3553,9 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
     const path = `drills/${user.uid}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
     const r = storageRef(storage, path);
     const snap = await uploadBytes(r, blob, { contentType: "image/jpeg" });
-    return getDownloadURL(snap.ref);
+    const url = await getDownloadURL(snap.ref);
+    sessionUploads.current.add(url);
+    return url;
   };
   const addPhotos = async (files) => {
     if (!files?.length) return;
@@ -3548,7 +3584,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
     setForm({ name: d.name || "", title: d.title || "", kind: d.kind || "drill", cat: d.cat || DRILL_CATS[0], tags: (d.tags || []).join(", "), dur: d.dur || "", players: d.players || "", equipment: equipStr, setupLengthYd: lenYd, setupWidthYd: widYd, setupCones: d.setup?.cones ?? "", setupBalls: d.setup?.balls ?? "", setupGoals: d.setup?.goals ?? "", setupMannequins: d.setup?.mannequins ?? "", setupTeams: d.setup?.teams || "", howTo: d.howTo || "", objectives: (d.objectives || []).join("\n"), desc: d.desc || "", info: d.info || "", videoUrl: d.videoUrl || "", photos: d.photos || [], diagram: d.diagram || "", diagramData: d.diagramData || null, diagramImage: d.diagramImage || "", scenario: d.scenario || "", cues: (d.cues || []).join("\n") });
     setAdding(true);
   };
-  const cancel = () => { setEditingId(null); setForm(blank); setAdding(false); setNewCat(false); };
+  const cancel = () => { cleanupUploads(); setEditingId(null); setForm(blank); setAdding(false); setNewCat(false); };
   // Structured drill record: setup carries real yard dimensions + counts.
   const buildData = () => {
     const numOrNull = (v) => { const n = Number(v); return Number.isFinite(n) && String(v).trim() !== "" ? n : null; };
@@ -3584,6 +3620,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
     try {
       if (editingId) await updateDrill(editingId, data);
       else await addDrill(data);
+      cleanupUploads(new Set([...(data.photos || []), data.diagram, data.diagramImage].filter(Boolean)));
       if (cat !== "All") setCat(data.cat); // stay on All — the new drill is already visible there
       cancel();
     } catch (e) { toast("Couldn't save drill — " + (e.message || "check Firestore rules.")); }
@@ -3753,7 +3790,7 @@ const DrillsPage = ({ user, drills, addDrill, updateDrill, deleteDrill, startCre
 
       <div className="px-5">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">{cat}{tag !== "All" ? ` · ${tag}` : ""}</h3>
-        {filtered.length === 0 ? (
+        {isLoading(drills) ? <LoadingNote /> : filtered.length === 0 ? (
           <p className="text-sm text-slate-400 italic">{isAdmin ? "No drills here yet — add one." : "Nothing here yet."}</p>
         ) : (
           <div className="grid grid-cols-2 gap-3">
@@ -4102,7 +4139,7 @@ const PracticesView = ({ practices, drills, canEdit, add, update, del, initialOp
         <button onClick={() => setPrintAllOpen(true)} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-200 text-slate-700 bg-white"><Printer className="w-3.5 h-3.5" /> Export all practices</button>
       )}
 
-      {filtered.length === 0 ? (
+      {isLoading(practices) ? <LoadingNote /> : filtered.length === 0 ? (
         <p className="text-sm text-slate-400 italic text-center py-6">No practices{cat !== "All" ? ` in ${cat}` : ""} yet.</p>
       ) : (
         <ul className="space-y-2">{filtered.map((p) => <li key={p.id}><PracticeCard practice={p} onOpen={() => setOpenId(p.id)} /></li>)}</ul>
@@ -4285,7 +4322,7 @@ const ProgramsView = ({ programs, practices, canEdit, add, update, del, onAssign
         )
       ) : (programs.length === 0 && <ReadOnlyHint label="Your coach hasn't published a program yet" />)}
 
-      {programs.length === 0 ? (
+      {isLoading(programs) ? <LoadingNote /> : programs.length === 0 ? (
         canEdit ? (
           <div className="text-center py-8">
             <div className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center mb-3" style={{ backgroundColor: COLORS.accentSoft }}><Goal className="w-6 h-6" style={{ color: COLORS.accent }} /></div>
@@ -4944,7 +4981,7 @@ const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, deleteLineup
         </div>
         {sending && <SendLineupSheet title={sending.name} formation={sending.formation} slots={sending.slots || []} logoUrl={logoUrl} teamShortName={teamShortName} chatGroups={chatGroups} postLineupImage={postLineupImage} onClose={() => setSending(null)} />}
         <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 pt-1">Saved line-ups</h3>
-        {lineups.length === 0 ? (
+        {isLoading(lineups) ? <LoadingNote /> : lineups.length === 0 ? (
           <div className="rounded-2xl p-6 border border-dashed border-slate-200 bg-white text-center">
             <Goal className="w-7 h-7 mx-auto mb-1.5" style={{ color: COLORS.accent }} />
             <p className="text-sm text-slate-500 font-medium">No line-ups yet.</p>
@@ -5581,7 +5618,7 @@ const AnnouncementsPage = ({ announcements, addAnnouncement, updateAnnouncement,
           </li>
         ))}
       </ul>
-      {sorted.length === 0 && <p className="text-sm text-slate-400 italic text-center py-4">No announcements yet — post the first one.</p>}
+      {isLoading(announcements) ? <LoadingNote /> : sorted.length === 0 && <p className="text-sm text-slate-400 italic text-center py-4">No announcements yet — post the first one.</p>}
     </div>
   );
 };
@@ -7876,7 +7913,7 @@ export const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderM
         <>
           <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 min-h-0 overflow-y-auto" style={{ backgroundColor: COLORS.bg }}>
             <div className="min-h-full flex flex-col justify-end px-3 py-4">
-            {dmMessages.length === 0 && <p className="text-center text-xs text-slate-400 italic py-6">{isAdmin ? "No messages in this thread yet." : "Message your coach privately. Only you and your team's coach can see this."}</p>}
+            {isLoading(dms) ? <LoadingNote /> : dmMessages.length === 0 && <p className="text-center text-xs text-slate-400 italic py-6">{isAdmin ? "No messages in this thread yet." : "Message your coach privately. Only you and your team's coach can see this."}</p>}
             {dmStream.map((item, idx) => {
               if (item.kind === "divider") return <div key={item.id} className="pt-3"><DateDivider label={item.label} /></div>;
               const d = item.dm;
@@ -8537,7 +8574,7 @@ const WorkoutsView = ({ workouts, canEdit, add, update, del, readOnlyLabel, lib,
         readOnlyLabel && <ReadOnlyHint label={readOnlyLabel} />
       )}
 
-      {workouts.length === 0 ? (
+      {isLoading(workouts) ? <LoadingNote /> : workouts.length === 0 ? (
         <p className="text-sm text-slate-400 italic text-center py-6">No workouts yet.{canEdit && seedWorkouts ? " Tap “Starter set” for the prehab routines." : ""}</p>
       ) : grouped ? (
         <div className="space-y-4">
@@ -9046,9 +9083,11 @@ const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdmin = fa
     setPhotoBusy(true);
     setPhotoErr("");
     try {
+      const oldPath = user.photoPath;
       const { snap, path } = await uploadFacePhoto(`avatars/${user.uid}/${Date.now()}`, file, 640, 0.85);
       const url = await getDownloadURL(snap.ref);
       await updateDoc(doc(db, "users", user.uid), { photoURL: url, photoPath: path });
+      if (oldPath && oldPath !== path && oldPath.startsWith(`avatars/${user.uid}/`)) deleteStorageFile(oldPath);
       setPhoto(url);
     } catch (e) {
       const msg = "Couldn't update photo. " + (e.message || "Try again.");
@@ -9579,9 +9618,11 @@ export default function TeamHubRolesApp() {
   const uploadOwnPhoto = async (file) => {
     if (!file || !user) return null;
     try {
+      const oldPath = user.photoPath;
       const { snap, path } = await uploadFacePhoto(`avatars/${user.uid}/${Date.now()}`, file, 640, 0.85);
       const url = await getDownloadURL(snap.ref);
       await updateDoc(doc(db, "users", user.uid), { photoURL: url, photoPath: path });
+      if (oldPath && oldPath !== path && oldPath.startsWith(`avatars/${user.uid}/`)) deleteStorageFile(oldPath);
       toast("Photo added.");
       return url;
     } catch (e) {
@@ -9710,8 +9751,11 @@ export default function TeamHubRolesApp() {
   const positionsByUid = appConfig.find((d) => d.id === `rosterPositions_${activeTeamId}`)?.byUid || EMPTY_OBJ;
   const setPlayerPosition = (uid, pos) =>
     setDoc(doc(db, "appConfig", `rosterPositions_${activeTeamId}`), { byUid: { [uid]: pos }, updatedByName: user.name }, { merge: true });
-  const setLineupLogo = (url, path) =>
-    setDoc(doc(db, "appConfig", `lineupLogo_${activeTeamId}`), { url: url || "", path: path || "", updatedByName: user.name }, { merge: true });
+  const setLineupLogo = async (url, path) => {
+    const oldPath = lineupLogo?.path;
+    await setDoc(doc(db, "appConfig", `lineupLogo_${activeTeamId}`), { url: url || "", path: path || "", updatedByName: user.name }, { merge: true });
+    if (oldPath && oldPath !== path && oldPath.startsWith(`branding/${user.uid}/`)) deleteStorageFile(oldPath);
+  };
   const requestProfileUpdate = async () => {
     await setDoc(doc(db, "appConfig", `profilePrompt_${activeTeamId}`), { requestedAt: new Date().toISOString(), byName: user.name }, { merge: true });
     // Reuse the announcement fan-out so it also lands as a push to everyone.
@@ -9891,17 +9935,23 @@ export default function TeamHubRolesApp() {
   // Renaming a folder moves everything filed under it: the videos in it and,
   // for a top-level folder, its subfolders are re-filed under the new name
   // in the same batch, so nothing is ever orphaned.
+  // F54: the videos are found with a fresh query (not just the ones loaded
+  // on this phone) and re-filed in chunks (no 500-write batch limit); the
+  // folder doc is renamed last, and the Videos page also shows any folder a
+  // video is filed under, so an interrupted rename never hides anything.
   const renameVideoFolder = async (folder, newName) => {
     const name = newName.trim();
-    const batch = writeBatch(db);
-    batch.update(doc(db, "videoFolders", folder.id), { name });
     if (!folder.parent) {
-      videos.filter((v) => v.cat === folder.name).forEach((v) => batch.update(doc(db, "videos", v.id), { cat: name }));
-      videoFolderDocs.filter((f) => f.parent === folder.name).forEach((f) => batch.update(doc(db, "videoFolders", f.id), { parent: name }));
+      const vids = await getDocs(query(collection(db, "videos"), where("cat", "==", folder.name)));
+      await commitInChunks(vids.docs, (b, d) => b.update(d.ref, { cat: name }));
+      const kids = await getDocs(query(collection(db, "videoFolders"), where("parent", "==", folder.name)));
+      await commitInChunks(kids.docs, (b, d) => b.update(d.ref, { parent: name }));
     } else {
-      videos.filter((v) => v.cat === folder.parent && v.subfolder === folder.name).forEach((v) => batch.update(doc(db, "videos", v.id), { subfolder: name }));
+      const vids = await getDocs(query(collection(db, "videos"), where("cat", "==", folder.parent)));
+      const inSub = vids.docs.filter((d) => d.data().subfolder === folder.name);
+      await commitInChunks(inSub, (b, d) => b.update(d.ref, { subfolder: name }));
     }
-    await batch.commit();
+    await updateDoc(doc(db, "videoFolders", folder.id), { name });
   };
 
   // Shared documents library (Train → Documents): items for all teams plus
