@@ -120,80 +120,88 @@ export function detectPRs(entries = [], maxesById = {}) {
 }
 
 // ── Program templates ───────────────────────────────────────────────────────
-// Ready-made strength templates a coach applies in one tap (the "hours to
-// minutes" lever). Each entry matches an exercise by name against the library so
-// %-of-max + PR tracking work out of the box. `weeks` are suggested weekly
-// percentage ramps a coach can run the same workout through.
+// Ready-made strength templates a coach applies in one tap. Each entry is
+// PINNED to an exact exercise (`id` from the Free Exercise DB, or the name of
+// a prehab-library exercise), so the right lift is used and %-of-max works.
+// Doses follow youth resistance-training guidance (NSCA / AAP) for 14–18
+// year-olds: technique first, moderate loads, never to failure, and heavier
+// %-based work only under coach supervision. Players' school lifting is
+// separate — these are for coaches who run strength sessions themselves.
 export const WORKOUT_TEMPLATES = [
   {
-    id: "5x5", name: "5×5 Linear Strength",
-    desc: "The classic. Big compounds, 5×5 at ~80% — add weight as maxes climb.",
-    weeks: [80, 82.5, 85, 87.5],
+    id: "strength-base", name: "Strength Base · Off-Season (Coach-Supervised)",
+    desc: "Off-season, coach-supervised, technique first. 3×5 on the big lifts, building ~70% → 80% over 4 weeks. Never to failure.",
+    supervised: true,
+    weeks: [70, 72.5, 75, 80],
     entries: [
-      { match: "back squat", sets: "5", reps: "5", pct: "80" },
-      { match: "bench press", sets: "5", reps: "5", pct: "80" },
-      { match: "deadlift", sets: "1", reps: "5", pct: "85" },
-      { match: "barbell row", sets: "5", reps: "5", pct: "75" },
+      { id: "Barbell_Full_Squat", match: "back squat", sets: "3", reps: "5", pct: "70" },
+      { id: "Barbell_Bench_Press_-_Medium_Grip", match: "bench press", sets: "3", reps: "5", pct: "70" },
+      { id: "Trap_Bar_Deadlift", match: "trap-bar deadlift", sets: "2", reps: "5", pct: "70", notes: "Trap bar is easier to learn than a straight-bar deadlift" },
+      { id: "Bent_Over_Barbell_Row", match: "barbell row", sets: "3", reps: "8", rpe: "7" },
     ],
   },
   {
-    id: "upper", name: "Upper Hypertrophy",
-    desc: "Push/pull volume for size — moderate loads, higher reps, supersets.",
+    id: "upper", name: "Upper Body · Off-Season",
+    desc: "Push/pull balance for posture and contact strength. Moderate loads, 8–12 reps, leave 2–3 reps in the tank.",
+    supervised: true,
     entries: [
-      { match: "bench press", sets: "4", reps: "8", pct: "70", group: "A" },
-      { match: "pull-up", sets: "4", reps: "8", rpe: "8", group: "A" },
-      { match: "overhead press", sets: "3", reps: "10", rpe: "8", group: "B" },
-      { match: "lateral raise", sets: "3", reps: "15", rpe: "9", group: "B" },
-      { match: "triceps pushdown", sets: "3", reps: "12", rpe: "9" },
+      { id: "Barbell_Bench_Press_-_Medium_Grip", match: "bench press", sets: "3", reps: "8", pct: "65", group: "A" },
+      { id: "Pullups", match: "pull-up", sets: "3", reps: "6–8", rpe: "7", group: "A", notes: "Band-assisted if needed" },
+      { id: "Barbell_Shoulder_Press", match: "overhead press", sets: "3", reps: "8–10", rpe: "7", group: "B" },
+      { id: "Side_Lateral_Raise", match: "lateral raise", sets: "2", reps: "12–15", rpe: "7", group: "B" },
+      { id: "Pushups", match: "push-up", sets: "2", reps: "10–15", rpe: "7" },
     ],
   },
   {
-    id: "lower", name: "Lower Power",
-    desc: "Speed + strength for the posterior chain and legs.",
-    weeks: [75, 80, 85],
+    id: "lower", name: "Lower Power · Off-Season (Coach-Supervised)",
+    desc: "Speed + strength for the legs and posterior chain. Low reps, crisp technique, full rest.",
+    supervised: true,
+    weeks: [70, 75, 77.5],
     entries: [
-      { match: "back squat", sets: "5", reps: "3", pct: "75" },
-      { match: "romanian deadlift", sets: "4", reps: "6", rpe: "8" },
-      { match: "walking lunge", sets: "3", reps: "10", rpe: "8", group: "A" },
-      { match: "hanging leg raise", sets: "3", reps: "12", rpe: "9", group: "A" },
+      { id: "Barbell_Full_Squat", match: "back squat", sets: "4", reps: "3", pct: "70", notes: "Fast up, controlled down" },
+      { id: "Romanian_Deadlift", match: "romanian deadlift", sets: "3", reps: "6–8", rpe: "7" },
+      { id: "Barbell_Walking_Lunge", match: "walking lunge", sets: "3", reps: "8 / leg", rpe: "7", group: "A", notes: "Dumbbells or bodyweight to start" },
+      { id: "Hanging_Leg_Raise", match: "hanging leg raise", sets: "3", reps: "10", rpe: "7", group: "A" },
     ],
   },
   {
     id: "soccer-power", name: "Soccer · Off-Season Power",
-    desc: "Posterior chain, repeat-sprint prep, and hamstring-injury resilience.",
+    desc: "Posterior chain, repeat-sprint prep and hamstring/groin injury resilience.",
+    supervised: true,
     entries: [
-      { match: "trap-bar deadlift", sets: "4", reps: "4", pct: "82" },
-      { match: "nordic hamstring curl", sets: "3", reps: "6", rpe: "8", notes: "Slow eccentric" },
-      { match: "lateral bound", sets: "4", reps: "4", notes: "Per side · stick the landing", group: "A" },
-      { match: "copenhagen adductor — full dynamic", sets: "1", reps: "12", notes: "Per side · adductor strength", group: "A" },
-      { match: "hip thrust", sets: "3", reps: "8", rpe: "8" },
+      { id: "Trap_Bar_Deadlift", match: "trap-bar deadlift", sets: "3", reps: "4", pct: "75" },
+      { lib: "Nordic Hamstring Curl", match: "nordic hamstring curl", sets: "2", reps: "3–5", notes: "Coach-led · slow lowering" },
+      { id: "Lateral_Bound", match: "lateral bound", sets: "3", reps: "4 / side", notes: "Stick the landing", group: "A" },
+      { lib: "Copenhagen Adductor — Short-Lever Dynamic", match: "copenhagen adductor — short-lever dynamic", sets: "1", reps: "3–5 / side → 8–12", notes: "Adductor strength", group: "A" },
+      { id: "Barbell_Hip_Thrust", match: "hip thrust", sets: "3", reps: "8", rpe: "7" },
     ],
   },
   {
     id: "soccer-inseason", name: "Soccer · In-Season Maintenance",
-    desc: "Reduced volume — keep strength and speed sharp through the schedule.",
+    desc: "1–2x/week, low volume, keep strength and speed without adding fatigue. Never the day before a game; never to failure.",
     entries: [
-      { match: "back squat", sets: "3", reps: "3", pct: "85", notes: "Low volume, high quality" },
-      { match: "hip thrust", sets: "3", reps: "6", rpe: "7" },
-      { match: "pogo hops", sets: "3", reps: "10", notes: "Stiff ankles, quick contacts" },
+      { id: "Barbell_Full_Squat", match: "back squat", sets: "2", reps: "3", pct: "75", notes: "Low volume, high quality" },
+      { id: "Barbell_Hip_Thrust", match: "hip thrust", sets: "2", reps: "6", rpe: "7" },
+      { lib: "Pogo Hops", match: "pogo hops", sets: "2", reps: "10", notes: "Stiff ankles, quick contacts" },
+      { lib: "Copenhagen Adductor — Isometric Short-Lever Hold", match: "copenhagen adductor — isometric", sets: "1", reps: "15–20s / side" },
     ],
   },
   {
     id: "prehab-12", name: "Pre-Practice Prehab — 12 Min",
     desc: "Bands only, before every practice and at home. Hips → groin → ankles → core. 1 set pre-practice, 2 sets at home 2–3x/week. School lifting is separate.",
     entries: [
-      { match: "ankle rocks", sets: "1", reps: "8", notes: "Per side · mobility first" },
-      { match: "leg swings", sets: "1", reps: "8", notes: "Per side" },
-      { match: "hip open / close", sets: "1", reps: "8", notes: "Per side · FIFA 11+ Part 1" },
-      { match: "lateral band walk", sets: "1", reps: "10", notes: "Steps each way · band taut" },
-      { match: "glute bridge", sets: "1", reps: "10", notes: "2–3s squeeze at top" },
-      { match: "clamshell", sets: "1", reps: "8", notes: "Per side" },
-      { match: "copenhagen adductor — isometric", sets: "1", reps: "15", notes: "Seconds per side · partner or bench" },
-      { match: "single-leg stance", sets: "1", reps: "30", notes: "Seconds per leg" },
-      { match: "band eversion", sets: "1", reps: "15", notes: "Per side" },
-      { match: "single-leg calf raise", sets: "1", reps: "12", notes: "Per leg · 3s down" },
-      { match: "side plank", sets: "1", reps: "20", notes: "Seconds per side" },
-      { match: "dead bug", sets: "1", reps: "6", notes: "Per side" },
+      { lib: "Ankle Rocks", match: "ankle rocks", sets: "1", reps: "8 / side", notes: "Mobility first" },
+      { lib: "Leg Swings", match: "leg swings", sets: "1", reps: "8 / side", notes: "Let the range grow" },
+      { lib: "Hip Open / Close (Gate)", match: "hip open / close", sets: "1", reps: "8 / side", notes: "FIFA 11+ Part 1" },
+      { lib: "Lateral Band Walk", match: "lateral band walk", sets: "1", reps: "10 steps each way", notes: "Band taut, knees out" },
+      { lib: "Glute Bridge", match: "glute bridge", sets: "1", reps: "10–15", notes: "2–3s squeeze at top" },
+      { lib: "Clamshell", match: "clamshell", sets: "1", reps: "8–12 / side", notes: "Feet together" },
+      { lib: "Copenhagen Adductor — Isometric Short-Lever Hold", match: "copenhagen adductor — isometric", sets: "1", reps: "15–20s / side", notes: "Partner or bench" },
+      { lib: "Single-Leg Stance", match: "single-leg stance", sets: "1", reps: "30s / leg", notes: "Eyes closed to progress" },
+      { lib: "Band Eversion", match: "band eversion", sets: "1", reps: "15 / side", notes: "Peroneals" },
+      { lib: "Single-Leg Calf Raise", match: "single-leg calf raise", sets: "1", reps: "12 / leg", notes: "3s down" },
+      { lib: "Side Plank", match: "side plank", sets: "1", reps: "20s / side", notes: "Hips stacked" },
+      { lib: "Dead Bug", match: "dead bug", sets: "1", reps: "6 / side", notes: "Low back flat" },
     ],
   },
 ];
@@ -204,7 +212,10 @@ const titleCaseWords = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperC
 // to the exercise library (so exerciseId links → %-max + PRs work). Unmatched
 // entries still land with their prescription; the coach can swap the exercise.
 export function buildTemplateWorkout(template, libItems = []) {
-  const findEx = (match) => {
+  const findEx = (match, pin = {}) => {
+    // Pinned first: exact database id, or exact prehab-library name.
+    if (pin.id) { const hit = libItems.find((x) => x.id === pin.id); if (hit) return hit; }
+    if (pin.lib) { const hit = libItems.find((x) => (x.name || "").toLowerCase() === pin.lib.toLowerCase()); if (hit) return hit; }
     const q = String(match || "").toLowerCase();
     return libItems.find((x) => (x.name || "").toLowerCase() === q)
       || libItems.find((x) => (x.name || "").toLowerCase().includes(q))
@@ -212,7 +223,7 @@ export function buildTemplateWorkout(template, libItems = []) {
       || null;
   };
   const exercises = template.entries.map((t) => {
-    const ex = findEx(t.match);
+    const ex = findEx(t.match, t);
     const base = newEntry({ id: ex?.id || "", name: ex?.name || titleCaseWords(t.match), equipment: ex?.equipment || "" });
     return {
       ...base,

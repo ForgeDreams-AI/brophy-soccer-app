@@ -1,11 +1,11 @@
 // Split out of TeamHubRoles.jsx (F81). Area: nutrition.
 // Every top-level declaration here is exported for the other app modules.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Apple, Check, ChevronLeft, ChevronRight, Clock, Droplet, Flame, Pencil, Plus, ScanLine, Star, Trash2, X } from "lucide-react";
+import { Apple, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Droplet, Flame, Pencil, Plus, ScanLine, Star, Trash2, X } from "lucide-react";
 import { searchFoods, usdaAvailable } from "../lib/usda";
 import { lookupBarcode, searchProducts } from "../lib/openfoodfacts";
 import { toast } from "../lib/toast";
-import { COLORS, CSV_TEMPLATE, FEELINGS, FEELING_COLOR, WATER_CUPS_GOAL, computeStreak, formatDayKey, formatTime, mealBucket, parseRecipeCSV, reportError } from "./shared";
+import { COLORS, CSV_TEMPLATE, FEELINGS, FEELING_COLOR, HYDRATION_TIP, WATER_CUPS_GOAL, computeStreak, formatDayKey, formatTime, mealBucket, parseRecipeCSV, reportError } from "./shared";
 
 
 /* ─── NUTRITION (log presets + custom food + post-meal rating) ─── */
@@ -76,6 +76,7 @@ export const NutritionHero = ({ totals, goal, streak, waterCups, setWaterCups })
           <button onClick={() => setWaterCups(waterCups + 1)} aria-label="Add a cup" className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold" style={{ backgroundColor: COLORS.accent, color: "#fff" }}>+</button>
         </div>
       </div>
+      <p className="mt-2 text-[10px] leading-snug opacity-70">💧 {HYDRATION_TIP}</p>
     </div>
   );
 };
@@ -105,6 +106,13 @@ export const TargetBar = ({ label, value, goal, unit }) => {
 // it — the player sets it for themselves if they want to, and it lives in
 // their private food-log area (logs/{uid}/goals/main). The hero bars and the
 // Today checklist show progress against this goal when one is set.
+const LOW_CAL_WARN = 1800;
+const splitList = (t) => String(t || "").split(",").map((x) => x.trim()).filter(Boolean);
+const splitLines = (t, commaFallback = false) => {
+  const str = String(t || "");
+  if (commaFallback && !str.includes("\n")) return splitList(str);
+  return str.split("\n").map((x) => x.trim()).filter(Boolean);
+};
 export const MyNutritionGoalSection = ({ goal, totals = { cal: 0, protein: 0 }, onSave, onClear }) => {
   const [open, setOpen] = useState(false);
   const [cal, setCal] = useState("");
@@ -117,8 +125,15 @@ export const MyNutritionGoalSection = ({ goal, totals = { cal: 0, protein: 0 }, 
     setProtein(goal?.protein ? String(goal.protein) : "");
     setOpen(true);
   };
+  const calNum = Number(cal) || 0;
+  const proteinNum = Number(protein) || 0;
+  // Guardrails for teen athletes (RED-S / under-fuelling risk): warn on very
+  // low calorie goals and on protein far outside the sports-nutrition range.
+  const lowCal = calNum > 0 && calNum < LOW_CAL_WARN;
+  const oddProtein = proteinNum > 0 && (proteinNum < 50 || proteinNum > 250);
   const save = async () => {
     if (!cal && !protein) return;
+    if (lowCal && !confirm(`${calNum} calories is very low for a teen athlete — most need 2,400–3,500+ on training days. Under-eating hurts speed, recovery and growth, and raises injury risk. Save anyway?`)) return;
     setBusy(true);
     try {
       await onSave({ cal, protein });
@@ -158,6 +173,13 @@ export const MyNutritionGoalSection = ({ goal, totals = { cal: 0, protein: 0 }, 
               <input type="number" value={cal} onChange={(e) => setCal(e.target.value)} placeholder="Calories" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
               <input type="number" value={protein} onChange={(e) => setProtein(e.target.value)} placeholder="Protein g" className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
             </div>
+            {lowCal && (
+              <p className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-snug">⚠️ That's very low for a teen athlete. Most players need 2,400–3,500+ kcal on training days. Talk to your coach, trainer or a dietitian before eating less.</p>
+            )}
+            {oddProtein && (
+              <p className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-snug">⚠️ Most athletes need about 0.5–0.9 g of protein per lb of bodyweight (1.2–2.0 g/kg) — roughly 70–160 g a day.</p>
+            )}
+            <p className="text-[10px] text-slate-400 leading-snug">Guide for teen soccer players: calories 2,400–3,500+ on training days (more if you're growing fast or play two sports); protein 1.2–2.0 g per kg bodyweight (a 150 lb player ≈ 80–135 g), spread across meals.</p>
             <div className="flex gap-2">
               <button onClick={save} disabled={busy || (!cal && !protein)} className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white disabled:opacity-40" style={{ backgroundColor: COLORS.primary }}>{busy ? "Saving…" : "Save goal"}</button>
               <button onClick={() => setOpen(false)} className="px-4 py-2 rounded-full text-xs font-bold bg-slate-100 text-slate-600">Cancel</button>
@@ -174,6 +196,37 @@ export const MyNutritionGoalSection = ({ goal, totals = { cal: 0, protein: 0 }, 
   );
 };
 
+
+// Full recipe: ingredients with amounts, steps, servings, when to eat it,
+// allergens and a whole-food swap for protein-powder recipes.
+export const RecipeDetails = ({ m }) => (
+  <div className="mt-3 pt-3 border-t border-slate-100 space-y-3 text-[12px] text-slate-700">
+    {(m.servings || m.timing) && (
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+        {m.servings ? <span><b className="text-slate-700">Serves:</b> {m.servings}</span> : null}
+        {m.timing ? <span><b className="text-slate-700">When:</b> {m.timing}</span> : null}
+      </div>
+    )}
+    {m.ingredients && m.ingredients.length > 0 && (
+      <div>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Ingredients</div>
+        <ul className="list-disc pl-4 space-y-0.5">{m.ingredients.map((x, i) => <li key={i}>{x}</li>)}</ul>
+      </div>
+    )}
+    {m.steps && m.steps.length > 0 && (
+      <div>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Steps</div>
+        <ol className="list-decimal pl-4 space-y-1">{m.steps.map((x, i) => <li key={i}>{x}</li>)}</ol>
+      </div>
+    )}
+    {m.swap && (
+      <div className="rounded-lg bg-sky-50 border border-sky-100 px-3 py-2 text-[11px] text-sky-900 leading-snug"><b>Food-first swap:</b> {m.swap}</div>
+    )}
+    {m.allergens && m.allergens.length > 0 && (
+      <div className="text-[11px] text-amber-800"><b>Contains:</b> {m.allergens.join(", ")}</div>
+    )}
+  </div>
+);
 
 export const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRecipe, importRecipes, seedRecipes, categories, addCategory, logged, addLog, updateLog, deleteLog, waterCups, setWaterCups, myNutritionGoal, myNutritionTotals, saveMyNutritionGoal, clearMyNutritionGoal, savedFoods = [], addSavedFood, deleteSavedFood }) => {
   const isAdmin = user.role === "admin";
@@ -195,6 +248,7 @@ export const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRe
   // "Fish & Seafood"). null = "All". A stale pick (from another category) simply
   // resolves back to "All" via `activeSub` below — no reset effect needed.
   const [subCat, setSubCat] = useState(null);
+  const [openRecipe, setOpenRecipe] = useState(null);
   const [manual, setManual] = useState({ name: "", cat: timeOfDayCategory(), cal: "", p: "", c: "", f: "" });
   const [showManual, setShowManual] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
@@ -286,7 +340,7 @@ export const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRe
   };
   // admin recipe management
   const [mode, setMode] = useState("single");
-  const [single, setSingle] = useState({ name: "", cat: categories[0] || "Breakfast", sub: "", cal: "", p: "", c: "", f: "", prep: "", ingredients: "" });
+  const [single, setSingle] = useState({ name: "", cat: categories[0] || "Breakfast", sub: "", cal: "", p: "", c: "", f: "", prep: "", ingredients: "", steps: "", tags: "", allergens: "" });
   const [seeding, setSeeding] = useState(false);
   const runSeedRecipes = async () => {
     if (!seedRecipes || seeding) return;
@@ -417,7 +471,11 @@ export const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRe
         c: Number(single.c) || 0,
         f: Number(single.f) || 0,
         prep: single.prep || "—",
-        ingredients: single.ingredients.split(",").map((x) => x.trim()).filter(Boolean),
+        // One ingredient per line (a single line with commas still splits on commas).
+        ingredients: splitLines(single.ingredients, true),
+        steps: splitLines(single.steps),
+        tags: splitList(single.tags),
+        allergens: splitList(single.allergens),
       };
       if (editingRecipeId) {
         await updateRecipe(editingRecipeId, data);
@@ -427,7 +485,7 @@ export const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRe
         await addRecipe(data);
         setImportMsg(`Added "${name}" to ${targetCat}.`);
       }
-      setSingle({ name: "", cat: targetCat, sub: single.sub, cal: "", p: "", c: "", f: "", prep: "", ingredients: "" });
+      setSingle({ name: "", cat: targetCat, sub: single.sub, cal: "", p: "", c: "", f: "", prep: "", ingredients: "", steps: "", tags: "", allergens: "" });
     } catch (e) {
       setImportMsg("Couldn't save recipe — " + (e.message || "check Firestore rules."));
     }
@@ -443,7 +501,10 @@ export const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRe
       c: String(r.c || ""),
       f: String(r.f || ""),
       prep: r.prep || "",
-      ingredients: (r.ingredients || []).join(", "),
+      ingredients: (r.ingredients || []).join("\n"),
+      steps: (r.steps || []).join("\n"),
+      tags: (r.tags || []).join(", "),
+      allergens: (r.allergens || []).join(", "),
     });
     setSub("manage");
     setMode("single");
@@ -517,10 +578,13 @@ export const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRe
               ))}
             </div>
             <input value={single.prep} onChange={(e) => setSingle({ ...single, prep: e.target.value })} placeholder="Prep time (e.g. 15 min)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
-            <input value={single.ingredients} onChange={(e) => setSingle({ ...single, ingredients: e.target.value })} placeholder="Main ingredients, comma-separated (e.g. chicken, rice, beans)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+            <textarea rows={4} value={single.ingredients} onChange={(e) => setSingle({ ...single, ingredients: e.target.value })} placeholder="Ingredients — one per line (e.g. 4 oz chicken breast)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+            <textarea rows={4} value={single.steps} onChange={(e) => setSingle({ ...single, steps: e.target.value })} placeholder="Steps — one per line" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+            <input value={single.tags} onChange={(e) => setSingle({ ...single, tags: e.target.value })} placeholder="Tags, comma-separated (vegetarian, gluten-free, nut-free…)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
+            <input value={single.allergens} onChange={(e) => setSingle({ ...single, allergens: e.target.value })} placeholder="Allergens, comma-separated (milk, eggs, wheat…)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200" />
             <button onClick={addSingle} className="w-full py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white" style={{ backgroundColor: COLORS.primary }}>{editingRecipeId ? "Save Changes" : "Add Recipe"}</button>
             {editingRecipeId && (
-              <button onClick={() => { setEditingRecipeId(null); setSingle({ name: "", cat: single.cat, sub: "", cal: "", p: "", c: "", f: "", prep: "", ingredients: "" }); setImportMsg(""); }} className="w-full mt-1 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100">Cancel Edit</button>
+              <button onClick={() => { setEditingRecipeId(null); setSingle({ name: "", cat: single.cat, sub: "", cal: "", p: "", c: "", f: "", prep: "", ingredients: "", steps: "", tags: "", allergens: "" }); setImportMsg(""); }} className="w-full mt-1 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100">Cancel Edit</button>
             )}
           </div>
         )}
@@ -745,8 +809,13 @@ export const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRe
               <div className="flex-1">
                 <h4 className="font-bold text-sm text-slate-900">{m.name}</h4>
                 {m.sub && <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>{m.sub}</span>}
-                {m.ingredients && m.ingredients.length > 0 && (
-                  <div className="mt-1.5 text-[11px] text-slate-500 leading-snug">{m.ingredients.join(" · ")}</div>
+                {m.ingredients && m.ingredients.length > 0 && openRecipe !== m.id && (
+                  <div className="mt-1.5 text-[11px] text-slate-500 leading-snug line-clamp-2">{m.ingredients.join(" · ")}</div>
+                )}
+                {m.tags && m.tags.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {m.tags.map((t) => <span key={t} className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">{t}</span>)}
+                  </div>
                 )}
                 <div className="flex items-center gap-3 mt-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wide"><span className="flex items-center gap-1"><Clock className="w-3 h-3" />{m.prep}</span><span className="flex items-center gap-1"><Flame className="w-3 h-3" />{m.cal} kcal</span><span>P {m.p}g</span><span>C {m.c}g</span><span>F {m.f}g</span></div>
               </div>
@@ -759,6 +828,13 @@ export const NutritionPage = ({ user, recipes, addRecipe, updateRecipe, deleteRe
                 </div>
               )}
             </div>
+            {((m.ingredients && m.ingredients.length > 0) || (m.steps && m.steps.length > 0)) && (
+              <button onClick={() => setOpenRecipe(openRecipe === m.id ? null : m.id)} className="mt-2 text-[11px] font-bold flex items-center gap-1" style={{ color: COLORS.primary }}>
+                {openRecipe === m.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                {openRecipe === m.id ? "Hide recipe" : "How to make it"}
+              </button>
+            )}
+            {openRecipe === m.id && <RecipeDetails m={m} />}
           </article>
         ))}
       </div>

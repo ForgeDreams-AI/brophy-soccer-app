@@ -13,7 +13,7 @@ import { getTeam, getTeamShortName } from "../data/teams";
 import QuoteOfDay from "../components/QuoteOfDay";
 import { PushNotificationModal } from "./chat";
 import { DocumentsSection } from "./documents";
-import { COLORS, Scale, VERDICTS, VERDICT_RANK, formatAgo, formatHourTime, readinessFor, reportError } from "./shared";
+import { COLORS, Scale, VERDICTS, VERDICT_RANK, WATER_CUPS_GOAL, formatAgo, formatHourTime, readinessFor, reportError } from "./shared";
 
 /* Assignments were removed in the Home redo (Option A) — coaches no longer assign tasks; the assignments collection is unused. */
 
@@ -246,7 +246,7 @@ export const PlayerTodayPage = ({ user, events = [], announcements = [], checkin
   const hero = todays[0];
   const upcoming = !hero ? [...events].filter((e) => e.date > todayStr).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))[0] : null;
   const sortedAnnouncements = [...announcements].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-  const WATER_GOAL = 8;
+  const WATER_GOAL = WATER_CUPS_GOAL;
   const setMetric = (k, v) => { setCheckin({ ...checkin, [k]: v }); setSaved(false); };
   const submit = async () => {
     if (!checkin.energy || !checkin.soreness || !checkin.tiredness) return;

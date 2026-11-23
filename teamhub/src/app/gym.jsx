@@ -27,7 +27,9 @@ export const useExerciseLib = () => {
   useEffect(() => {
     let alive = true;
     loadExercises()
-      .then((d) => { if (alive) { setItems(d); setLoading(false); } })
+      // Strongman lifts (car deadlift, rickshaw, log press…) aren't for high
+      // school soccer players — hide them from the library.
+      .then((d) => { if (alive) { setItems(d.filter((x) => x.category !== "strongman")); setLoading(false); } })
       .catch((e) => { if (alive) { setErr(e.message || "Failed to load"); setLoading(false); } });
     return () => { alive = false; };
   }, []);
@@ -496,6 +498,15 @@ footer{margin-top:24px;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0
 };
 
 export const WorkoutDetail = ({ workout, canEdit, lib, onSave, onDelete, onDuplicate, onBack }) => {
+  // W6: tap an exercise name to open its how-to (photos + steps), matched by
+  // its library id or, for starter workouts, by name.
+  const [howTo, setHowTo] = useState(null);
+  const libItemFor = (entry) => {
+    const items = lib?.items || [];
+    return (entry.exerciseId && items.find((x) => x.id === entry.exerciseId))
+      || items.find((x) => (x.name || "").toLowerCase() === String(entry.name || "").toLowerCase())
+      || null;
+  };
   const [name, setName] = useState(workout.name || "");
   const [exercises, setExercises] = useState(workout.exercises || []);
   const [dirty, setDirty] = useState(false);
@@ -626,7 +637,9 @@ export const WorkoutDetail = ({ workout, canEdit, lib, onSave, onDelete, onDupli
                 <div className="space-y-2">
                   {g.items.map(({ entry, index }) => (
                     <div key={index}>
-                      <div className="font-semibold text-sm text-slate-900 leading-tight">{entry.name}</div>
+                      {libItemFor(entry)
+                        ? <button type="button" onClick={() => setHowTo(libItemFor(entry))} className="font-semibold text-sm text-slate-900 leading-tight text-left underline decoration-slate-300 underline-offset-2">{entry.name}</button>
+                        : <div className="font-semibold text-sm text-slate-900 leading-tight">{entry.name}</div>}
                       <PrescriptionLine entry={entry} />
                     </div>
                   ))}
@@ -691,6 +704,7 @@ export const WorkoutDetail = ({ workout, canEdit, lib, onSave, onDelete, onDupli
                     <div className="text-sm font-bold text-slate-900">{tpl.name}</div>
                     <div className="text-[10px] font-semibold text-slate-400">{tpl.entries.length} lifts</div>
                   </div>
+                  {tpl.supervised && <span className="inline-block mt-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Coach-supervised</span>}
                   <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">{tpl.desc}</div>
                 </button>
               ))}
@@ -698,6 +712,7 @@ export const WorkoutDetail = ({ workout, canEdit, lib, onSave, onDelete, onDupli
           </div>
         </div>
       )}
+      {howTo && <ExerciseModal item={howTo} onClose={() => setHowTo(null)} />}
     </div>
   );
 };

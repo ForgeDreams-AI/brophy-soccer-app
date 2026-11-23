@@ -220,10 +220,13 @@ export const formatHourTime = (hhmm) => {
   return `${hour12}:${(mStr || "00").padStart(2, "0")} ${period}`;
 };
 
-// Daily water guide shown in the nutrition hero (cups). There is no
-// team-wide calorie/protein target — each player sets their own daily goal
-// if they want one (see MyNutritionGoalSection).
-export const WATER_CUPS_GOAL = 8;
+// Daily water guide (8-oz cups) for the nutrition hero and the Today
+// checklist. Active teens training in Arizona heat need ~10-12+ cups on
+// training days, plus more during/after hot sessions, so the default is 12.
+// There is no team-wide calorie/protein target — each player sets their own
+// daily goal if they want one (see MyNutritionGoalSection).
+export const WATER_CUPS_GOAL = 12;
+export const HYDRATION_TIP = "Aim for pale-yellow pee. Add 2–3 cups per hour of practice in the heat, and drink before you're thirsty.";
 
 export const mealBucket = (ts) => {
   if (!ts) return "Today";

@@ -10,9 +10,6 @@ import { onForegroundMessage, refreshPushToken, syncAppBadge } from "./lib/notif
 import { toast } from "./lib/toast";
 import { teamDateKey, zonedDate } from "./lib/dates";
 import WelcomeTour from "./WelcomeTour";
-import { recipeSeedDocs } from "./data/recipeSeed";
-import { liftSeedDocs } from "./data/liftSeed";
-import { workoutSeedDocs } from "./data/workoutSeed";
 import { DEFAULT_TEAM_ID, TEAMS, TEAM_IDS, getTeam, getTeamShortName, isValidTeamId, teamDocFields } from "./data/teams";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { useFirestoreResync, useFirestoreStale } from "./hooks/useFirestoreResync";
@@ -580,6 +577,7 @@ export default function TeamHubRolesApp() {
   // One-tap starter library — batch-writes the curated lift seed, skipping any
   // lift whose name already exists (additive; never disturbs existing exercises).
   const seedLifts = async () => {
+    const { liftSeedDocs } = await import("./data/liftSeed");
     const have = new Set(customExercises.map((e) => (e.name || "").toLowerCase().trim()));
     const fresh = liftSeedDocs().filter((l) => !have.has(l.name.toLowerCase().trim()));
     if (!fresh.length) return { added: 0, skipped: liftSeedDocs().length };
@@ -609,6 +607,7 @@ export default function TeamHubRolesApp() {
   // food-type sub-category. De-dupes by name+category so it's safe to re-run and
   // never overwrites recipes you've already added.
   const seedRecipes = async () => {
+    const { recipeSeedDocs } = await import("./data/recipeSeed");
     const key = (r) => `${(r.name || "").toLowerCase().trim()}|${(r.cat || "").toLowerCase().trim()}`;
     const have = new Set(recipes.map(key));
     const all = recipeSeedDocs();
@@ -955,6 +954,7 @@ export default function TeamHubRolesApp() {
   // One-tap starter sessions — batch-writes the curated team workouts, grouped by
   // focus area. De-dupes by name so it's additive and safe to re-run.
   const seedTeamWorkouts = async () => {
+    const { workoutSeedDocs } = await import("./data/workoutSeed");
     const have = new Set(teamWorkouts.map((w) => (w.name || "").toLowerCase().trim()));
     const all = workoutSeedDocs();
     const fresh = all.filter((w) => !have.has(w.name.toLowerCase().trim()));
@@ -968,6 +968,35 @@ export default function TeamHubRolesApp() {
     }
     return { added: fresh.length, skipped: all.length - fresh.length };
   };
+  // One-time upgrade of starter content seeded before the 2026-11-23 content
+  // audit (see lib/seedUpgrade.js — never overwrites a coach's edits). Runs
+  // once per team on a coach's device, after the three lists have loaded.
+  const seedUpgradeRan = useRef(false);
+  useEffect(() => {
+    if (user?.role !== "admin" || !activeTeamId || seedUpgradeRan.current) return;
+    if (isLoading(teamWorkouts) || isLoading(customExercises) || isLoading(recipes)) return;
+    const flag = `brophy.seedUpgrade.v2.${activeTeamId}`; // bump with SEED_UPGRADE_VERSION
+    try { if (localStorage.getItem(flag)) return; } catch { /* storage blocked — just run (idempotent) */ }
+    seedUpgradeRan.current = true;
+    (async () => {
+      const { planLiftUpgrade, planRecipeUpgrade, planWorkoutUpgrade } = await import("./lib/seedUpgrade");
+      const w = planWorkoutUpgrade(teamWorkouts);
+      const l = planLiftUpgrade(customExercises);
+      const r = planRecipeUpgrade(recipes);
+      const ops = [
+        ...w.updates.map((u) => (b) => b.update(doc(db, "teamWorkouts", u.id), { ...u.data, updatedAt: serverTimestamp() })),
+        ...w.adds.map((a) => (b) => b.set(doc(collection(db, "teamWorkouts")), {
+          ...a, teamId: activeTeamId, createdByUid: user.uid, createdByName: user.name || "Starter",
+          createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        })),
+        ...l.updates.map((u) => (b) => b.update(doc(db, "customExercises", u.id), u.data)),
+        ...l.adds.map((a) => (b) => b.set(doc(collection(db, "customExercises")), { ...a, createdAt: serverTimestamp() })),
+        ...r.updates.map((u) => (b) => b.update(doc(db, "recipes", u.id), u.data)),
+      ];
+      if (ops.length) await commitInChunks(ops, (b, op) => op(b));
+      try { localStorage.setItem(flag, String(Date.now())); } catch { /* ignore */ }
+    })().catch((e) => { seedUpgradeRan.current = false; console.warn("Starter content upgrade failed", e); });
+  }, [user?.role, user?.uid, user?.name, activeTeamId, teamWorkouts, customExercises, recipes]);
 
   // Chat — pinned status lives on each message doc (guide §4)
   // Most recent `msgLimit` messages of the team (all channels); "Load older"

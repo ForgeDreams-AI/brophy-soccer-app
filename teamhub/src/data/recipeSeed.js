@@ -1,3 +1,5 @@
+import { RECIPE_DETAILS } from "./recipeDetails.js";
+
 // Starter recipe library — healthy, whole-food recipes for each of the six
 // meal categories, each filed under a food-type sub-category so the
 // Nutrition tab can browse Breakfast → "Eggs & Dairy", Lunch → "Fish & Seafood",
@@ -5,16 +7,14 @@
 //
 // Recipe shape matches the `recipes` collection exactly, plus a `sub` field:
 //   { name, cat, sub, cal, p, c, f, prep }   // p/c/f in grams, cal in kcal
-// Newer "School Lunch" recipes also carry an `ingredients` array of their
-// MAIN ingredients (5 or fewer — seasonings/oil/water don't count), shown on
-// the recipe card so a player can see at a glance what goes in it. Older
-// seeds predate that field and simply don't show an ingredient list.
+// plus the full details from recipeDetails.js (ingredients, steps, servings,
+// tags, allergens, timing, swap).
 //
 // Macros are sensible per-serving templates for an athlete — a coach can tune
 // them. Seeding is additive and de-dupes by name+category, so it never disturbs
 // recipes you've already added.
 
-export const RECIPE_SEED = [
+export const RECIPE_BASE = [
   // ══════════════════ BREAKFAST ══════════════════
   // Eggs & Dairy
   { cat: "Breakfast", sub: "Eggs & Dairy", name: "Veggie Egg-White Scramble", cal: 320, p: 34, c: 18, f: 12, prep: "12 min" },
@@ -31,7 +31,7 @@ export const RECIPE_SEED = [
   { cat: "Breakfast", sub: "Fruit & Smoothies", name: "Berry Banana Protein Shake", cal: 350, p: 32, c: 46, f: 5, prep: "5 min" },
   { cat: "Breakfast", sub: "Fruit & Smoothies", name: "Mango Greek-Yogurt Smoothie", cal: 320, p: 24, c: 52, f: 4, prep: "5 min" },
   { cat: "Breakfast", sub: "Fruit & Smoothies", name: "Apple-Cinnamon Overnight Bowl", cal: 360, p: 16, c: 58, f: 9, prep: "overnight" },
-  { cat: "Breakfast", sub: "Fruit & Smoothies", name: "Mixed Fruit & Almond Bowl", cal: 300, p: 10, c: 48, f: 11, prep: "5 min" },
+  { cat: "Breakfast", sub: "Fruit & Smoothies", name: "Mixed Fruit & Almond Bowl", cal: 330, p: 10, c: 48, f: 11, prep: "5 min" },
   // Whole-Grain Bakes
   { cat: "Breakfast", sub: "Whole-Grain Bakes", name: "Avocado Toast on Whole-Grain", cal: 340, p: 12, c: 38, f: 17, prep: "8 min" },
   { cat: "Breakfast", sub: "Whole-Grain Bakes", name: "Whole-Wheat Banana Pancakes", cal: 430, p: 22, c: 62, f: 11, prep: "18 min" },
@@ -133,7 +133,7 @@ export const RECIPE_SEED = [
   { cat: "Pre-Game", sub: "Fruit", name: "Fruit Salad Cup", cal: 180, p: 3, c: 44, f: 1, prep: "5 min" },
   { cat: "Pre-Game", sub: "Fruit", name: "Orange Slices & Honey", cal: 160, p: 2, c: 40, f: 0, prep: "3 min" },
   // Smoothies
-  { cat: "Pre-Game", sub: "Smoothies", name: "Banana-Berry Fuel Smoothie", cal: 320, p: 12, c: 68, f: 4, prep: "5 min" },
+  { cat: "Pre-Game", sub: "Smoothies", name: "Banana-Berry Fuel Smoothie", cal: 355, p: 12, c: 68, f: 4, prep: "5 min" },
   { cat: "Pre-Game", sub: "Smoothies", name: "Mango-Oat Smoothie", cal: 340, p: 14, c: 66, f: 5, prep: "5 min" },
   { cat: "Pre-Game", sub: "Smoothies", name: "Pineapple-Coconut Water Cooler", cal: 220, p: 3, c: 52, f: 1, prep: "4 min" },
   { cat: "Pre-Game", sub: "Smoothies", name: "Beet & Berry Performance Blend", cal: 260, p: 6, c: 56, f: 2, prep: "5 min" },
@@ -150,7 +150,7 @@ export const RECIPE_SEED = [
   // Poultry
   { cat: "Post-Game", sub: "Poultry", name: "Chicken & Rice Recovery Bowl", cal: 520, p: 44, c: 60, f: 10, prep: "20 min" },
   { cat: "Post-Game", sub: "Poultry", name: "Turkey Wrap & Fruit", cal: 460, p: 36, c: 52, f: 12, prep: "12 min" },
-  { cat: "Post-Game", sub: "Poultry", name: "Chicken Quesadilla", cal: 540, p: 40, c: 48, f: 20, prep: "18 min" },
+  { cat: "Post-Game", sub: "Poultry", name: "Chicken & Black-Bean Quesadilla", cal: 540, p: 40, c: 48, f: 20, prep: "18 min" },
   // Rice Bowls
   { cat: "Post-Game", sub: "Rice Bowls", name: "Salmon & Sushi Rice Bowl", cal: 560, p: 40, c: 64, f: 16, prep: "20 min" },
   { cat: "Post-Game", sub: "Rice Bowls", name: "Beef & Rice Burrito Bowl", cal: 580, p: 42, c: 62, f: 18, prep: "22 min" },
@@ -192,6 +192,13 @@ export const RECIPE_SEED = [
   { cat: "Snacks", sub: "School Lunch", name: "Cottage Cheese & Fruit", cal: 300, p: 26, c: 36, f: 5, prep: "3 min", ingredients: ["cottage cheese", "pineapple", "granola"] },
   { cat: "Snacks", sub: "School Lunch", name: "Chicken Nuggets & Apple", cal: 460, p: 30, c: 44, f: 16, prep: "12 min", ingredients: ["chicken nuggets", "apple", "yogurt dip"] },
 ];
+
+// Every recipe carries full details (ingredients with amounts, steps, tags,
+// allergens, timing, and a food-first swap for protein-powder recipes).
+export const RECIPE_SEED = RECIPE_BASE.map((r) => ({ ...r, ...(RECIPE_DETAILS[`${r.cat}|${r.name}`] || {}) }));
+
+// Seeded recipe renames (old cat|name → new name), applied once to seeded docs.
+export const RECIPE_RENAMES = { "Post-Game|Chicken Quesadilla": "Chicken & Black-Bean Quesadilla" };
 
 // Sub-categories present per meal category, in a sensible display order (derived
 // from the seed but stable). Handy for building the sub-category pills.
