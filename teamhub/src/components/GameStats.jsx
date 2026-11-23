@@ -18,10 +18,10 @@ import { shareSheetPdf } from "../lib/sharePdf";
 import { GameInsights, SeasonAnalytics, PlayerInsights } from "./GameAnalytics";
 import { gameCsv, seasonCsv, scorers, reportText, shareOrDownload, fileSafe, gameTitle, resultLetter } from "../lib/gameExport";
 import { teamDateKey } from "../lib/dates";
-import { groupByPosition } from "../data/rosterPositions";
+import { groupByPosition, notJoinedPlayers, sheetAliases } from "../data/rosterPositions";
 import {
   PLAYER_ACTIONS, ACTION_LABEL, isShot, clockMs, fmtClock, minuteOf,
-  playerProfile, possessionTotals, switchPossession, pausePossession, resumePossession, ballOwner, takeBall, possessionEvents, lastPasserTo, score, onFieldNow, playerLines, teamTotals, seasonLines, record,
+  playerProfile, possessionTotals, switchPossession, pausePossession, resumePossession, ballOwner, takeBall, possessionEvents, lastPasserTo, score, onFieldNow, playerLines, teamTotals, seasonLines, record, applyAliases,
 } from "../lib/gameStats";
 
 const RED = "#980000";
@@ -38,7 +38,8 @@ const abbr = (s) => (String(s || "OPP").replace(/[^A-Za-z ]/g, "").trim().slice(
 const Face = ({ p, size = 40 }) => (p?.photoURL ? (
   <img src={p.photoURL} alt="" className="rounded-full object-cover flex-shrink-0" style={{ width: size, height: size }} />
 ) : (
-  <div className="rounded-full flex items-center justify-center font-bold text-white flex-shrink-0" style={{ width: size, height: size, backgroundColor: RED, fontSize: Math.round(size * 0.36) }}>
+  // Grey = on the roster sheet but not in the app yet (still trackable).
+  <div title={p?.notInApp ? "Not in the app yet" : undefined} className="rounded-full flex items-center justify-center font-bold text-white flex-shrink-0" style={{ width: size, height: size, backgroundColor: p?.notInApp ? "#94a3b8" : RED, fontSize: Math.round(size * 0.36) }}>
     {p?.initials || "?"}
   </div>
 ));
@@ -1012,7 +1013,7 @@ function StatKeepersSheet({ allUsers, activeTeamId, players, current, onSave, on
   const [busy, setBusy] = useState(false);
   const people = useMemo(() => {
     const staff = (allUsers || []).filter((u) => u.role !== "player" && (u.teamIds || []).includes(activeTeamId) && u.role !== "admin" && u.role !== "orgAdmin");
-    return [...players, ...staff].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    return [...players.filter((p) => !p.notInApp), ...staff].sort((a, b) => String(a.name).localeCompare(String(b.name)));
   }, [allUsers, activeTeamId, players]);
   const toggle = (id) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   return (
@@ -1038,8 +1039,8 @@ function StatKeepersSheet({ allUsers, activeTeamId, players, current, onSave, on
 
 // ─── Page ──────────────────────────────────────────────────────────────────
 export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineups = [], positionsByUid, isCoach = false, canRecord = isCoach, statKeepers = null, setStatKeepers, onSendReport, startGameId = null, startProfileUid = null }) {
-  const games = useCollection(activeTeamId ? "games" : null, where("teamId", "==", activeTeamId), orderBy("date", "desc"));
-  const allEvents = useCollection(activeTeamId ? "gameEvents" : null, where("teamId", "==", activeTeamId));
+  const gamesRaw = useCollection(activeTeamId ? "games" : null, where("teamId", "==", activeTeamId), orderBy("date", "desc"));
+  const allEventsRaw = useCollection(activeTeamId ? "gameEvents" : null, where("teamId", "==", activeTeamId));
   const [tab, setTab] = useState("games");
   const [seasonView, setSeasonView] = useState("players");
   const [openId, setOpenId] = useState(startGameId);
@@ -1057,12 +1058,19 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
   const players = useMemo(() => {
     const source = (allUsers || []).length ? allUsers : snapshotUsers;
     const team = source.filter((u) => (u.role || "player") === "player" && (u.teamIds || []).includes(activeTeamId));
-    const { groups } = groupByPosition(team, activeTeamId, positionsByUid || {});
+    const { groups: joined, notJoined } = groupByPosition(team, activeTeamId, positionsByUid || {});
+    // Sheet players who haven't joined the app yet can be tracked too
+    // (stand-in id "sheet:<Name>"; their stats move to their account once
+    // they join — see applyAliases below).
+    const extra = notJoinedPlayers(notJoined);
+    const groups = Object.fromEntries(Object.entries(joined).map(([k, l]) => [k, [...l, ...(extra[k] || [])]]));
     const list = [...groups.GK, ...groups.DEF, ...groups.MID, ...groups.FWD, ...groups.NONE];
     list.gkIds = groups.GK.map((p) => p.id);
     list.groups = groups;
+    list.alias = sheetAliases(joined);
     return list;
   }, [allUsers, snapshotUsers, activeTeamId, positionsByUid]);
+  const { games, events: allEvents } = useMemo(() => applyAliases(gamesRaw, allEventsRaw, players.alias), [gamesRaw, allEventsRaw, players]);
   // Names: live accounts first, then the roster snapshot saved on each game
   // (players' phones don't load the team list, and people can leave the team).
   const playerById = useMemo(() => {
@@ -1222,8 +1230,13 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
 // Shows the most recent finished game with the player's own line; tap to
 // open the full report (their row highlighted) and their season stats.
 export function LatestGameCard({ user, activeTeamId, allUsers = [], positionsByUid, isStatKeeper = false, statKeepers = null, lineups = [] }) {
-  const games = useCollection(activeTeamId ? "games" : null, where("teamId", "==", activeTeamId), orderBy("date", "desc"));
-  const allEvents = useCollection(activeTeamId ? "gameEvents" : null, where("teamId", "==", activeTeamId));
+  const gamesRaw = useCollection(activeTeamId ? "games" : null, where("teamId", "==", activeTeamId), orderBy("date", "desc"));
+  const allEventsRaw = useCollection(activeTeamId ? "gameEvents" : null, where("teamId", "==", activeTeamId));
+  // Stats recorded before this player joined the app (under their sheet
+  // name) count as theirs.
+  const uid = user?.uid, uname = user?.name, uemail = user?.email;
+  const myAlias = useMemo(() => (uid ? sheetAliases(groupByPosition([{ id: uid, name: uname, email: uemail }], activeTeamId).groups) : {}), [uid, uname, uemail, activeTeamId]);
+  const { games, events: allEvents } = useMemo(() => applyAliases(gamesRaw, allEventsRaw, myAlias), [gamesRaw, allEventsRaw, myAlias]);
   const [open, setOpen] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);

@@ -15,7 +15,9 @@ export const POSITIONS = [
 // From the coach's roster sheet (2026-11-21).
 export const SHEET_ROSTER = {
   varsity: {
-    GK: ["Brannen Marks", "Franco Coury", "Carlos Ramos"],
+    // Carlos Ramos joined the app under a different name (2026-11-23), so he
+    // is placed by the coach instead of matched from the sheet.
+    GK: ["Brannen Marks", "Franco Coury"],
     DEF: ["Austin Schenk", "Gavin Hamilton", "Alex Swiergol", "Cruz Wie", "Cade Cicalese", "Eli Halpert", "Max Garske", "Miguel Suady"],
     MID: ["Shubhan Kulkarni", "Will Osborne", "Kellen Choi", "Hugh Healy", "Bangally Jaiteh-Kabba", "Brody Haegen", "Nucci Qoshlli", "Lucas DiPasquale", "Stadon Pricher"],
     FWD: ["Joey Fritz", "Conor Byers", "Jackson Ducusin", "Will Chucri", "Emilio Coker", "Neal Mahoney", "Jonah Geist"],
@@ -101,4 +103,29 @@ export function groupByPosition(players, teamId, byUid = {}) {
   const notJoined = {};
   for (const [sp, names] of Object.entries(sheet)) notJoined[sp] = names.filter((n) => !matchedSheet.has(n));
   return { groups, notJoined };
+}
+
+// ─── Sheet players who aren't in the app yet ───────────────────────────────
+// Game Stats can track them too: they get a stand-in id `sheet:<Name>`.
+// Once they join and their account matches that sheet name, stats recorded
+// under the stand-in id are shown as theirs (see sheetAliases).
+export const sheetId = (name) => `sheet:${name}`;
+export const isSheetId = (id) => String(id || "").startsWith("sheet:");
+
+// notJoined (from groupByPosition) → players to append per position.
+export function notJoinedPlayers(notJoined = {}) {
+  const out = {};
+  for (const [pos, names] of Object.entries(notJoined)) {
+    out[pos] = names.map((n) => ({ id: sheetId(n), name: n, initials: initialsOf(n), photoURL: "", role: "player", notInApp: true, sheetName: n }));
+  }
+  return out;
+}
+
+// { "sheet:<Name>": uid } for joined players matched to a sheet name.
+export function sheetAliases(groups = {}) {
+  const m = {};
+  for (const list of Object.values(groups)) {
+    for (const p of list || []) if (p.sheetName && !isSheetId(p.id)) m[sheetId(p.sheetName)] = p.id;
+  }
+  return m;
 }

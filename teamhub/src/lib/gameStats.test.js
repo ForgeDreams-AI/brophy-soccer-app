@@ -188,3 +188,26 @@ describe("possession by half is recorded automatically", () => {
     expect(p.byHalf).toEqual({ 1: { us: 30_000, them: 10_000 }, 2: { us: 20_000, them: 0 } });
   });
 });
+
+describe("applyAliases (not-yet-joined players)", () => {
+  it("re-points stand-in ids to the joined account everywhere", async () => {
+    const { applyAliases, playerLines } = await import("./gameStats.js");
+    const games = Object.assign([{ id: "g", starters: ["sheet:Brannen Marks", "u2"], roster: { "sheet:Brannen Marks": { name: "Brannen Marks" } } }], { loading: false });
+    const events = [
+      { id: "1", gameId: "g", type: "goal", uid: "sheet:Brannen Marks", ms: 1000 },
+      { id: "2", gameId: "g", type: "pass", uid: "u2", toUid: "sheet:Brannen Marks", ms: 2000 },
+      { id: "3", gameId: "g", type: "sub", outUid: "sheet:Brannen Marks", inUid: "u3", ms: 3000 },
+    ];
+    const { games: g, events: e } = applyAliases(games, events, { "sheet:Brannen Marks": "u1" });
+    expect(g[0].starters).toEqual(["u1", "u2"]);
+    expect(Object.keys(g[0].roster)).toEqual(["u1"]);
+    expect(e.map((x) => [x.uid, x.toUid, x.outUid])).toEqual([["u1", undefined, undefined], ["u2", "u1", undefined], [undefined, undefined, "u1"]]);
+    expect(playerLines(g[0], e).u1.goal).toBe(1);
+  });
+  it("is a no-op without aliases and keeps the loading flag", async () => {
+    const { applyAliases } = await import("./gameStats.js");
+    const games = Object.assign([], { loading: true });
+    expect(applyAliases(games, [], {}).games.loading).toBe(true);
+    expect(applyAliases(games, [], { a: "b" }).games.loading).toBe(true);
+  });
+});

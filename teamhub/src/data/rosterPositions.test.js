@@ -29,7 +29,7 @@ describe("groupByPosition", () => {
     expect(groups.GK.map((p) => p.id)).toEqual(["b"]);
     expect(groups.DEF.map((p) => p.id)).toEqual(["d"]);
     expect(groups.NONE.map((p) => p.id)).toEqual(["c"]);
-    expect(notJoined.GK).toEqual(["Brannen Marks", "Carlos Ramos"]);
+    expect(notJoined.GK).toEqual(["Brannen Marks"]);
     expect(notJoined.MID).not.toContain("Kellen Choi");
   });
   it("other teams have no sheet: everyone unassigned until set", () => {

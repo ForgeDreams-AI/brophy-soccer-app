@@ -298,3 +298,22 @@ export function playerProfile(uid, games, eventsByGame, now = Date.now()) {
     passFrom: top(passFrom),
   };
 }
+
+// Re-point stats recorded for a not-yet-joined player (stand-in id
+// "sheet:<Name>") to their account once they've joined. `alias` maps
+// stand-in id → uid. Returns new arrays (keeps a `.loading` flag).
+export function applyAliases(games = [], events = [], alias = {}) {
+  if (!Object.keys(alias).length) return { games, events };
+  const a = (id) => (id && alias[id]) || id;
+  const keep = (src, out) => Object.assign(out, src.loading ? { loading: true } : {});
+  const g2 = keep(games, games.map((g) => {
+    const roster = g.roster ? Object.fromEntries(Object.entries(g.roster).map(([k, v]) => [a(k), v])) : g.roster;
+    return { ...g, starters: (g.starters || []).map(a), ...(roster ? { roster } : {}) };
+  }));
+  const e2 = keep(events, events.map((e) => {
+    const x = { ...e };
+    for (const f of ["uid", "toUid", "outUid", "inUid"]) if (x[f]) x[f] = a(x[f]);
+    return x;
+  }));
+  return { games: g2, events: e2 };
+}
