@@ -556,7 +556,15 @@ export const GameDayPage = ({ user, lineups = [], addLineup, updateLineup, delet
 // name, see data/rosterPositions.js); a coach taps a player to move them and
 // that choice is saved for the team. Sheet names with no account yet are
 // listed faded as "not in app yet".
-export const PlayersByPosition = ({ allUsers = [], activeTeamId, byUid = {}, onSetPosition }) => {
+// onSetRole (program admin only): make someone a Team manager (role
+// "statistician": player access + Game Stats, not listed as a player) or
+// move them back to the players.
+export const PlayersByPosition = ({ allUsers = [], activeTeamId, byUid = {}, onSetPosition, onSetRole }) => {
+  const managers = useMemo(
+    () => (allUsers || []).filter((u) => u.role === "statistician" && (u.teamIds || []).includes(activeTeamId))
+      .sort((a, b) => String(a.name || a.email).localeCompare(String(b.name || b.email))),
+    [allUsers, activeTeamId],
+  );
   const players = useMemo(
     () => (allUsers || []).filter((u) => u.role === "player" && (u.teamIds || []).includes(activeTeamId)),
     [allUsers, activeTeamId],
@@ -567,7 +575,18 @@ export const PlayersByPosition = ({ allUsers = [], activeTeamId, byUid = {}, onS
   const move = async (pos) => {
     const p = moving;
     setMoving(null);
-    try { await onSetPosition(p.id, pos); } catch (e) { toast("Couldn't save — " + (e?.message || "try again.")); }
+    try {
+      // A team manager placed at a position becomes a player again.
+      if (p.role === "statistician" && onSetRole) await onSetRole(p, "player");
+      await onSetPosition(p.id, pos);
+      if (p.role === "statistician") toast(`${p.name || p.email} is a player again.`, "success");
+    } catch (e) { toast("Couldn't save — " + (e?.message || "try again.")); }
+  };
+  const makeManager = async () => {
+    const p = moving;
+    setMoving(null);
+    try { await onSetRole(p, "statistician"); toast(`${p.name || p.email} is now a team manager (statistician).`, "success"); }
+    catch (e) { toast("Couldn't change — " + (e?.message || "try again.")); }
   };
   const playerRow = (p) => (
     <button
@@ -619,7 +638,23 @@ export const PlayersByPosition = ({ allUsers = [], activeTeamId, byUid = {}, onS
           </div>
         </div>
       )}
-      {onSetPosition && <p className="text-[10px] text-slate-400 text-center py-2">Tap a player to change their position. Coaches aren't listed.</p>}
+      {managers.length > 0 && (
+        <div className="border-t border-slate-100">
+          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50">
+            Team managers · Statistician ({managers.length})
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 p-1">
+            {managers.map((u) => (
+              <button key={u.id} type="button" onClick={() => onSetRole && setMoving(u)} disabled={!onSetRole}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left active:bg-slate-100 disabled:active:bg-transparent">
+                <Avatar photoURL={u.photoURL} initials={u.initials || initialsOf(u.name || u.email || "")} size={26} />
+                <span className="text-[13px] font-semibold text-slate-800 leading-tight break-words min-w-0">{u.name || u.email}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {onSetPosition && <p className="text-[10px] text-slate-400 text-center py-2">Tap a player to change their position{onSetRole ? " or make them a team manager" : ""}. Coaches aren't listed.</p>}
       {moving && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4" onClick={() => setMoving(null)} role="dialog" aria-label="Change position">
           <div className="w-full max-w-sm bg-white rounded-2xl p-4 space-y-2" onClick={(e) => e.stopPropagation()}>
@@ -635,7 +670,15 @@ export const PlayersByPosition = ({ allUsers = [], activeTeamId, byUid = {}, onS
                 </button>
               ))}
             </div>
-            <button type="button" onClick={() => move("NONE")} className="w-full py-2.5 rounded-xl text-sm font-semibold text-slate-500">No position</button>
+            {onSetRole && moving.role !== "statistician" && (
+              <button type="button" onClick={makeManager}
+                className="w-full py-3 rounded-xl text-sm font-bold border border-blue-200 bg-blue-50 text-blue-700 active:bg-blue-100">
+                Team manager (Statistician)
+                <span className="block text-[10px] font-semibold text-blue-500">Player access + Game Stats · not listed as a player</span>
+              </button>
+            )}
+            {moving.role === "statistician" && <p className="text-[11px] text-slate-500 text-center">Team manager now. Pick a position to make them a player again.</p>}
+            {moving.role !== "statistician" && <button type="button" onClick={() => move("NONE")} className="w-full py-2.5 rounded-xl text-sm font-semibold text-slate-500">No position</button>}
           </div>
         </div>
       )}
@@ -817,7 +860,8 @@ export const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addI
           <Bell className="w-3.5 h-3.5" /> Ask everyone to update their info
         </button>
       )}
-      <PlayersByPosition allUsers={allUsers} activeTeamId={activeTeamId} byUid={positionsByUid} onSetPosition={setPlayerPosition} />
+      <PlayersByPosition allUsers={allUsers} activeTeamId={activeTeamId} byUid={positionsByUid} onSetPosition={setPlayerPosition}
+        onSetRole={isOrgAdmin && setUserRoleAndTeams ? (u, role) => setUserRoleAndTeams(u.id, u.email, { role, teamIds: u.teamIds || [activeTeamId], primaryTeamId: u.primaryTeamId }) : null} />
       <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 space-y-2">
         {myTeams.length > 1 && (
           <label className="block">
