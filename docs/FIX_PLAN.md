@@ -140,7 +140,7 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
 | ✅ Decided 2026-11-21 + done | F28 drill library is signed-in only · F62 players see poll totals only (private vote docs + `voteCounts`; run `functions/scripts/migrate-poll-votes.js` once) · F34 players set their own photo only (coach photo upload removed, rules deny) |
 | ⏸ Needs decision (unchanged) | F44, F47, F81, F84 (`drill-bank.json`), F08, F32 |
 | ✅ Done 2026-11-23 | F47: players save training maxes (Train → Gym → My maxes, users/{uid}/maxes); %-of-max workouts show the real weight ("5 × 5 @ 75% → 185 lb"), with a "set your max" link where one is missing; coaches on the team can read them. |
-| ⏸ Open | F81 (split the main file). No parent account type (decided 2026-11-23). |
+| ✅ Done 2026-11-23 | F81: TeamHubRoles.jsx (11k lines) split mechanically into src/app/{shared,documents,home,calendar,library,nutrition,practice,coach,chat,gym,settings}.jsx (app shell stays in TeamHubRoles.jsx, ~1.4k lines). Coach tools, Calendar, Gym, Nutrition and Library/Videos load on demand (React.lazy); main bundle 1,355 KB → 1,073 KB. | No parent account type (decided 2026-11-23). |
 
 **Behaviour changes to tell coaches about:**
 - Sign-up is now enforced server-side. An account must match a roster email (role and team) or a live invite link.

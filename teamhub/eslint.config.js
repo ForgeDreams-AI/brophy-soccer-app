@@ -26,6 +26,12 @@ export default defineConfig([
     },
   },
   {
+    // App area modules (split out of TeamHubRoles.jsx, F81) deliberately
+    // export helpers next to components; that only affects dev hot-reload.
+    files: ['src/app/**/*.jsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
+  {
     // Cloud Functions run on Node (CommonJS), not in the browser.
     files: ['functions/**/*.js'],
     languageOptions: {
