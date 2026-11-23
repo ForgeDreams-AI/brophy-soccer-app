@@ -44,6 +44,23 @@ const Face = ({ p, size = 40 }) => (p?.photoURL ? (
   </div>
 ));
 
+// A player grid split into position sections (Goalkeepers, Defenders,
+// Midfielders, Forwards, then anyone without a position), using the roster
+// positions on `players.groups`. renderItem(p) draws one tile.
+const POS_SECTIONS = [["GK", "Goalkeepers"], ["DEF", "Defenders"], ["MID", "Midfielders"], ["FWD", "Forwards"], ["NONE", "No position"]];
+const ByPosition = ({ list, players, gridClass = "grid grid-cols-3 gap-2", children: renderItem }) => {
+  const posOf = {};
+  for (const [k] of POS_SECTIONS) for (const p of players?.groups?.[k] || []) posOf[p.id] = k;
+  const sections = POS_SECTIONS.map(([k, label]) => [label, list.filter((p) => (posOf[p.id] || "NONE") === k)]).filter(([, l]) => l.length);
+  if (!sections.length) return <p className="text-sm text-slate-400 text-center py-4">No players here.</p>;
+  return sections.map(([label, l]) => (
+    <div key={label} className="mb-2.5 last:mb-0">
+      <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 px-0.5">{label} <span className="text-slate-300">{l.length}</span></div>
+      <div className={gridClass}>{l.map(renderItem)}</div>
+    </div>
+  ));
+};
+
 // Bottom sheet that sits above everything (incl. the live tracker).
 const Sheet = ({ title, onClose, children }) => (
   <div className="fixed inset-0 z-[70] bg-black/50 flex items-end justify-center" onClick={onClose} role="dialog" aria-label={title}>
@@ -138,7 +155,11 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
   const onField = onFieldNow(game.starters || [], events);
   const onSet = new Set(onField);
   const bench = players.filter((p) => !onSet.has(p.id));
-  const fieldPlayers = onField.map((u) => playerById[u] || { id: u, name: "Player", initials: "?" });
+  // On-field tiles in position order (GK → DEF → MID → FWD → others).
+  const posRank = {};
+  ["GK", "DEF", "MID", "FWD", "NONE"].forEach((k, i) => (players.groups?.[k] || []).forEach((p) => { posRank[p.id] = i; }));
+  const fieldPlayers = onField.map((u) => playerById[u] || { id: u, name: "Player", initials: "?" })
+    .sort((a, b) => (posRank[a.id] ?? 9) - (posRank[b.id] ?? 9));
   const keeper = fieldPlayers.find((p) => gkIds.includes(p.id)) || null;
   const lines = useMemo(() => playerLines(game, events, now), [game, events, now]);
   const carrier = owner.side === "us" && owner.uid ? playerById[owner.uid] : null;
@@ -379,8 +400,8 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
 
       {pickFor && (
         <Sheet title={pickFor === "save" ? "Who made the save?" : "Stat for which player?"} onClose={() => setPickFor(false)}>
-          <div className="grid grid-cols-3 gap-2">
-            {fieldPlayers.map((p) => (
+          <ByPosition list={fieldPlayers} players={players}>
+            {(p) => (
               <button key={p.id} onClick={() => {
                 setPickFor(false);
                 if (pickFor === "save") { add("save", { uid: p.id }); give("us", p.id, { auto: false }); return; }
@@ -388,15 +409,15 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
               }} className="rounded-2xl border border-slate-200 py-2 flex flex-col items-center gap-1 active:bg-slate-50">
                 <Face p={p} size={34} /><span className="text-xs font-bold text-slate-800 text-center leading-tight">{shortName(p.name)}</span>
               </button>
-            ))}
-          </div>
+            )}
+          </ByPosition>
         </Sheet>
       )}
 
       {subStep && (
         <Sheet title={subStep.out === "__none__" ? "Who's coming on?" : subStep.out ? `Who's coming on for ${shortName(playerById[subStep.out]?.name)}?` : "Who's coming off?"} onClose={() => setSubStep(null)}>
-          <div className="grid grid-cols-3 gap-2">
-            {(subStep.out ? bench : fieldPlayers).map((p) => (
+          <ByPosition list={subStep.out ? bench : fieldPlayers} players={players}>
+            {(p) => (
               <button key={p.id} onClick={() => {
                 if (!subStep.out) { setSubStep({ out: p.id }); return; }
                 add("sub", { outUid: subStep.out, inUid: p.id });
@@ -406,8 +427,8 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
               }} className="rounded-2xl border border-slate-200 py-2 flex flex-col items-center gap-1 active:bg-slate-50">
                 <Face p={p} size={34} /><span className="text-xs font-bold text-slate-800 text-center leading-tight">{shortName(p.name)}</span>
               </button>
-            ))}
-          </div>
+            )}
+          </ByPosition>
           {!subStep.out && bench.length > 0 && fieldPlayers.length < 11 && (
             <button onClick={() => setSubStep({ out: "__none__" })} className="w-full h-12 mt-3 rounded-2xl text-sm font-bold text-slate-600 bg-slate-100">Just add a player (no one off)</button>
           )}
@@ -816,15 +837,17 @@ function EditStartersSheet({ game, players, onClose }) {
   return (
     <Sheet title={`Starting 11 (${starters.length}/11)`} onClose={onClose}>
       <p className="text-[12px] text-slate-500 mb-2">Fix who started. Minutes and plus/minus update automatically. (For changes during the game, use Sub.)</p>
-      <div className="grid grid-cols-3 gap-1.5 max-h-[50vh] overflow-y-auto">
-        {players.map((p) => {
+      <div className="max-h-[50vh] overflow-y-auto">
+        <ByPosition list={players} players={players} gridClass="grid grid-cols-3 gap-1.5">
+        {(p) => {
           const on = starters.includes(p.id);
           return (
             <button key={p.id} onClick={() => toggle(p.id)} className={`rounded-xl py-2 px-1 flex flex-col items-center gap-1 border ${on ? "border-transparent text-white" : "border-slate-200 bg-white text-slate-800"}`} style={on ? { backgroundColor: RED } : undefined}>
               <span className={on ? "rounded-full ring-2 ring-white" : ""}><Face p={p} size={30} /></span><span className="text-[11px] font-bold leading-tight text-center">{shortName(p.name)}</span>
             </button>
           );
-        })}
+        }}
+        </ByPosition>
       </div>
       <button onClick={saveIt} disabled={busy} className="w-full h-14 mt-3 rounded-2xl text-white text-base font-black disabled:opacity-50" style={{ backgroundColor: RED }}>{busy ? "…" : "Save starting 11"}</button>
     </Sheet>
@@ -870,15 +893,17 @@ function NewGameSheet({ players, lineups, onCreate, onClose }) {
               ))}
             </div>
           )}
-          <div className="grid grid-cols-3 gap-1.5 max-h-[38vh] overflow-y-auto">
-            {players.map((p) => {
+          <div className="max-h-[38vh] overflow-y-auto">
+            <ByPosition list={players} players={players} gridClass="grid grid-cols-3 gap-1.5">
+            {(p) => {
               const on = starters.includes(p.id);
               return (
                 <button key={p.id} onClick={() => toggle(p.id)} className={`rounded-xl py-2 px-1 flex flex-col items-center gap-1 border ${on ? "border-transparent text-white" : "border-slate-200 bg-white text-slate-800"}`} style={on ? { backgroundColor: RED } : undefined}>
                   <span className={on ? "rounded-full ring-2 ring-white" : ""}><Face p={p} size={30} /></span><span className="text-[11px] font-bold leading-tight text-center">{shortName(p.name)}</span>
                 </button>
               );
-            })}
+            }}
+            </ByPosition>
           </div>
         </div>
         <button onClick={create} disabled={busy} className="w-full h-14 rounded-2xl text-white text-base font-black disabled:opacity-50" style={{ backgroundColor: RED }}>

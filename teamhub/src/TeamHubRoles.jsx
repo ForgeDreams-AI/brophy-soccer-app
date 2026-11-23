@@ -323,8 +323,11 @@ export default function TeamHubRolesApp() {
   // listener until the user is known + actually an admin (rules deny otherwise).
   // Roster for the active team only (a coach picks players from their own
   // team; the org admin switches teams to see the others).
+  // Stat keepers / statisticians load it too, so the Game Stats tracker has
+  // the roster (and subs) on their phone — the rules let any team member
+  // list their own team's people.
   const allUsersRaw = useCollection(
-    noData ? null : (isCoach ? "users" : null),
+    noData ? null : (isCoach || isStatKeeper ? "users" : null),
     where("teamIds", "array-contains", activeTeamId),
     orderBy("name"),
   );
