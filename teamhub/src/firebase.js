@@ -8,9 +8,17 @@ import {
 import { getStorage } from "firebase/storage";
 import { getMessaging } from "firebase/messaging";
 
+const SAME_SITE_AUTH_HOSTS = ["brophy-soccer-app.firebaseapp.com"];
+
 const firebaseConfig = {
   apiKey: "AIzaSyCsKiTGtjJmh9tCHCPQ82oUFLXnUcpUy6Q",
-  authDomain: "brophy-soccer-app.firebaseapp.com",
+  // Google sign-in runs its handler page on `authDomain`. When that's a
+  // different site from the one the app is open on, iPhone Safari (storage
+  // partitioning) loses the sign-in state: "Unable to process request due to
+  // missing initial state". So use the app's own host when Google has it as
+  // an authorized redirect URI (https://<host>/__/auth/handler in the OAuth
+  // client — add a host here only after it's added there).
+  authDomain: SAME_SITE_AUTH_HOSTS.includes(globalThis.location?.hostname) ? globalThis.location.hostname : "brophy-soccer-app.firebaseapp.com",
   projectId: "brophy-soccer-app",
   storageBucket: "brophy-soccer-app.firebasestorage.app",
   messagingSenderId: "134702834848",

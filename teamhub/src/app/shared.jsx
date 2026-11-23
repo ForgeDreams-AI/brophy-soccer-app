@@ -533,6 +533,9 @@ export const LoginScreen = ({ externalError, clearExternalError, emailLinkPendin
           <button onClick={google} disabled={busy} className="w-full py-3 rounded-xl font-bold text-sm bg-white text-slate-700 flex items-center justify-center gap-2 hover:bg-slate-50 disabled:opacity-60">
             <span className="text-base font-black" style={{ color: "#4285F4" }}>G</span> Continue with Google
           </button>
+          {/iPad|iPhone|iPod/.test(navigator.userAgent) && (
+            <p className="text-[11px] text-white/60 text-center leading-snug">On iPhone, if Google shows an error, use <span className="font-bold text-white/80">Email me a sign-in link</span> above.</p>
+          )}
         </div>
 
         <div className="mt-6 bg-white/10 rounded-xl p-3">
