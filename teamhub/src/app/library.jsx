@@ -1,7 +1,7 @@
 // Split out of TeamHubRoles.jsx (F81). Area: library.
 // Every top-level declaration here is exported for the other app modules.
-import { useMemo, useState } from "react";
-import { Download, ExternalLink, FileText, Link as LinkIcon, Paperclip, Pencil, Play, Plus, Trash2, Video, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, ExternalLink, FileText, Folder, Hash, Link as LinkIcon, Paperclip, Pencil, Play, Plus, Send, Trash2, Video, X } from "lucide-react";
 import { isLoading } from "../hooks/useCollection";
 import { toast } from "../lib/toast";
 import { getTeamShortName } from "../data/teams";
@@ -137,9 +137,60 @@ export const LibraryItemForm = ({ initial, activeTeamId, folders, onSave, onClos
   );
 };
 
-export const LibraryPage = ({ user, items = [], activeTeamId, addItem, updateItem, deleteItem }) => {
+// Channel picker for sending a document or a whole folder into a chat. The
+// message carries a link back here (attachment type "doc" / "folder"); tapping
+// it in the chat opens Train → Documents on that folder / document.
+export const SendToChatSheet = ({ label, chatGroups = [], onSend, onClose }) => {
+  const [busy, setBusy] = useState("");
+  const channels = [{ id: "team", name: "Team" }, ...chatGroups.map((c) => ({ id: c.id, name: c.name }))];
+  const send = async (ch) => {
+    setBusy(ch.id);
+    try { await onSend(ch.id); toast(`Sent to ${ch.name}.`, "success"); onClose(); }
+    catch (e) { toast("Couldn't send — " + (e?.code === "permission-denied" ? "you can't post in that chat." : (e?.message || "try again."))); setBusy(""); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl w-full max-w-md max-h-[80vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-slate-100 px-5 py-3 flex items-center justify-between gap-2">
+          <h3 className="font-bold text-base text-slate-900 truncate">Send {label} to…</h3>
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-4 space-y-2">
+          {channels.map((ch) => (
+            <button key={ch.id} onClick={() => send(ch)} disabled={!!busy} className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border border-slate-200 bg-white disabled:opacity-60">
+              <span className="flex items-center gap-2 font-semibold text-sm text-slate-800"><Hash className="w-4 h-4 text-slate-400" />{ch.name}</span>
+              {busy === ch.id ? <span className="inline-block w-4 h-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" /> : <Send className="w-4 h-4" style={{ color: COLORS.primary }} />}
+            </button>
+          ))}
+          <p className="text-[10px] text-slate-400 leading-relaxed px-1 pt-1">Posts a link in the chat. Tapping it opens it here in Train → Documents.</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const LibraryPage = ({ user, items = [], activeTeamId, addItem, updateItem, deleteItem, chatGroups = [], onSendToChat, focus = null }) => {
   const isAdmin = user.role === "admin";
-  const [folder, setFolder] = useState("All");
+  // `focus` = { folder, docId } when opened from a chat link (the page is
+  // re-mounted per link, so it starts on that folder with the doc highlighted).
+  const [folder, setFolder] = useState(focus?.folder || "All");
+  const [sendTarget, setSendTarget] = useState(null); // { label, attachment, text }
+  const focusRef = useRef(null);
+  const focusDoc = focus?.docId ? items.find((i) => i.id === focus.docId) : null;
+  const focusMissing = Boolean(focus?.docId) && !isLoading(items) && !focusDoc;
+  useEffect(() => {
+    if (focusDoc) focusRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusDoc]);
+  const sendDoc = (i) => setSendTarget({
+    label: `"${i.title}"`,
+    text: `📄 ${i.title}`,
+    attachment: { type: "doc", docId: i.id, name: i.title, folder: i.folder || "", docKind: i.kind || "file", fileType: i.fileType || "" },
+  });
+  const sendFolder = (f) => setSendTarget({
+    label: `the ${f} folder`,
+    text: `📁 ${f}`,
+    attachment: { type: "folder", folder: f, name: f, count: items.filter((i) => i.folder === f).length },
+  });
   const [q, setQ] = useState("");
   const [form, setForm] = useState(null); // null | {} (new) | item (edit)
   const usedFolders = [...new Set(items.map((i) => i.folder).filter(Boolean))];
@@ -147,7 +198,7 @@ export const LibraryPage = ({ user, items = [], activeTeamId, addItem, updateIte
   const pills = ["All", ...usedFolders.sort((a, b) => a.localeCompare(b))];
   const activeFolder = pills.includes(folder) ? folder : "All";
   const needle = q.trim().toLowerCase();
-  const shown = items.filter((i) => (activeFolder === "All" || i.folder === activeFolder)
+  const shown = items.filter((i) => (activeFolder === "All" || i.folder === activeFolder || (i.id === focus?.docId && !needle))
     && (!needle || [i.title, i.desc, i.folder, i.name].some((v) => (v || "").toLowerCase().includes(needle))));
   const fmtDate = (ts) => (ts?.toDate ? ts.toDate().toLocaleDateString([], { month: "short", day: "numeric" }) : "");
   const remove = (i) => {
@@ -171,6 +222,12 @@ export const LibraryPage = ({ user, items = [], activeTeamId, addItem, updateIte
           ))}
         </div>
       )}
+      {focusMissing && <p className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">That document was removed or isn't shared with your team any more.</p>}
+      {onSendToChat && activeFolder !== "All" && (
+        <button onClick={() => sendFolder(activeFolder)} className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold bg-white border border-slate-200" style={{ color: COLORS.primary }}>
+          <Folder className="w-3.5 h-3.5" /> Send the {activeFolder} folder to a chat
+        </button>
+      )}
       {isLoading(items) ? <p className="text-sm text-slate-400 text-center py-8">Loading documents…</p>
         : shown.length === 0 ? (
           <div className="text-center py-10 text-slate-400">
@@ -183,7 +240,7 @@ export const LibraryPage = ({ user, items = [], activeTeamId, addItem, updateIte
               const isLink = i.kind === "link";
               const isImg = !isLink && (i.fileType || "").startsWith("image/");
               return (
-                <li key={i.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 flex items-center gap-3">
+                <li key={i.id} ref={i.id === focus?.docId ? focusRef : undefined} className={`bg-white rounded-2xl shadow-sm border p-3 flex items-center gap-3 ${i.id === focus?.docId ? "border-transparent ring-2" : "border-slate-100"}`} style={i.id === focus?.docId ? { "--tw-ring-color": COLORS.accent } : undefined}>
                   {isImg ? <img src={i.url} alt="" loading="lazy" className="w-11 h-11 rounded-xl object-cover flex-shrink-0" />
                     : <div className="w-11 h-11 rounded-xl flex flex-col items-center justify-center flex-shrink-0 gap-0.5" style={{ backgroundColor: COLORS.accentSoft }}>
                       {isLink ? <LinkIcon className="w-4 h-4" style={{ color: COLORS.accent }} /> : <FileText className="w-4 h-4" style={{ color: COLORS.accent }} />}
@@ -199,6 +256,11 @@ export const LibraryPage = ({ user, items = [], activeTeamId, addItem, updateIte
                   <a href={i.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${i.title}`} className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.bg, color: COLORS.primary }}>
                     {isLink ? <ExternalLink className="w-4 h-4" /> : <Download className="w-4 h-4" />}
                   </a>
+                  {onSendToChat && (
+                    <button onClick={() => sendDoc(i)} aria-label={`Send ${i.title} to a chat`} title="Send to a chat" className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: COLORS.bg, color: COLORS.primary }}>
+                      <Send className="w-4 h-4" />
+                    </button>
+                  )}
                   {isAdmin && (
                     <div className="flex flex-col gap-1 flex-shrink-0">
                       <button onClick={() => setForm(i)} aria-label={`Edit ${i.title}`} className="text-slate-300 hover:text-slate-600"><Pencil className="w-3.5 h-3.5" /></button>
@@ -210,6 +272,11 @@ export const LibraryPage = ({ user, items = [], activeTeamId, addItem, updateIte
             })}
           </ul>
         )}
+      {sendTarget && (
+        <SendToChatSheet label={sendTarget.label} chatGroups={chatGroups}
+          onSend={(channel) => onSendToChat(channel, sendTarget.text, sendTarget.attachment)}
+          onClose={() => setSendTarget(null)} />
+      )}
       {form && (
         <LibraryItemForm initial={form} activeTeamId={activeTeamId} folders={folders}
           onSave={(data, onProgress) => (form.id ? updateItem(form.id, { title: data.title, folder: data.folder, desc: data.desc, ...(form.kind === "link" ? { url: data.url } : {}) }) : addItem(data, onProgress))}

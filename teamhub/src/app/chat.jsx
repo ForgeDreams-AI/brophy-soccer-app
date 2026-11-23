@@ -1,7 +1,7 @@
 // Split out of TeamHubRoles.jsx (F81). Area: chat.
 // Every top-level declaration here is exported for the other app modules.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, BarChart3, Bell, BellOff, Camera, Check, ChevronDown, ChevronLeft, ChevronUp, Clock, Copy, Eye, FileText, Hash, Image as ImageIcon, Layers, Link as LinkIcon, Maximize2, Paperclip, Pin, Play, Plus, Repeat, Reply, Trash2, Video, X } from "lucide-react";
+import { ArrowUp, BarChart3, Bell, BellOff, Camera, Check, ChevronDown, ChevronLeft, ChevronUp, Clock, Copy, Eye, FileText, Folder, Hash, Image as ImageIcon, Layers, Link as LinkIcon, Maximize2, Paperclip, Pin, Play, Plus, Repeat, Reply, Trash2, Video, X } from "lucide-react";
 import { collection, deleteField, doc, getDocs, updateDoc } from "firebase/firestore";
 import { db, storage } from "../firebase";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
@@ -831,7 +831,27 @@ export const VideoViewer = ({ url, onClose }) => {
   );
 };
 
-export const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderMessages = false, onLoadOlder, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, markDMsRead, scheduled = [], addScheduled, deleteScheduled }) => {
+// A chat link to Train → Documents (sent from the Documents page): a single
+// document or a whole folder. Tapping opens Documents on it.
+export const LibraryLinkCard = ({ a, own, onOpen }) => {
+  const isFolder = a.type === "folder";
+  return (
+    <button onClick={() => onOpen?.({ folder: a.folder || "", docId: isFolder ? "" : (a.docId || "") })}
+      className={`mx-2 my-2 rounded-xl p-2.5 flex items-center gap-2.5 text-left w-[calc(100%-1rem)] ${own ? "bg-white/15" : "bg-white/80"}`}>
+      <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: own ? "rgba(255,255,255,0.2)" : COLORS.accentSoft, color: own ? "#fff" : COLORS.accent }}>
+        {isFolder ? <Folder className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] font-bold truncate">{a.name || (isFolder ? "Folder" : "Document")}</span>
+        <span className={`block text-[11px] truncate ${own ? "text-white/75" : "text-slate-500"}`}>
+          {isFolder ? `Folder${a.count ? ` · ${a.count} item${a.count === 1 ? "" : "s"}` : ""}` : (a.folder ? `In ${a.folder}` : "Document")} · Open in Documents ›
+        </span>
+      </span>
+    </button>
+  );
+};
+
+export const MessagesPage = ({ onOpenDocument, user, activeTeamId, isOrgAdmin = false, hasOlderMessages = false, onLoadOlder, messages, addMessage, togglePinMessage, deleteMessage, markMessagesRead, voteOnPoll, reactToMessage, rosterCount = 0, chatGroups = [], addChatGroup, deleteChatGroup, updateChatGroup, onPinChannel, groups = [], invites = [], allUsers = [], announcements = [], addAnnouncement, deleteAnnouncement, dms = [], addDM, markDMsRead, scheduled = [], addScheduled, deleteScheduled }) => {
   const isAdmin = user.role === "admin";
   const [input, setInput] = useState("");
   const [showPinned, setShowPinned] = useState(true);
@@ -1409,6 +1429,12 @@ export const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderM
                       <div className="text-[10px] font-semibold text-slate-700 truncate w-full">{m.attachment.name}</div>
                       <div className="text-[9px] text-slate-400">{m.sender.split(" ")[0]}</div>
                     </a>
+                  ) : (m.attachment?.type === "doc" || m.attachment?.type === "folder") ? (
+                    <button key={m.id} onClick={() => onOpenDocument?.({ folder: m.attachment.folder || "", docId: m.attachment.docId || "" })} className="bg-white rounded-xl border border-slate-100 p-3 flex flex-col items-center text-center">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-1.5" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>{m.attachment.type === "folder" ? <Folder className="w-4 h-4" /> : <FileText className="w-4 h-4" />}</div>
+                      <div className="text-[10px] font-semibold text-slate-700 truncate w-full">{m.attachment.name}</div>
+                      <div className="text-[9px] text-slate-400">{m.sender.split(" ")[0]}</div>
+                    </button>
                   ) : (
                     <div key={m.id} className="bg-white rounded-xl border border-slate-100 p-3 flex flex-col items-center text-center">
                       <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-1.5" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}><AttIcon type={m.attachment.type} /></div>
@@ -1576,8 +1602,10 @@ export const MessagesPage = ({ user, activeTeamId, isOrgAdmin = false, hasOlderM
                               <button onClick={() => setVideoViewer(m.attachment.url)} aria-label="Watch fullscreen" title="Watch fullscreen" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center"><Maximize2 className="w-4 h-4" /></button>
                             </div>
                           )}
-                          {m.text && <p className="text-[15px] leading-snug break-words px-3.5 py-2"><Linkify>{m.text}</Linkify></p>}
-                          {m.attachment && m.attachment.type !== "image" && m.attachment.type !== "video" && (
+                          {m.text && !((m.attachment?.type === "doc" || m.attachment?.type === "folder") && (m.text === `📄 ${m.attachment.name}` || m.text === `📁 ${m.attachment.name}`)) && <p className="text-[15px] leading-snug break-words px-3.5 py-2"><Linkify>{m.text}</Linkify></p>}
+                          {(m.attachment?.type === "doc" || m.attachment?.type === "folder") ? (
+                            <LibraryLinkCard a={m.attachment} own={own} onOpen={onOpenDocument} />
+                          ) : m.attachment && m.attachment.type !== "image" && m.attachment.type !== "video" && (
                             m.attachment.type === "file" && m.attachment.url ? (
                               <a href={m.attachment.url} target="_blank" rel="noopener noreferrer" className={`mx-2 my-2 rounded-xl p-2 flex items-center gap-2 ${own ? "bg-white/15" : "bg-white/70"}`}><AttIcon type={m.attachment.type} /><span className="text-[12px] font-semibold truncate">{m.attachment.name}</span></a>
                             ) : (
