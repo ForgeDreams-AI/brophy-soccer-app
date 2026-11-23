@@ -44,3 +44,31 @@ describe('player roster listing', () => {
     await assertFails(getDocs(collection(as(env, 'coachV').firestore(), 'users')))
   })
 })
+
+describe('statistician role', () => {
+  beforeEach(async () => {
+    await seed(env, 'users/stat1', { name: 'Stat Guy', email: 'stat1@example.com', role: 'statistician', teamIds: ['varsity'], primaryTeamId: 'varsity' })
+  })
+  const game = { teamId: 'varsity', opponent: 'Xavier', date: '2026-11-24', status: 'live' }
+  test('records games for their own team without being picked', async () => {
+    const { addDoc } = await import('firebase/firestore')
+    await assertSucceeds(addDoc(collection(as(env, 'stat1').firestore(), 'games'), game))
+  })
+  test('cannot record for another team', async () => {
+    const { addDoc } = await import('firebase/firestore')
+    await assertFails(addDoc(collection(as(env, 'stat1').firestore(), 'games'), { ...game, teamId: 'jvb' }))
+  })
+  test('a plain player still cannot record', async () => {
+    const { addDoc } = await import('firebase/firestore')
+    await assertFails(addDoc(collection(as(env, 'p1').firestore(), 'games'), game))
+  })
+  test('has team-app access (shared libraries)', async () => {
+    await assertSucceeds(getDocs(collection(as(env, 'stat1').firestore(), 'recipes')))
+  })
+  test('can sign up from a statistician invite', async () => {
+    const { setDoc, doc } = await import('firebase/firestore')
+    await seed(env, 'invitedEmails/new.stat@example.com', { email: 'new.stat@example.com', teamId: 'varsity', role: 'statistician' })
+    const db = env.authenticatedContext('newstat', { email: 'new.stat@example.com', email_verified: true }).firestore()
+    await assertSucceeds(setDoc(doc(db, 'users/newstat'), { name: 'New Stat', email: 'new.stat@example.com', role: 'statistician', teamIds: ['varsity'], primaryTeamId: 'varsity', initials: 'NS' }))
+  })
+})

@@ -9,6 +9,8 @@
 // UX lock. Kept in its own file so TeamHubRoles.jsx only exports components
 // (react-refresh/only-export-components).
 
-export const TEAM_APP_ROLES = ["admin", "orgAdmin", "player"];
+// "statistician": everything a player has, plus Game Stats on their Home
+// (records games like a stat keeper; not listed as a player).
+export const TEAM_APP_ROLES = ["admin", "orgAdmin", "player", "statistician"];
 
 export const isLockedOutRole = (role) => !TEAM_APP_ROLES.includes(role);

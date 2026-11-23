@@ -38,7 +38,7 @@ service cloud.firestore {
     // The caller has a profile with a team-app role (player, coach or org
     // admin). Excludes drillBuilder (drill-library-only, no team-app access)
     // and profile-less accounts. Used for the shared (non-team) libraries.
-    function hasTeamRole() { return hasProfile() && myRole() in ['player', 'admin', 'orgAdmin']; }
+    function hasTeamRole() { return hasProfile() && myRole() in ['player', 'statistician', 'admin', 'orgAdmin']; }
     // Any coach-level role (a per-team coach or the org admin). Used for
     // shared (non-team) collections only; team-scoped writes use isCoachOf.
     function isAdmin() { return signedIn() && (myRole() == 'admin' || myRole() == 'orgAdmin'); }
@@ -66,10 +66,13 @@ service cloud.firestore {
     // Stat keeper: a team member a coach picked to record Game Stats
     // (appConfig/statKeepers_<team>.uids). They can record games, never
     // delete a game or touch anything else.
+    // A Statistician (role 'statistician': player access + Game Stats) is a
+    // stat keeper of every team they're on, without being picked.
     function isStatKeeperOf(teamId) {
       return isTeamId(teamId) && isMemberOf(teamId)
-        && exists(/databases/$(database)/documents/appConfig/$('statKeepers_' + teamId))
-        && get(/databases/$(database)/documents/appConfig/$('statKeepers_' + teamId)).data.get('uids', []).hasAny([request.auth.uid]);
+        && (myRole() == 'statistician'
+          || (exists(/databases/$(database)/documents/appConfig/$('statKeepers_' + teamId))
+            && get(/databases/$(database)/documents/appConfig/$('statKeepers_' + teamId)).data.get('uids', []).hasAny([request.auth.uid])));
     }
 
     // The audience keys the current user satisfies. A doc with an
@@ -140,7 +143,7 @@ service cloud.firestore {
       let path = /databases/$(database)/documents/invitedEmails/$(d.email);
       return exists(path)
         && d.role == get(path).data.get('role', 'player')
-        && d.role in ['player', 'admin', 'orgAdmin']
+        && d.role in ['player', 'statistician', 'admin', 'orgAdmin']
         && d.primaryTeamId == get(path).data.get('teamId', 'varsity');
     }
 

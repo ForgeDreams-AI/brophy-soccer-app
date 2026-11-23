@@ -294,7 +294,7 @@ export default function TeamHubRolesApp() {
   // Game Stats stat keepers (appConfig/statKeepers_<team>): uids allowed to
   // record games + a roster snapshot their phones use (see GameStats).
   const statKeepers = appConfig.find((d) => d.id === `statKeepers_${activeTeamId}`) || null;
-  const isStatKeeper = Boolean(user && (statKeepers?.uids || []).includes(user.uid));
+  const isStatKeeper = Boolean(user && (user.role === "statistician" || (statKeepers?.uids || []).includes(user.uid)));
   const setStatKeepers = (uids, roster) =>
     setDoc(doc(db, "appConfig", `statKeepers_${activeTeamId}`), { uids, roster, updatedByName: user.name, updatedAt: new Date().toISOString() });
   // Coach-set positions for the roster (see PlayersByPosition).
@@ -807,7 +807,7 @@ export default function TeamHubRolesApp() {
   // truth (e.g. someone invited as a player and later made program admin).
   // Use the account's role when it is staff, so staff never show as players.
   const invites = useMemo(() => {
-    const staffByEmail = new Map((allUsers || []).filter((u) => u.email && isStaffRole(u.role)).map((u) => [u.email.toLowerCase(), u.role]));
+    const staffByEmail = new Map((allUsers || []).filter((u) => u.email && (isStaffRole(u.role) || u.role === "statistician")).map((u) => [u.email.toLowerCase(), u.role]));
     if (user && isStaffRole(user.role) && user.email) staffByEmail.set(user.email.toLowerCase(), user.role);
     if (!staffByEmail.size) return invitesRaw;
     const out = invitesRaw.map((inv) => {
@@ -914,7 +914,7 @@ export default function TeamHubRolesApp() {
     if (role !== "orgAdmin" && !validTeams.length) {
       throw new Error("Pick at least one team.");
     }
-    const finalRole = role === "orgAdmin" ? "orgAdmin" : role === "admin" ? "admin" : "player";
+    const finalRole = ["orgAdmin", "admin", "statistician"].includes(role) ? role : "player";
     // Org admins see all three teams; everyone else gets exactly the teams
     // the admin picked. Primary is the first picked team (or the existing
     // primary if it's still one of them).
@@ -1458,7 +1458,7 @@ export default function TeamHubRolesApp() {
               practiceProps={{ user: { ...effUser, isOrgAdmin: user.role === "orgAdmin" }, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events }}
               gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId), activeTeamId, positionsByUid }}
               gameStatsProps={{ user: effUser, activeTeamId, allUsers, lineups, positionsByUid, isCoach, canRecord: isCoach || isStatKeeper, statKeepers, setStatKeepers, onSendReport: postGameReport }}
-              rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", removeUser, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId, positionsByUid, setPlayerPosition }}
+              rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", setUserRoleAndTeams, removeUser, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId, positionsByUid, setPlayerPosition }}
               calendarProps={{ user: effUser, events, practices, teamWorkouts, personalEvents, addEvent, updateEvent, addPersonalEvent, updatePersonalEvent, deleteEvent, deletePersonalEvent, importEvents, groups: groupsList, addGroup, updateGroupMembers, deleteGroup, invites, allUsers, chatGroups }}
               documentsProps={{ user: effUser, documents, rosterCount: invites.filter((i) => !isStaffRole(i.role)).length, onUpload: addDocument, onDelete: deleteDocument, onSign: signDocument }}
               announcementsProps={{ announcements, addAnnouncement, updateAnnouncement, togglePinAnnouncement, deleteAnnouncement }}

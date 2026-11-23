@@ -1,7 +1,7 @@
 // Split out of TeamHubRoles.jsx (F81). Area: coach.
 // Every top-level declaration here is exported for the other app modules.
 import { useMemo, useRef, useState } from "react";
-import { BarChart3, Bell, Calendar as CalendarIcon, ChevronLeft, ClipboardList, Copy, FileText, Goal, Hash, Link as LinkIcon, Megaphone, Pencil, Pin, Plus, Send, Trash2, Users, X } from "lucide-react";
+import { BarChart3, Bell, Calendar as CalendarIcon, ChevronDown, ChevronLeft, ClipboardList, Copy, FileText, Goal, Hash, Link as LinkIcon, Megaphone, Pencil, Pin, Plus, Send, Trash2, Users, X } from "lucide-react";
 import { storage } from "../firebase";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { isLoading } from "../hooks/useCollection";
@@ -15,7 +15,7 @@ import { DocumentsSection } from "./documents";
 import { LoadingNote } from "./home";
 import { PracticePage } from "./practice";
 import { initialsOf } from "./settings";
-import { AutoGrowTextarea, Avatar, COLORS, EMPTY_OBJ, downscaleToBlob, formatAgo, isStaffRole, reportError, staffLabel, uploadStamp } from "./shared";
+import { AutoGrowTextarea, Avatar, COLORS, EMPTY_OBJ, ROSTER_ROLES, downscaleToBlob, formatAgo, isStaffRole, reportError, staffLabel, uploadStamp } from "./shared";
 
 
 /* ─── GAME DAY: starting line-ups ─────────────────────────────────────────
@@ -643,7 +643,31 @@ export const PlayersByPosition = ({ allUsers = [], activeTeamId, byUid = {}, onS
   );
 };
 
-export const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks = [], addInviteLink, removeInviteLink, allUsers = [], removeUser, requestProfileUpdate, activeTeamId, positionsByUid = {}, setPlayerPosition }) => {
+// Role badge on the roster list. Coach = red, Statistician = blue, Player = grey.
+const roleBadgeStyle = (role) => (isStaffRole(role)
+  ? { backgroundColor: COLORS.primary, color: "white" }
+  : role === "statistician"
+  ? { backgroundColor: "#DBEAFE", color: "#1D4ED8" }
+  : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` });
+export const RoleBadge = ({ role }) => (
+  <span title="Only the program admin can change roles." className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={roleBadgeStyle(role)}>
+    {staffLabel(role)}
+  </span>
+);
+// Program admin: tap the badge → the phone's picker (Player / Coach /
+// Statistician). The native <select> sits invisibly over the badge.
+export const RoleSelect = ({ role, onChange, label = "" }) => (
+  <label className="relative flex-shrink-0 cursor-pointer">
+    <span className="text-[9px] font-black uppercase tracking-wider pl-2 pr-1.5 py-1 rounded-md flex items-center gap-0.5" style={roleBadgeStyle(role)}>
+      {staffLabel(role)}<ChevronDown className="w-3 h-3 opacity-70" />
+    </span>
+    <select value={role} onChange={(e) => onChange(e.target.value)} aria-label={`Role for ${label}`} className="absolute inset-0 opacity-0 cursor-pointer w-full">
+      {ROSTER_ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+    </select>
+  </label>
+);
+
+export const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks = [], addInviteLink, removeInviteLink, allUsers = [], removeUser, requestProfileUpdate, activeTeamId, positionsByUid = {}, setPlayerPosition, setUserRoleAndTeams }) => {
   const nameByEmail = useMemo(() => Object.fromEntries((allUsers || []).filter((u) => u.email).map((u) => [u.email, u.name])), [allUsers]);
   // Teams this coach can invite/link to: the org admin sees all three, a
   // team coach sees only their own team(s).
@@ -936,13 +960,13 @@ export const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addI
       ) : (
         <ul className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           {invites.map((inv, i) => {
-            const isCoach = isStaffRole(inv.role);
+            const role = inv.role || "player";
             const isSelf = inv.email === user.email;
-            const toggleRole = async () => {
-              const next = isCoach ? "player" : "admin";
+            const changeRole = async (next) => {
+              if (next === role) return;
               try {
                 await setInviteRole(inv.email, next);
-                setInviteMsg(`${inv.email} is now ${next === "admin" ? "a coach" : "a player"}.`);
+                setInviteMsg(`${nameByEmail[inv.email] || inv.email} is now ${next === "admin" ? "a coach" : next === "statistician" ? "a statistician" : "a player"}.`);
               } catch (e) {
                 setInviteMsg(e.message || "Couldn't change role.");
               }
@@ -957,28 +981,10 @@ export const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addI
                 {/* Role is org-admin-only (decision 2026-11-08): a team
                     coach sees the badge but can't promote/demote anyone.
                     setInviteRole + the rules enforce it server-side too. */}
-                {isOrgAdmin ? (
-                  <button
-                    onClick={toggleRole}
-                    disabled={isSelf}
-                    title={isSelf ? "You can't change your own role here." : isCoach ? "Make player" : "Make coach"}
-                    className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
-                    style={isCoach
-                      ? { backgroundColor: COLORS.primary, color: "white" }
-                      : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
-                  >
-                    {staffLabel(isCoach ? inv.role : "player")}
-                  </button>
+                {isOrgAdmin && !isSelf && role !== "orgAdmin" ? (
+                  <RoleSelect role={role} onChange={changeRole} label={nameByEmail[inv.email] || inv.email} />
                 ) : (
-                  <span
-                    title={isCoach ? "Coach — only the program admin can change roles." : "Player — only the program admin can change roles."}
-                    className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0"
-                    style={isCoach
-                      ? { backgroundColor: COLORS.primary, color: "white" }
-                      : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}
-                  >
-                    {staffLabel(isCoach ? inv.role : "player")}
-                  </span>
+                  <RoleBadge role={role} />
                 )}
                 <button onClick={() => { if (confirm(`Remove ${inv.email} from the roster? They won't be able to sign up with this invite.`)) Promise.resolve(removeInvite(inv.id)).catch(reportError("Couldn't remove the invite")); }} disabled={isSelf} title={isSelf ? "You can't remove yourself." : `Remove ${inv.email}`} aria-label={`Remove ${inv.email}`} className="text-slate-300 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed">
                   <Trash2 className="w-3.5 h-3.5" />
@@ -991,7 +997,6 @@ export const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addI
               "Via link" tag. Only the program admin can remove one (deletes
               their profile — firestore.rules users delete). */}
           {linkJoiners.map((u, j) => {
-            const isCoach = isStaffRole(u.role);
             const displayName = (u.name || "").trim();
             return (
               <li key={u.id} className={`flex items-center gap-2 px-3 py-2.5 ${j < linkJoiners.length - 1 ? "border-b border-slate-100" : ""}`}>
@@ -1001,9 +1006,15 @@ export const RosterInvitesPage = ({ user, isOrgAdmin = false, invites = [], addI
                     : <span className="text-xs font-mono text-slate-700">{u.email}</span>}
                 </span>
                 <span title="Joined through an invite link." className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={{ backgroundColor: COLORS.accentSoft, color: COLORS.accent }}>Via link</span>
-                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md flex-shrink-0" style={isCoach ? { backgroundColor: COLORS.primary, color: "white" } : { backgroundColor: COLORS.bg, color: COLORS.textSecondary, border: `1px solid ${COLORS.border}` }}>
-                  {staffLabel(isCoach ? u.role : "player")}
-                </span>
+                {isOrgAdmin && setUserRoleAndTeams && u.id !== user.uid && u.role !== "orgAdmin" ? (
+                  <RoleSelect role={u.role || "player"} label={displayName || u.email} onChange={async (next) => {
+                    if (next === (u.role || "player")) return;
+                    try {
+                      await setUserRoleAndTeams(u.id, u.email, { role: next, teamIds: u.teamIds || [activeTeamId], primaryTeamId: u.primaryTeamId });
+                      setInviteMsg(`${displayName || u.email} is now ${next === "admin" ? "a coach" : next === "statistician" ? "a statistician" : "a player"}.`);
+                    } catch (e) { setInviteMsg(e.message || "Couldn't change role."); }
+                  }} />
+                ) : <RoleBadge role={u.role || "player"} />}
                 {isOrgAdmin && removeUser && u.id !== user.uid && (
                   <button onClick={() => { if (confirm(`Remove ${displayName || u.email} from the team? They'll lose access until invited again.`)) Promise.resolve(removeUser(u.id)).catch(reportError("Couldn't remove the player")); }} aria-label={`Remove ${displayName || u.email}`} className="text-slate-300 hover:text-red-500">
                     <Trash2 className="w-3.5 h-3.5" />

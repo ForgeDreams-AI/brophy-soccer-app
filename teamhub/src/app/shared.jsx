@@ -284,7 +284,9 @@ export const EMPTY_OBJ = Object.freeze({});
 // never shown or counted as players.
 export const STAFF_ROLES = new Set(["admin", "orgAdmin", "drillBuilder"]);
 export const isStaffRole = (role) => STAFF_ROLES.has(role);
-export const staffLabel = (role) => (role === "orgAdmin" ? "Admin" : role === "drillBuilder" ? "Builder" : role === "admin" ? "Coach" : "Player");
+export const staffLabel = (role) => (role === "orgAdmin" ? "Admin" : role === "drillBuilder" ? "Builder" : role === "admin" ? "Coach" : role === "statistician" ? "Statistician" : "Player");
+// Roles a roster entry can be set to (program admin only).
+export const ROSTER_ROLES = [["player", "Player"], ["admin", "Coach"], ["statistician", "Statistician"]];
 
 export const COLORS = {
   primary: "#980000",     // Brophy Red (site header)

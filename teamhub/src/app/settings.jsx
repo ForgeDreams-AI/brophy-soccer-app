@@ -27,7 +27,7 @@ export const initialsOf = (name) =>
 // Settings — a professional page: Profile, Team & Role, People & Roles
 // (org admin only), Notifications, Help, About. Tester feedback was removed
 // outright (decision 2026-11-08, §10) — no feedback form exists anywhere.
-export const ROLE_LABELS = { player: "Player", admin: "Team Coach", orgAdmin: "Org Admin" };
+export const ROLE_LABELS = { player: "Player", statistician: "Statistician", admin: "Team Coach", orgAdmin: "Org Admin" };
 
 export const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdmin = false, orgUsers = [], setUserRoleAndTeams }) => {
   const [editingName, setEditingName] = useState(false);
@@ -133,7 +133,7 @@ export const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdm
   }, [orgUsers, roleSearch]);
   const openEditor = (u) => {
     setEditingUid(u.id);
-    setEditRole(u.role === "orgAdmin" ? "orgAdmin" : u.role === "admin" ? "admin" : "player");
+    setEditRole(["orgAdmin", "admin", "statistician"].includes(u.role) ? u.role : "player");
     const teams = (u.teamIds || []).filter(isValidTeamId);
     setEditTeams(teams.length ? teams : [u.primaryTeamId || DEFAULT_TEAM_ID].filter(isValidTeamId));
     setEditErr(""); setEditMsg("");
@@ -289,8 +289,8 @@ export const SettingsModal = ({ user, onClose, onSignOut, onReplayTour, isOrgAdm
                             <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
                               <div>
                                 <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">Role</div>
-                                <div className="flex gap-1.5">
-                                  {["player", "admin", "orgAdmin"].map((r) => (
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  {["player", "statistician", "admin", "orgAdmin"].map((r) => (
                                     <button
                                       key={r}
                                       onClick={() => setEditRole(r)}

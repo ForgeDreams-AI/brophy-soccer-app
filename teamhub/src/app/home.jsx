@@ -435,7 +435,7 @@ export const HomePage = ({ user, practices = [], announcements = [], events = []
   const playersTotal = useMemo(() => {
     const keys = new Set();
     (allUsers || []).filter((u) => u.role === "player").forEach((u) => keys.add((u.email || u.id).toLowerCase()));
-    (invites || []).filter((i) => i.role !== "admin" && i.role !== "orgAdmin").forEach((i) => keys.add((i.email || i.id).toLowerCase()));
+    (invites || []).filter((i) => !i.role || i.role === "player").forEach((i) => keys.add((i.email || i.id).toLowerCase()));
     return keys.size;
   }, [allUsers, invites]);
   const [openPlayer, setOpenPlayer] = useState(null);
