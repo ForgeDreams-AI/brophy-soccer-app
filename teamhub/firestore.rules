@@ -162,7 +162,17 @@ service cloud.firestore {
     //    hook degrades to in-memory values if a write is denied.
     //  - delete (F02): org admin only, and never their own doc.
     match /users/{uid} {
-      allow read:   if isOwner(uid) || isOrgAdmin() || sharesTeam(resource.data.get('teamIds', []));
+      allow get:    if isOwner(uid) || isOrgAdmin() || sharesTeam(resource.data.get('teamIds', []));
+      // Listing a team's people (roster, Game Day picker): the query filters
+      // teamIds array-contains <team>, and a list rule must be provable from
+      // the query alone — `hasAny` against the caller's teams isn't, so it was
+      // denied for every per-team coach (only the org admin got through).
+      // One clause per team in the `'x' in resource.data.teamIds` form, which
+      // the rules engine can match to the array-contains filter.
+      allow list:   if isOrgAdmin()
+        || ('varsity' in myTeamIds() && 'varsity' in resource.data.teamIds)
+        || ('jvb' in myTeamIds() && 'jvb' in resource.data.teamIds)
+        || ('jva' in myTeamIds() && 'jva' in resource.data.teamIds);
       allow create: if isOwner(uid)
         && request.auth.token.email_verified == true
         && request.resource.data.keys().hasOnly(['name', 'email', 'role', 'teamIds', 'primaryTeamId', 'initials', 'inviteCode'])

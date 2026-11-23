@@ -3,6 +3,19 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import TeamHubRolesApp from "./TeamHubRoles.jsx";
 
+// A screen that loads on demand (Coach, Calendar, Gym…) can fail to load if a
+// new version was deployed while the app sat open: the old file names are
+// gone. Reload once to pick up the new version instead of showing an error.
+window.addEventListener("vite:preloadError", (e) => {
+  try {
+    const last = Number(sessionStorage.getItem("brophy.chunkReload") || 0);
+    if (Date.now() - last < 30000) return; // already tried — let the error show
+    sessionStorage.setItem("brophy.chunkReload", String(Date.now()));
+  } catch { /* storage blocked — still reload once */ }
+  e.preventDefault();
+  window.location.reload();
+});
+
 // Error boundary: without one, any render-time throw unmounts the whole
 // tree and the user sees a blank white page with no clue what happened.
 // This catches the throw and shows a plain fallback (with a reload button)
