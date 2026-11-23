@@ -139,7 +139,8 @@ Companion to `docs/APP_WALKTHROUGH.md`. Finding IDs (F01…F87) refer to that do
 | ✅ Done 2026-11-23 | F11: loading state (not "empty") on documents, announcements, videos, drills, practices, programs, line-ups, workouts and DMs. F15: Today water row has a − button. F54: folder rename re-files every video via a query, in chunks, folder doc last; the Videos page shows any folder a video is filed under. F33: replaced profile photos and line-up logos are deleted; drill pictures uploaded then replaced/abandoned during an edit are deleted (saved drill pictures are kept — duplicates can share them); Storage rules let owners delete their own files. |
 | ✅ Decided 2026-11-21 + done | F28 drill library is signed-in only · F62 players see poll totals only (private vote docs + `voteCounts`; run `functions/scripts/migrate-poll-votes.js` once) · F34 players set their own photo only (coach photo upload removed, rules deny) |
 | ⏸ Needs decision (unchanged) | F44, F47, F81, F84 (`drill-bank.json`), F08, F32 |
-| ⏸ Open | F47 (%-of-max: finish or remove — decision pending), F81 (split the main file — later). No parent account type (decided 2026-11-23). |
+| ✅ Done 2026-11-23 | F47: players save training maxes (Train → Gym → My maxes, users/{uid}/maxes); %-of-max workouts show the real weight ("5 × 5 @ 75% → 185 lb"), with a "set your max" link where one is missing; coaches on the team can read them. |
+| ⏸ Open | F81 (split the main file). No parent account type (decided 2026-11-23). |
 
 **Behaviour changes to tell coaches about:**
 - Sign-up is now enforced server-side. An account must match a roster email (role and team) or a live invite link.

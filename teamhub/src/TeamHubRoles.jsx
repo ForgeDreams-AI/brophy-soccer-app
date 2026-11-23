@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, createContext, useContext } from "react";
 import {
   Home, Calendar as CalendarIcon, Video, Apple, MessageCircle,
   Pin, Clock, MapPin, Plus, X, Trash2, Send, Paperclip,
@@ -93,7 +93,7 @@ const commitInChunks = async (items, apply, size = 450) => {
 };
 import WelcomeTour from "./WelcomeTour";
 import {
-  newEntry, formatPrescription, groupBySuperset, SUPERSET_LABELS,
+  newEntry, formatPrescription, resolveLoad, groupBySuperset, SUPERSET_LABELS,
   WORKOUT_TEMPLATES, buildTemplateWorkout,
 } from "./lib/lifting";
 import { recipeSeedDocs } from "./data/recipeSeed";
@@ -1157,6 +1157,74 @@ const NotificationPrefs = ({ user }) => {
   );
 };
 
+// ─── Training maxes (F47) ─────────────────────────────────────────────────
+// The signed-in player's maxes { [exerciseId]: { value, unit, name } }, so any
+// workout screen shows "@ 75% → 185 lb" instead of just "@ 75%".
+const MaxesContext = createContext({ maxes: {}, openMaxes: () => {} });
+const useMaxes = () => useContext(MaxesContext);
+
+// One prescription line, personalized; a %-row with no max offers to set it.
+const PrescriptionLine = ({ entry, className = "text-[11px] text-slate-600" }) => {
+  const { maxes, openMaxes } = useMaxes();
+  const needs = resolveLoad(entry, maxes).needsMax;
+  return (
+    <div className={className}>
+      {formatPrescription(entry, maxes)}
+      {needs && entry.exerciseId && <button type="button" onClick={() => openMaxes(entry)} className="ml-1.5 font-bold underline" style={{ color: COLORS.primary }}>set your max</button>}
+    </div>
+  );
+};
+
+// "My maxes": every lift used as % of max in the team's or your workouts.
+const MaxesSheet = ({ uid, maxes, workouts = [], focus, onClose }) => {
+  const lifts = useMemo(() => {
+    const m = new Map();
+    for (const w of workouts) for (const e of w.exercises || []) if (e.exerciseId && e.loadMode === "percent" && !m.has(e.exerciseId)) m.set(e.exerciseId, e.name || "Lift");
+    for (const [id, v] of Object.entries(maxes)) if (!m.has(id)) m.set(id, v.name || "Lift");
+    if (focus?.exerciseId && !m.has(focus.exerciseId)) m.set(focus.exerciseId, focus.name || "Lift");
+    return [...m.entries()].sort((a, b) => (a[0] === focus?.exerciseId ? -1 : b[0] === focus?.exerciseId ? 1 : a[1].localeCompare(b[1])));
+  }, [workouts, maxes, focus]);
+  const [draft, setDraft] = useState(() => Object.fromEntries(Object.entries(maxes).map(([id, v]) => [id, { value: String(v.value), unit: v.unit || "lb" }])));
+  const [busy, setBusy] = useState("");
+  const save = async (id, name) => {
+    const d = draft[id] || {};
+    const value = Number(String(d.value || "").replace(",", "."));
+    setBusy(id);
+    try {
+      if (!d.value) await deleteDoc(doc(db, "users", uid, "maxes", id));
+      else if (!(value > 0 && value < 2000)) { toast("Enter a weight, e.g. 185"); setBusy(""); return; }
+      else await setDoc(doc(db, "users", uid, "maxes", id), { value, unit: d.unit || "lb", name, updatedAt: new Date().toISOString() });
+      toast(d.value ? `${name}: ${value} ${d.unit || "lb"}` : `${name} max removed`, "success");
+    } catch (e) { toast("Couldn't save — " + (e?.message || "")); }
+    setBusy("");
+  };
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/50 flex items-end sm:items-center justify-center" onClick={onClose} role="dialog" aria-label="My maxes">
+      <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-4 pb-[calc(16px+env(safe-area-inset-bottom))] max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-bold text-base text-slate-900">My maxes</h3>
+          <button onClick={onClose} aria-label="Close" className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <p className="text-[12px] text-slate-500 mb-3">Your training max (best weight for 1 rep) for each lift. Workouts written as "% of max" then show your exact weight.</p>
+        {lifts.length === 0 && <p className="text-sm text-slate-400 text-center py-6">No workouts use % of max yet.</p>}
+        <ul className="space-y-2">
+          {lifts.map(([id, name]) => {
+            const d = draft[id] || { value: "", unit: "lb" };
+            return (
+              <li key={id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${id === focus?.exerciseId ? "border-transparent ring-2" : "border-slate-200"}`} style={id === focus?.exerciseId ? { "--tw-ring-color": COLORS.primary } : undefined}>
+                <span className="flex-1 min-w-0 text-sm font-semibold text-slate-900 truncate">{name}</span>
+                <input inputMode="decimal" value={d.value} onChange={(e) => setDraft((x) => ({ ...x, [id]: { ...d, value: e.target.value } }))} placeholder="—" className="w-20 h-10 border border-slate-200 rounded-lg px-2 text-right text-base tabular-nums" />
+                <button type="button" onClick={() => setDraft((x) => ({ ...x, [id]: { ...d, unit: d.unit === "kg" ? "lb" : "kg" } }))} className="w-11 h-10 rounded-lg bg-slate-100 text-xs font-bold text-slate-700">{d.unit}</button>
+                <button type="button" disabled={busy === id} onClick={() => save(id, name)} className="h-10 px-3 rounded-lg text-white text-xs font-bold disabled:opacity-50" style={{ backgroundColor: COLORS.primary }}>{busy === id ? "…" : "Save"}</button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+};
+
 // "Turn on notifications" card (Home, players and coaches). Hidden once push
 // is on for this device. On an iPhone that isn't running the Home Screen
 // app, explains that step first — iOS only allows web push from there.
@@ -1964,7 +2032,7 @@ const EventDetailModal = ({ ev, practices = [], teamWorkouts = [], nameByUid = {
                 {(workout.exercises || []).map((ex, i) => (
                   <li key={i} className="text-sm">
                     <div className="font-semibold text-slate-800 leading-tight">{ex.name}</div>
-                    <div className="text-[11px] text-slate-500">{formatPrescription(ex)}</div>
+                    <PrescriptionLine entry={ex} className="text-[11px] text-slate-500" />
                   </li>
                 ))}
                 {!(workout.exercises || []).length && <li className="text-xs text-slate-400 italic">No exercises in this workout yet.</li>}
@@ -8770,7 +8838,7 @@ const WorkoutDetail = ({ workout, canEdit, lib, onSave, onDelete, onDuplicate, o
                   {g.items.map(({ entry, index }) => (
                     <div key={index}>
                       <div className="font-semibold text-sm text-slate-900 leading-tight">{entry.name}</div>
-                      <div className="text-[11px] text-slate-600">{formatPrescription(entry)}</div>
+                      <PrescriptionLine entry={entry} />
                     </div>
                   ))}
                 </div>
@@ -8849,6 +8917,7 @@ const GymPage = ({ user, myWorkouts, addMyWorkout, updateMyWorkout, deleteMyWork
   const isAdmin = user.role === "admin";
   const [view, setView] = useState("library");
   const lib = useExerciseLib();
+  const { maxes, openMaxes } = useMaxes();
 
   // Coach-authored exercises sit at the front of the library, tagged custom so
   // they render their own photos + get edit/delete. They still group by the
@@ -8874,6 +8943,9 @@ const GymPage = ({ user, myWorkouts, addMyWorkout, updateMyWorkout, deleteMyWork
           ))}
         </div>
         <p className="text-[11px] leading-snug text-slate-500 mt-2 px-1">Pre-Practice Prehab — bands only, ~12 min before every practice and at home. Your school lifting (2×/week) is separate.</p>
+        <button type="button" onClick={() => openMaxes()} className="mt-2 w-full h-11 rounded-2xl bg-white border border-slate-200 text-sm font-bold text-slate-800 flex items-center justify-center gap-2">
+          <Dumbbell className="w-4 h-4" style={{ color: COLORS.primary }} /> My maxes{Object.keys(maxes).length ? ` (${Object.keys(maxes).length})` : ""}
+        </button>
       </div>
 
       {view === "library" && <ExerciseLibrary items={mergedLib.items} loading={mergedLib.loading} err={mergedLib.err} myWorkouts={myWorkouts} addMyWorkout={addMyWorkout} updateMyWorkout={updateMyWorkout} canEdit={isAdmin} uid={user.uid} addCustomExercise={addCustomExercise} updateCustomExercise={updateCustomExercise} deleteCustomExercise={deleteCustomExercise} seedLifts={seedLifts} />}
@@ -10393,6 +10465,11 @@ export default function TeamHubRolesApp() {
     updateDoc(doc(db, myWorkoutsPath, id), { ...data, updatedAt: serverTimestamp() });
   const deleteMyWorkout = (id) => deleteDoc(doc(db, myWorkoutsPath, id));
 
+  // Training maxes (F47) for %-of-max workouts.
+  const myMaxDocs = useCollection(noData || !user ? null : `users/${user.uid}/maxes`);
+  const myMaxes = useMemo(() => Object.fromEntries(myMaxDocs.map((d) => [d.id, d])), [myMaxDocs]);
+  const [maxesOpen, setMaxesOpen] = useState(false); // false | true | entry (focus that lift)
+  const maxesCtx = useMemo(() => ({ maxes: myMaxes, openMaxes: (entry) => setMaxesOpen(entry || true) }), [myMaxes, setMaxesOpen]);
   const teamWorkouts = useCollection(noData ? null : ("teamWorkouts"), where("teamId", "==", activeTeamId), orderBy("updatedAt", "desc"));
   const addTeamWorkout = (input) => {
     const base = typeof input === "string" ? { name: input } : (input || {});
@@ -10734,6 +10811,7 @@ export default function TeamHubRolesApp() {
 
 
   return (
+    <MaxesContext.Provider value={maxesCtx}>
     <div
       className="app-shell min-h-screen min-h-dvh flex justify-center relative"
       style={{
@@ -10897,5 +10975,7 @@ export default function TeamHubRolesApp() {
         </div>
       </div>
     </div>
+    {maxesOpen && <MaxesSheet uid={user.uid} maxes={myMaxes} workouts={[...teamWorkouts, ...myWorkouts]} focus={maxesOpen === true ? null : maxesOpen} onClose={() => setMaxesOpen(false)} />}
+    </MaxesContext.Provider>
   );
 }

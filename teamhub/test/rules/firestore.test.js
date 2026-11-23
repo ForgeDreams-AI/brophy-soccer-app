@@ -449,3 +449,17 @@ describe('notification preferences', () => {
     await assertFails(updateDoc(doc(as(env, 'p1').firestore(), 'users/p1'), { notifPrefs: {}, role: 'admin' }))
   })
 })
+
+describe('training maxes (F47)', () => {
+  test('a player saves their own maxes; others cannot', async () => {
+    await assertSucceeds(setDoc(doc(as(env, 'p1').firestore(), 'users/p1/maxes/squat'), { value: 225, unit: 'lb', name: 'Back Squat' }))
+    await assertFails(setDoc(doc(as(env, 'p2').firestore(), 'users/p1/maxes/squat'), { value: 999, unit: 'lb' }))
+    await assertFails(setDoc(doc(as(env, 'p1').firestore(), 'users/p1/maxes/bench'), { value: -5, unit: 'lb' }))
+    await assertFails(setDoc(doc(as(env, 'p1').firestore(), 'users/p1/maxes/bench'), { value: 100, unit: 'stone' }))
+  })
+  test('their team coach can read them; another player cannot', async () => {
+    await seed(env, 'users/p1/maxes/squat', { value: 225, unit: 'lb' })
+    await assertSucceeds(getDoc(doc(as(env, 'coachV').firestore(), 'users/p1/maxes/squat')))
+    await assertFails(getDoc(doc(as(env, 'p2').firestore(), 'users/p1/maxes/squat')))
+  })
+})

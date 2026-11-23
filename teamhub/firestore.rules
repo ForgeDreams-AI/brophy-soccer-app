@@ -185,6 +185,19 @@ service cloud.firestore {
       allow delete: if isOrgAdmin() && uid != request.auth.uid;
     }
 
+    // Training maxes (F47): users/{uid}/maxes/{exerciseId} = { value, unit,
+    // name }. %-of-max workouts turn into real weights from these. The player
+    // owns them; a coach on their team can read them.
+    match /users/{uid}/maxes/{exerciseId} {
+      allow read: if isOwner(uid)
+        || (isAdmin() && sharesTeam(get(/databases/$(database)/documents/users/$(uid)).data.get('teamIds', [])));
+      allow write: if isOwner(uid)
+        && request.resource.data.value is number
+        && request.resource.data.value > 0 && request.resource.data.value < 2000
+        && request.resource.data.unit in ['lb', 'kg'];
+      allow delete: if isOwner(uid);
+    }
+
     // Announcements: team-scoped. Coach of the team writes; members read.
     match /announcements/{id} {
       allow read:   if isMemberOf(rTeam());
