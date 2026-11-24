@@ -765,7 +765,8 @@ function GameSummary({ game, events, playerById, isCoach, canRecord = isCoach, o
     <div className="px-5 pt-3 pb-8 space-y-4">
       {onBack && <button onClick={onBack} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> All games</button>}
       <div className="rounded-2xl text-white p-4 text-center" style={{ backgroundColor: RED }}>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-white/80">{game.status === "final" ? "Final" : "Live"} · {game.date} · {game.homeAway === "away" ? "Away" : "Home"}</div>
+        <div className="text-[11px] font-bold uppercase tracking-wider text-white/80">{game.status === "final" ? "Final" : "🔴 Live"} · {game.date} · {game.homeAway === "away" ? "Away" : "Home"}</div>
+        {game.status !== "final" && game.createdByName && <div className="text-[11px] font-semibold text-white/75 mt-0.5">Tracked by {game.createdByName} · updates live</div>}
         <div className="flex items-center justify-center gap-5 mt-1">
           <div><div className="text-[11px] font-bold text-white/80">Brophy</div><div className="text-4xl font-black tabular-nums">{sc.us}</div></div>
           <div className="text-white/60 font-bold">–</div>
@@ -1199,7 +1200,7 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
                 const result = g.status !== "final" ? "LIVE" : s.us > s.them ? "W" : s.us < s.them ? "L" : "D";
                 return (
                   <li key={g.id}>
-                    <button onClick={() => (g.status === "live" && canRecord ? (setOpenId(g.id), setTracking(g.id)) : setOpenId(g.id))} className="w-full bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex items-center gap-3 text-left">
+                    <button onClick={() => (g.status === "live" && canRecord && !(isCoach && g.createdBy && g.createdBy !== user.uid) ? (setOpenId(g.id), setTracking(g.id)) : setOpenId(g.id))} className="w-full bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex items-center gap-3 text-left">
                       <span className={`w-11 h-11 rounded-xl flex items-center justify-center text-sm font-black ${result === "LIVE" ? "text-white animate-pulse" : result === "W" ? "bg-emerald-100 text-emerald-700" : result === "L" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"}`} style={result === "LIVE" ? { backgroundColor: RED, fontSize: 10 } : undefined}>{result}</span>
                       <span className="flex-1 min-w-0">
                         <span className="block font-bold text-slate-900 truncate">{g.homeAway === "away" ? "@ " : "vs "}{g.opponent}</span>

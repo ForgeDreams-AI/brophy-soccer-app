@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
-import { Calendar as CalendarIcon, ChevronLeft, ClipboardList, Dumbbell, Eye, Home, MessageCircle } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ClipboardList, Dumbbell, Eye, Home, MessageCircle } from "lucide-react";
 import { isSignInWithEmailLink, signInWithEmailLink } from "firebase/auth";
 import { addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, limit, orderBy, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { auth, db, storage } from "./firebase";
@@ -125,6 +125,12 @@ export default function TeamHubRolesApp() {
   // Opened from a chat link to a document / folder: { folder, docId, at }.
   // `at` re-keys the Documents page so each tap lands fresh on that spot.
   const [libraryFocus, setLibraryFocus] = useState(null);
+  // Coach Center → Game Stats opened on one game (live banner / push link
+  // "?tab=practice&game=<id>"). `at` re-keys Coach Center so it opens fresh.
+  const [statsFocus, setStatsFocus] = useState(() => {
+    try { const g = new URLSearchParams(window.location.search).get("game"); return g ? { gameId: g, at: 1 } : null; } catch { return null; }
+  });
+  const openGameStats = (gameId) => { setStatsFocus({ gameId, at: Date.now() }); setTab("practice"); };
   const [videoFocus, setVideoFocus] = useState(null);
   // A Train link tapped in chat: documents / document folders open Train →
   // Documents, videos / video folders open Train → Videos.
@@ -231,8 +237,10 @@ export default function TeamHubRolesApp() {
       const handler = (e) => {
         if (e.data?.type === "deeplink") {
           const url = new URL(e.data.link, window.location.origin);
-          const t = new URLSearchParams(url.search).get("tab");
-          if (t) routeToTab(t);
+          const sp = new URLSearchParams(url.search);
+          const t = sp.get("tab");
+          if (sp.get("game")) openGameStats(sp.get("game"));
+          else if (t) routeToTab(t);
         }
       };
       navigator.serviceWorker.addEventListener("message", handler);
@@ -254,10 +262,12 @@ export default function TeamHubRolesApp() {
       const n = payload.notification || {};
       const d = payload.data || {};
       const link = d.link || payload.fcmOptions?.link || "/";
-      const tab = new URLSearchParams(new URL(link, window.location.origin).search).get("tab");
+      const sp = new URLSearchParams(new URL(link, window.location.origin).search);
+      const tab = sp.get("tab");
+      const game = sp.get("game");
       if (tab === "messages" && activeTabRef.current === "messages") return;
       try { navigator.vibrate?.(30); } catch { /* not supported */ }
-      setInAppBanner({ id: Date.now(), title: n.title || d.title || "Brophy Soccer", body: n.body || d.body || "", tab });
+      setInAppBanner({ id: Date.now(), title: n.title || d.title || "Brophy Soccer", body: n.body || d.body || "", tab, game });
     });
   }, [user, lockedOut]);
   useEffect(() => {
@@ -331,6 +341,9 @@ export default function TeamHubRolesApp() {
     where("teamIds", "array-contains", activeTeamId),
     orderBy("name"),
   );
+  // Games being tracked right now (by anyone — usually a stat keeper), so the
+  // coach's Home shows a LIVE card and Game Stats fills in as they tap.
+  const liveGames = useCollection(noData || !isCoach ? null : "games", where("teamId", "==", activeTeamId), where("status", "==", "live"));
   const invitesRaw = useCollection(noData || !isCoach ? null : ("invitedEmails"), where("teamId", "==", activeTeamId), orderBy("email"));
   // An invite marked Coach wins over an account still saying "player" (the
   // account was made before the invite was changed). People lists treat them
@@ -1343,7 +1356,7 @@ export default function TeamHubRolesApp() {
       {inAppBanner && (
         <button
           key={inAppBanner.id}
-          onClick={() => { if (inAppBanner.tab) routeToTab(inAppBanner.tab); setInAppBanner(null); }}
+          onClick={() => { if (inAppBanner.game) openGameStats(inAppBanner.game); else if (inAppBanner.tab) routeToTab(inAppBanner.tab); setInAppBanner(null); }}
           className="fixed left-3 right-3 z-[9000] flex items-start gap-3 text-left rounded-2xl bg-white/95 backdrop-blur shadow-2xl border border-slate-200 px-3.5 py-3 sm:max-w-sm sm:left-auto"
           style={{ top: "calc(10px + env(safe-area-inset-top))", animation: "banner-in .35s cubic-bezier(.2,.9,.3,1.2)" }}
           role="status"
@@ -1402,7 +1415,7 @@ export default function TeamHubRolesApp() {
               const active = activeTab === t.id;
               const badge = t.id === "messages" ? chatUnread : 0;
               return (
-                <button key={t.id} onClick={() => { setTrainView(null); setLibraryFocus(null); setVideoFocus(null); setTab(t.id); }} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold text-left" style={{ backgroundColor: active ? COLORS.accentSoft : "transparent", color: active ? COLORS.accent : COLORS.textSecondary }}>
+                <button key={t.id} onClick={() => { setTrainView(null); setLibraryFocus(null); setVideoFocus(null); setStatsFocus(null); setTab(t.id); }} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold text-left" style={{ backgroundColor: active ? COLORS.accentSoft : "transparent", color: active ? COLORS.accent : COLORS.textSecondary }}>
                   <span className="relative">
                     <Icon className="w-5 h-5" style={{ color: active ? COLORS.accent : COLORS.textSecondary }} fill={active ? COLORS.accent : "none"} strokeWidth={active ? 2.5 : 2} />
                     {badge > 0 && (
@@ -1441,6 +1454,20 @@ export default function TeamHubRolesApp() {
           {/* Desktop content cap: the column goes wide on a laptop, but the
               pages stay readable (and the pitch stays usable) at 72rem. */}
           <div className="w-full lg:max-w-6xl lg:mx-auto h-full flex flex-col">
+          {activeTab === "home" && effUser.role === "admin" && liveGames.length > 0 && (
+            <div className="px-5 pt-4 -mb-1 space-y-2">
+              {liveGames.map((g) => (
+                <button key={g.id} onClick={() => openGameStats(g.id)} className="w-full rounded-2xl p-4 text-white flex items-center gap-3 shadow-sm text-left" style={{ backgroundColor: COLORS.primary }}>
+                  <span className="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center text-[11px] font-black animate-pulse">LIVE</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block font-black text-base truncate">{g.homeAway === "away" ? "@ " : "vs "}{g.opponent}</span>
+                    <span className="block text-xs text-white/75 truncate">{g.createdByName ? `${g.createdByName} is tracking` : "Being tracked"} · tap to watch the stats live</span>
+                  </span>
+                  <ChevronRight className="w-5 h-5 text-white/70" />
+                </button>
+              ))}
+            </div>
+          )}
           {activeTab === "home" && effUser.role === "admin" && <HomePage user={effUser} isOrgAdmin={user.role === "orgAdmin"} practices={practices} announcements={announcements} addAnnouncement={addAnnouncement} updateAnnouncement={updateAnnouncement} togglePinAnnouncement={togglePinAnnouncement} deleteAnnouncement={deleteAnnouncement} events={events} wellness={wellness} wellnessLoading={isLoading(wellnessRaw)} invites={invites} addInvite={addInvite} removeInvite={removeInvite} addInvitesBatch={addInvitesBatch} setInviteRole={setInviteRole} inviteLinks={inviteLinks} addInviteLink={addInviteLink} removeInviteLink={removeInviteLink} mealLogActivityToday={mealLogActivityToday} documents={documents} addDocument={addDocument} deleteDocument={deleteDocument} signDocument={signDocument} allUsers={allUsers} requestProfileUpdate={requestProfileUpdate} pushNotifications={pushNotifications} addPushNotification={addPushNotification} deletePushNotification={deletePushNotification} sendPushNotificationNow={sendPushNotificationNow} activeTeamId={activeTeamId} todayQuote={todayQuote} addQuote={addQuote} />}
           {activeTab === "home" && effUser.role !== "admin" && <div className="px-5 pt-4 -mb-1"><PushPrompt user={effUser} /></div>}
           {activeTab === "home" && effUser.role !== "admin" && <LatestGameCard user={effUser} activeTeamId={activeTeamId} allUsers={allUsers} positionsByUid={positionsByUid} isStatKeeper={isStatKeeper} statKeepers={statKeepers} lineups={lineups} />}
@@ -1458,9 +1485,12 @@ export default function TeamHubRolesApp() {
           )}
           {activeTab === "practice" && effUser.role === "admin" && (
             <CoachCenterPage
+              key={statsFocus?.at || 0}
+              initialView={statsFocus ? "stats" : null}
+              liveGameCount={liveGames.length}
               practiceProps={{ user: { ...effUser, isOrgAdmin: user.role === "orgAdmin" }, drills, addDrill, updateDrill, deleteDrill, practices, addPractice, updatePractice, deletePractice, programs, addProgram, updateProgram, deleteProgram, importEvents, events }}
               gameDayProps={{ user: effUser, lineups, addLineup, updateLineup, deleteLineup, allUsers, invites, chatGroups, postLineupImage, lineupLogo: lineupLogo?.url || "", setLineupLogo, teamShortName: getTeamShortName(activeTeamId), activeTeamId, positionsByUid }}
-              gameStatsProps={{ user: effUser, activeTeamId, allUsers, lineups, positionsByUid, isCoach, canRecord: isCoach || isStatKeeper, statKeepers, setStatKeepers, onSendReport: postGameReport }}
+              gameStatsProps={{ user: effUser, startGameId: statsFocus?.gameId || null, activeTeamId, allUsers, lineups, positionsByUid, isCoach, canRecord: isCoach || isStatKeeper, statKeepers, setStatKeepers, onSendReport: postGameReport }}
               rosterProps={{ user: effUser, isOrgAdmin: user.role === "orgAdmin", setUserRoleAndTeams, removeUser, invites, addInvite, removeInvite, addInvitesBatch, setInviteRole, inviteLinks, addInviteLink, removeInviteLink, allUsers, requestProfileUpdate, activeTeamId, positionsByUid, setPlayerPosition }}
               calendarProps={{ user: effUser, events, practices, teamWorkouts, personalEvents, addEvent, updateEvent, addPersonalEvent, updatePersonalEvent, deleteEvent, deletePersonalEvent, importEvents, groups: groupsList, addGroup, updateGroupMembers, deleteGroup, invites, allUsers, chatGroups }}
               documentsProps={{ user: effUser, documents, rosterCount: invites.filter((i) => !isStaffRole(i.role)).length, onUpload: addDocument, onDelete: deleteDocument, onSign: signDocument }}
@@ -1478,7 +1508,7 @@ export default function TeamHubRolesApp() {
               const Icon = t.icon; const active = activeTab === t.id;
               const badge = t.id === "messages" ? chatUnread : 0;
               return (
-                <button key={t.id} onClick={() => { setTrainView(null); setLibraryFocus(null); setVideoFocus(null); setTab(t.id); }} className="flex flex-col items-center justify-center py-1.5 gap-0.5">
+                <button key={t.id} onClick={() => { setTrainView(null); setLibraryFocus(null); setVideoFocus(null); setStatsFocus(null); setTab(t.id); }} className="flex flex-col items-center justify-center py-1.5 gap-0.5">
                   <span className="relative">
                     <Icon className="w-5 h-5" style={{ color: active ? COLORS.accent : COLORS.textSecondary }} fill={active ? COLORS.accent : "none"} strokeWidth={active ? 2.5 : 2} />
                     {badge > 0 && (

@@ -1166,8 +1166,8 @@ export const DocumentsPage = ({ user, documents, rosterCount = 0, onUpload, onDe
 // tiles, one per area — tap a tile, you're in that area. Everything here is
 // per-team (Fix 1 model); the org admin switches teams with the one team
 // switcher in the header, a single-team coach sees only theirs.
-export const CoachCenterPage = ({ practiceProps, gameDayProps, gameStatsProps, rosterProps, calendarProps, documentsProps, announcementsProps }) => {
-  const [view, setView] = useState(null); // null | practice | gameday | roster | calendar | documents | announcements
+export const CoachCenterPage = ({ initialView = null, liveGameCount = 0, practiceProps, gameDayProps, gameStatsProps, rosterProps, calendarProps, documentsProps, announcementsProps }) => {
+  const [view, setView] = useState(initialView); // null | practice | gameday | roster | calendar | documents | announcements
   const practices = practiceProps?.practices || [];
   const programs = practiceProps?.programs || [];
   const lineups = gameDayProps?.lineups || [];
@@ -1186,7 +1186,7 @@ export const CoachCenterPage = ({ practiceProps, gameDayProps, gameStatsProps, r
   const tiles = [
     { id: "practice", label: "Practice", sub: "Drill library, sessions & programs", icon: ClipboardList, badge: `${practices.length} session${practices.length === 1 ? "" : "s"} · ${programs.length} program${programs.length === 1 ? "" : "s"}` },
     { id: "gameday", label: "Game Day", sub: "Build & share your starting line-up", icon: Goal, badge: `${lineups.length} saved line-up${lineups.length === 1 ? "" : "s"}`, highlight: true },
-    { id: "stats", label: "Game Stats", sub: "Track games live, season stats", icon: BarChart3, badge: "Live tracker" },
+    { id: "stats", label: "Game Stats", sub: "Track games live, season stats", icon: BarChart3, badge: "Live tracker", alert: liveGameCount > 0 ? `${liveGameCount} live now` : null },
     { id: "roster", label: "Roster & Invites", sub: "Players, coaches & invite links", icon: Users, badge: `${invites.length} on roster`, alert: pendingCount > 0 ? `${pendingCount} pending` : null },
     { id: "calendar", label: "Calendar", sub: "Practices, games & events", icon: CalendarIcon, badge: `${upcomingCount} upcoming` },
     { id: "documents", label: "Documents", sub: "Handbooks, itineraries & forms", icon: FileText, badge: `${documents.length} file${documents.length === 1 ? "" : "s"}` },

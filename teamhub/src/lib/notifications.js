@@ -129,6 +129,7 @@ export const NOTIF_CATEGORIES = [
   ["announcements", "Announcements", "News from coaches"],
   ["schedule", "Schedule", "New events and sessions you're running"],
   ["reminders", "Reminders", "Before games, practices and coach reminders"],
+  ["games", "Live games", "When a stat keeper starts tracking a game (coaches)"],
   ["library", "Documents", "New files and links"],
   ["quotes", "Quote of the Day", ""],
   ["wellness", "Wellness check-in", "Morning reminder to log how you feel"],

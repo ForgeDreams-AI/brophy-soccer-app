@@ -212,6 +212,24 @@ async function tokensForAudienceKeys(audienceKeys, { teamId, excludeUid } = {}) 
 
 // ── triggers ─────────────────────────────────────────────────────────────
 
+// Game Stats: when someone other than a coach (a stat keeper / statistician)
+// starts tracking a game, tell the team's coaches so they can watch the
+// stats fill in live. A coach starting their own game notifies no one.
+exports.onGameCreated = onDocumentCreated("games/{id}", async (event) => {
+  const g = event.data?.data();
+  if (!g || g.status !== "live" || !g.teamId) return;
+  const coaches = await coachUidsForTeam(g.teamId);
+  if (!g.createdBy || coaches.includes(g.createdBy)) return;
+  const bundle = await tokensForUids(coaches, { excludeUid: g.createdBy });
+  await sendToTokens(bundle, {
+    title: `🔴 Live: ${g.homeAway === "away" ? "@" : "vs"} ${trunc(g.opponent || "Opponent", 40)}`,
+    body: `${trunc(g.createdByName || "Your stat keeper", 40)} started tracking. Tap to watch the stats live.`,
+    link: `/?tab=practice&game=${event.params.id}`,
+    tag: `game-${event.params.id}`,
+    category: "games",
+  });
+});
+
 exports.onAnnouncementCreated = onDocumentCreated("announcements/{id}", async (event) => {
   const data = event.data?.data();
   if (!data) return;
