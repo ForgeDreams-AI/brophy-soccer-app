@@ -317,3 +317,15 @@ export function applyAliases(games = [], events = [], alias = {}) {
   }));
   return { games: g2, events: e2 };
 }
+
+// ─── One tracker at a time ─────────────────────────────────────────────────
+// Two phones tracking the same game would both log the same goal (double
+// counts) and fight over the clock/possession. The phone that's tracking
+// holds game.tracker = { uid, name, at } and refreshes `at` every 30s; a
+// hold not refreshed for 90s (phone closed, lost signal) is free again.
+export const TRACKER_HEARTBEAT_MS = 30000;
+export const TRACKER_STALE_MS = 90000;
+export function trackerStatus(tracker, uid, now = Date.now()) {
+  if (!tracker?.uid || !tracker.at || now - tracker.at > TRACKER_STALE_MS) return "free";
+  return tracker.uid === uid ? "mine" : "other";
+}

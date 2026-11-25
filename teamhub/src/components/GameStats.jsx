@@ -21,7 +21,7 @@ import { teamDateKey } from "../lib/dates";
 import { groupByPosition, notJoinedPlayers, sheetAliases } from "../data/rosterPositions";
 import {
   PLAYER_ACTIONS, ACTION_LABEL, isShot, clockMs, fmtClock, minuteOf,
-  playerProfile, possessionTotals, switchPossession, pausePossession, resumePossession, ballOwner, takeBall, possessionEvents, lastPasserTo, score, onFieldNow, playerLines, teamTotals, seasonLines, record, applyAliases,
+  playerProfile, possessionTotals, switchPossession, pausePossession, resumePossession, ballOwner, takeBall, possessionEvents, lastPasserTo, score, onFieldNow, playerLines, teamTotals, seasonLines, record, applyAliases, trackerStatus, TRACKER_HEARTBEAT_MS,
 } from "../lib/gameStats";
 
 const RED = "#980000";
@@ -166,6 +166,36 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
 
   const gameRef = doc(db, "games", game.id);
   const save = (patch) => updateDoc(gameRef, patch).catch((e) => toast("Couldn't save — " + (e?.message || "")));
+
+  // One tracker at a time (see trackerStatus): claim the game when it's free,
+  // keep the hold fresh, and hand it back on close. If someone else holds
+  // it, the controls are covered with Watch / Take over.
+  const [lockNow, setLockNow] = useState(nowMs);
+  useEffect(() => { const t = setInterval(() => setLockNow(nowMs()), 15000); return () => clearInterval(t); }, []);
+  const lock = trackerStatus(game.tracker, user.uid, Math.max(lockNow, now));
+  const meRef = useRef({ uid: user.uid, name: user.name || "" });
+  // `from` = who held it before (so their phone can say "X took over").
+  const claim = (from = null) => updateDoc(gameRef, { tracker: { uid: meRef.current.uid, name: meRef.current.name, at: nowMs(), from } }).catch(() => {});
+  useEffect(() => {
+    if (lock === "free" && game.status !== "final") claim();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lock, game.status]);
+  useEffect(() => {
+    if (lock !== "mine") return undefined;
+    const t = setInterval(() => updateDoc(gameRef, { "tracker.at": nowMs() }).catch(() => {}), TRACKER_HEARTBEAT_MS);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lock, game.id]);
+  const lockRef = useRef(lock);
+  useEffect(() => { lockRef.current = lock; }, [lock]);
+  useEffect(() => () => {
+    // Closing the tracker hands the game back.
+    if (lockRef.current === "mine") updateDoc(doc(db, "games", game.id), { tracker: null }).catch(() => {});
+  }, [game.id]);
+  const takeOver = () => {
+    if (!confirm(`Take over tracking from ${game.tracker?.name || "the other tracker"}? Their phone will stop recording.`)) return;
+    claim(game.tracker?.uid || null);
+  };
   const add = async (type, extra = {}) => {
     buzz();
     try {
@@ -205,7 +235,7 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
     const half = game.clock?.half || 1;
     if (half >= 2) {
       if (!confirm(`End the game? Final score ${sc.us}–${sc.them}.`)) return;
-      save({ status: "final", clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t) }, possession: stopPossession(t) });
+      save({ status: "final", tracker: null, clock: { ...game.clock, running: false, startedAt: null, elapsedMs: clockMs(game.clock, t) }, possession: stopPossession(t) });
       onClose();
       return;
     }
@@ -300,6 +330,19 @@ function LiveTracker({ game, events, players, playerById, gkIds = [], user, onCl
   const oppHas = owner.side === "them";
   return (
     <div className="fixed inset-0 z-[60] bg-slate-50 flex flex-col" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+      {lock === "other" && game.status !== "final" && (
+        <div className="absolute inset-0 z-[80] bg-slate-900/85 flex items-center justify-center p-6" role="dialog" aria-label="Someone else is tracking">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-sm text-center space-y-3">
+            <div className="w-12 h-12 mx-auto rounded-2xl flex items-center justify-center text-white text-[11px] font-black animate-pulse" style={{ backgroundColor: RED }}>LIVE</div>
+            <h3 className="font-black text-lg text-slate-900 leading-tight">
+              {game.tracker?.from === user.uid ? `${game.tracker?.name || "Someone"} took over tracking` : `${game.tracker?.name || "Someone"} is tracking this game`}
+            </h3>
+            <p className="text-[13px] text-slate-500 leading-snug">Only one phone records at a time so nothing gets counted twice. You can watch every stat come in live.</p>
+            <button onClick={onClose} className="w-full h-12 rounded-2xl text-white font-black" style={{ backgroundColor: RED }}>Watch live</button>
+            <button onClick={takeOver} className="w-full h-11 rounded-2xl font-bold text-slate-700 bg-slate-100">Take over tracking</button>
+          </div>
+        </div>
+      )}
       {/* Score + clock */}
       <div className="text-white px-3 pt-2 pb-2.5" style={{ backgroundColor: RED }}>
         <div className="flex items-center justify-between">
@@ -766,7 +809,11 @@ function GameSummary({ game, events, playerById, isCoach, canRecord = isCoach, o
       {onBack && <button onClick={onBack} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><ChevronLeft className="w-3 h-3" /> All games</button>}
       <div className="rounded-2xl text-white p-4 text-center" style={{ backgroundColor: RED }}>
         <div className="text-[11px] font-bold uppercase tracking-wider text-white/80">{game.status === "final" ? "Final" : "🔴 Live"} · {game.date} · {game.homeAway === "away" ? "Away" : "Home"}</div>
-        {game.status !== "final" && game.createdByName && <div className="text-[11px] font-semibold text-white/75 mt-0.5">Tracked by {game.createdByName} · updates live</div>}
+        {game.status !== "final" && (trackerStatus(game.tracker, "", nowMs()) !== "free" || game.createdByName) && (
+          <div className="text-[11px] font-semibold text-white/75 mt-0.5">
+            {trackerStatus(game.tracker, "", nowMs()) !== "free" ? `${game.tracker.name || "Someone"} is tracking` : `Started by ${game.createdByName}`} · updates live
+          </div>
+        )}
         <div className="flex items-center justify-center gap-5 mt-1">
           <div><div className="text-[11px] font-bold text-white/80">Brophy</div><div className="text-4xl font-black tabular-nums">{sc.us}</div></div>
           <div className="text-white/60 font-bold">–</div>
@@ -1200,7 +1247,7 @@ export default function GameStatsPage({ user, activeTeamId, allUsers = [], lineu
                 const result = g.status !== "final" ? "LIVE" : s.us > s.them ? "W" : s.us < s.them ? "L" : "D";
                 return (
                   <li key={g.id}>
-                    <button onClick={() => (g.status === "live" && canRecord && !(isCoach && g.createdBy && g.createdBy !== user.uid) ? (setOpenId(g.id), setTracking(g.id)) : setOpenId(g.id))} className="w-full bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex items-center gap-3 text-left">
+                    <button onClick={() => (g.status === "live" && canRecord && trackerStatus(g.tracker, user.uid, nowMs()) !== "other" ? (setOpenId(g.id), setTracking(g.id)) : setOpenId(g.id))} className="w-full bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex items-center gap-3 text-left">
                       <span className={`w-11 h-11 rounded-xl flex items-center justify-center text-sm font-black ${result === "LIVE" ? "text-white animate-pulse" : result === "W" ? "bg-emerald-100 text-emerald-700" : result === "L" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"}`} style={result === "LIVE" ? { backgroundColor: RED, fontSize: 10 } : undefined}>{result}</span>
                       <span className="flex-1 min-w-0">
                         <span className="block font-bold text-slate-900 truncate">{g.homeAway === "away" ? "@ " : "vs "}{g.opponent}</span>

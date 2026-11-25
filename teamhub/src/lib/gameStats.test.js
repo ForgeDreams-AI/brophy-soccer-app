@@ -211,3 +211,14 @@ describe("applyAliases (not-yet-joined players)", () => {
     expect(applyAliases(games, [], { a: "b" }).games.loading).toBe(true);
   });
 });
+
+describe("trackerStatus (one tracker at a time)", () => {
+  it("free / mine / other, and a stale hold is free", async () => {
+    const { trackerStatus, TRACKER_STALE_MS } = await import("./gameStats.js");
+    const now = 1_000_000;
+    expect(trackerStatus(null, "a", now)).toBe("free");
+    expect(trackerStatus({ uid: "a", at: now - 1000 }, "a", now)).toBe("mine");
+    expect(trackerStatus({ uid: "b", at: now - 1000 }, "a", now)).toBe("other");
+    expect(trackerStatus({ uid: "b", at: now - TRACKER_STALE_MS - 1 }, "a", now)).toBe("free");
+  });
+});
